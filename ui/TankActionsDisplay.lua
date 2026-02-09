@@ -1,6 +1,3 @@
--- TankAssist Tank Actions Display
--- Separate display for tank-specific cooldowns: mitigation, defensives, healing
-
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.TankActionsDisplay = {}

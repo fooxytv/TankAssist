@@ -80,7 +80,7 @@ end
 utils.spellCache = {}
 utils.keybindCache = {}
 utils.keybindCacheTime = 0
-utils.KEYBIND_CACHE_DURATION = 5
+utils.keybindCacheDuration = 5
 
 function utils:GetSpellInfo(spellId)
     if self.spellCache[spellId] then
@@ -98,7 +98,7 @@ end
 
 function utils:GetSpellKeybind(spellId)
     local now = GetTime()
-    if now - self.keybindCacheTime < self.KEYBIND_CACHE_DURATION then
+    if now - self.keybindCacheTime < self.keybindCacheDuration then
         local cached = self.keybindCache[spellId]
         if cached ~= nil then
             return cached ~= false and cached or nil

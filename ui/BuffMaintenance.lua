@@ -1,6 +1,3 @@
--- TankAssist Buff Maintenance Display
--- Tracks tank-specific maintenance buffs (Bone Shield, Shuffle, Ironfur, etc.)
-
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.BuffMaintenance = {}

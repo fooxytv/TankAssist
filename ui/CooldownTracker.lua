@@ -1,6 +1,3 @@
--- TankAssist Cooldown Tracker
--- Tracks major defensive and offensive cooldowns
-
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.CooldownTracker = {}

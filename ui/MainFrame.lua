@@ -1,6 +1,3 @@
--- TankAssist Main Frame
--- Container frame that holds all UI components
-
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.MainFrame = {}
