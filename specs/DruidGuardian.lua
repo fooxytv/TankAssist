@@ -1,161 +1,238 @@
--- TankAssist Guardian Druid Module
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.Constants.GuardianDruid = {
+    Spells = {
+        Mangle = 33917,
+        Thrash = 77758,
+        Swipe = 213771,
+        Maul = 6807,
+        Ironfur = 192081,
+        FrenziedRegeneration = 22842,
+        Barkskin = 22812,
+        SurvivalInstincts = 61336,
+        IncarnationGuardian = 102558,
+        Berserk = 50334,
+        RageOfTheSleeper = 200851,
+        Pulverize = 80313,
+        BristlingFur = 155835,
+        SkullBash = 106839,
+        IncapacitatingRoar = 99,
+        StampedingRoar = 106898,
+        Moonfire = 8921,
+        ConvokeTheSpirits = 391528,
+    },
 
-local GuardianDruid = TA.SpecBase:New(104, "Guardian Druid")
+    SpellCosts = {
+        [33917] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [77758] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [213771] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [6807] = {
+            resource = "RAGE",
+            cost = 40,
+        },
+        [192081] = {
+            resource = "RAGE",
+            cost = 40,
+        },
+        [22842] = {
+            resource = "RAGE",
+            cost = 10,
+        },
+        [80313] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [8921] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+    },
 
-local SPELLS = TA.Constants.GUARDIAN_DRUID.SPELLS
-local BUFFS = TA.Constants.GUARDIAN_DRUID.BUFFS
-local THRESHOLDS = TA.Constants.GUARDIAN_DRUID.THRESHOLDS
+    Buffs = {
+        Ironfur = 192081,
+        FrenziedRegeneration = 22842,
+        Barkskin = 22812,
+        SurvivalInstincts = 61336,
+        Incarnation = 102558,
+        Berserk = 50334,
+        RageOfTheSleeper = 200851,
+        ToothAndClaw = 135286,
+        GalacticGuardian = 213708,
+        Gore = 93622,
+        Earthwarden = 203975,
+        DreamOfCenarius = 372152,
+    },
 
--- =============================================================================
--- SECONDARY SPELLS
--- =============================================================================
+    Thresholds = {
+        IronfurMinStacks = 2,
+        IronfurRefresh = 3,
+        FrenziedRegenHp = 0.7,
+        RageForIronfur = 40,
+        RageForMaul = 40,
+    },
 
-GuardianDruid.secondarySpells = {
-    -- EMERGENCY: Survival Instincts at critical health
+    Cooldowns = {
+        Major = { 102558, 50334, 391528 },
+        Defensive = { 22812, 61336, 200851 },
+        Offensive = { 155835 },
+    },
+
+    CooldownDurations = {
+        [33917] = 6,
+        [77758] = 6,
+        [213771] = 0,
+        [6807] = 3,
+        [192081] = 0,
+        [22842] = 36,
+        [22812] = 60,
+        [61336] = 180,
+        [102558] = 180,
+        [50334] = 180,
+        [200851] = 60,
+        [155835] = 40,
+        [391528] = 120,
+        [8921] = 0,
+    },
+    ChargeSpells = {
+        [22842] = { maxCharges = 2, rechargeTime = 36 },
+        [61336] = { maxCharges = 2, rechargeTime = 180 },
+    },
+    StackingBuffs = {
+        [192081] = { buffId = 192081, duration = 7 },
+    },
+}
+
+TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.GuardianDruid)
+
+local guardianDruid = TankAssist.SpecBase:New(104, "Guardian Druid")
+local spells = TankAssist.Constants.GuardianDruid.Spells
+local buffs = TankAssist.Constants.GuardianDruid.Buffs
+local thresholds = TankAssist.Constants.GuardianDruid.Thresholds
+
+guardianDruid.secondarySpells = {
     {
-        spellId = SPELLS.SURVIVAL_INSTINCTS,
+        spellId = spells.SurvivalInstincts,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.30)
         end,
     },
-
-    -- HEAL: Frenzied Regeneration when low health
     {
-        spellId = SPELLS.FRENZIED_REGENERATION,
+        spellId = spells.FrenziedRegeneration,
         category = "HEAL",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.60)
         end,
     },
-
-    -- MITIGATION: Ironfur maintenance (no cooldown, just rage cost)
-    -- Note: Resource check is handled by CanCastSpell/IsSpellUsable before condition runs
     {
-        spellId = SPELLS.IRONFUR,
+        spellId = spells.Ironfur,
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
-            -- CanCastSpell already verified we have enough rage via IsSpellUsable
-            -- Just check if we're in a situation where we'd want to use it
             return self:InCombat() or self:HasTarget()
         end,
     },
-
-    -- DEFENSIVE: Barkskin when taking damage
     {
-        spellId = SPELLS.BARKSKIN,
+        spellId = spells.Barkskin,
         category = "DEFENSIVE",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.50)
         end,
     },
-
-    -- DEFENSIVE: Rage of the Sleeper (if talented)
     {
-        spellId = SPELLS.RAGE_OF_THE_SLEEPER,
+        spellId = spells.RageOfTheSleeper,
         category = "DEFENSIVE",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.40) and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Incarnation/Berserk
     {
-        spellId = SPELLS.INCARNATION_GUARDIAN,
+        spellId = spells.IncarnationGuardian,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
     {
-        spellId = SPELLS.BERSERK,
+        spellId = spells.Berserk,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             if not self:HasTarget() or not self:InCombat() then
                 return false
             end
-            -- If Incarnation is also "known", it means Incarnation replaced Berserk
-            -- In that case, don't show Berserk (Incarnation entry will handle it)
-            if IsPlayerSpell(SPELLS.INCARNATION_GUARDIAN) then
+            if IsPlayerSpell(spells.IncarnationGuardian) then
                 return false
             end
             return true
         end,
     },
-
-    -- OFFENSIVE: Convoke the Spirits (if talented)
     {
-        spellId = SPELLS.CONVOKE_THE_SPIRITS,
+        spellId = spells.ConvokeTheSpirits,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- AOE: Thrash (6s cooldown)
     {
-        spellId = SPELLS.THRASH,
+        spellId = spells.Thrash,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- FILLER: Mangle (6s cooldown)
     {
-        spellId = SPELLS.MANGLE,
+        spellId = spells.Mangle,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- FILLER: Maul (rage dump, 3s CD)
-    -- Note: We can't check exact rage during combat due to secret values
-    -- So we just recommend it if castable (has enough rage) and has target
     {
-        spellId = SPELLS.MAUL,
+        spellId = spells.Maul,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
-            -- CanCastSpell already verified we have enough rage
             return self:HasTarget()
         end,
     },
 }
 
--- Legacy: AoE spells in priority order
-GuardianDruid.aoeSpells = {
+guardianDruid.aoeSpells = {
     {
-        spellId = SPELLS.THRASH,
+        spellId = spells.Thrash,
         priority = 1,
         condition = function() return true end,
     },
     {
-        spellId = SPELLS.SWIPE,
+        spellId = spells.Swipe,
         priority = 2,
         condition = function() return true end,
     },
 }
 
-function GuardianDruid:GetBestAoESpell()
+function guardianDruid:GetBestAoESpell()
     for _, aoeData in ipairs(self.aoeSpells) do
         local spellId = aoeData.spellId
         if spellId and IsSpellKnown(spellId) then
-            local cdInfo = TA.SecretValues:GetCooldownInfo(spellId)
+            local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
             local isReady = not cdInfo.onCooldown or (cdInfo.charges and cdInfo.charges > 0)
             local conditionMet = not aoeData.condition or aoeData.condition()
             if isReady and conditionMet then
@@ -166,102 +243,85 @@ function GuardianDruid:GetBestAoESpell()
     return nil
 end
 
--- =============================================================================
--- TRACKED BUFFS
--- =============================================================================
-
-GuardianDruid.buffsToTrack = {
+guardianDruid.buffsToTrack = {
     {
-        spellId = BUFFS.IRONFUR,
+        spellId = buffs.Ironfur,
         name = "Ironfur",
-        refreshSpell = SPELLS.IRONFUR,
-        minStacks = THRESHOLDS.IRONFUR_MIN_STACKS,
-        refreshThreshold = THRESHOLDS.IRONFUR_REFRESH,
+        refreshSpell = spells.Ironfur,
+        minStacks = thresholds.IronfurMinStacks,
+        refreshThreshold = thresholds.IronfurRefresh,
         priority = "CRITICAL",
     },
     {
-        spellId = BUFFS.FRENZIED_REGENERATION,
+        spellId = buffs.FrenziedRegeneration,
         name = "Frenzied Regen",
-        refreshSpell = SPELLS.FRENZIED_REGENERATION,
+        refreshSpell = spells.FrenziedRegeneration,
         refreshThreshold = 0,
         priority = "HIGH",
     },
     {
-        spellId = BUFFS.BARKSKIN,
+        spellId = buffs.Barkskin,
         name = "Barkskin",
-        refreshSpell = SPELLS.BARKSKIN,
+        refreshSpell = spells.Barkskin,
         refreshThreshold = 0,
         priority = "HIGH",
     },
 }
 
--- =============================================================================
--- TANK ACTIONS (for TankActionsDisplay)
--- =============================================================================
-
-GuardianDruid.tankActions = {
+guardianDruid.tankActions = {
     MITIGATION = {
-        spellId = SPELLS.IRONFUR,
+        spellId = spells.Ironfur,
         name = "Ironfur",
         condition = function()
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", TA.Constants.GUARDIAN_DRUID.BUFFS.IRONFUR)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", TankAssist.Constants.GuardianDruid.Buffs.Ironfur)
             if not buffInfo.exists then return true end
             return buffInfo.stacks and buffInfo.stacks < 2
         end,
     },
     SHIELD = {
-        spellId = SPELLS.FRENZIED_REGENERATION,
+        spellId = spells.FrenziedRegeneration,
         name = "Frenzied Regeneration",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.7
         end,
     },
     DEFENSIVE = {
-        spellId = SPELLS.SURVIVAL_INSTINCTS,
+        spellId = spells.SurvivalInstincts,
         name = "Survival Instincts",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.4
         end,
     },
     HEAL = {
-        spellId = SPELLS.FRENZIED_REGENERATION,
+        spellId = spells.FrenziedRegeneration,
         name = "Frenzied Regeneration",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.5
         end,
     },
 }
 
--- =============================================================================
--- TRACKED COOLDOWNS
--- =============================================================================
-
-GuardianDruid.cooldownsToTrack = {
-    { spellId = SPELLS.INCARNATION_GUARDIAN, name = "Incarnation", category = "MAJOR" },
-    { spellId = SPELLS.BERSERK, name = "Berserk", category = "MAJOR" },
-    { spellId = SPELLS.CONVOKE_THE_SPIRITS, name = "Convoke", category = "MAJOR" },
-    { spellId = SPELLS.BARKSKIN, name = "Barkskin", category = "DEFENSIVE" },
-    { spellId = SPELLS.SURVIVAL_INSTINCTS, name = "Survival Instincts", category = "DEFENSIVE" },
-    { spellId = SPELLS.RAGE_OF_THE_SLEEPER, name = "Rage of the Sleeper", category = "DEFENSIVE" },
-    { spellId = SPELLS.BRISTLING_FUR, name = "Bristling Fur", category = "OFFENSIVE" },
+guardianDruid.cooldownsToTrack = {
+    { spellId = spells.IncarnationGuardian, name = "Incarnation", category = "MAJOR" },
+    { spellId = spells.Berserk, name = "Berserk", category = "MAJOR" },
+    { spellId = spells.ConvokeTheSpirits, name = "Convoke", category = "MAJOR" },
+    { spellId = spells.Barkskin, name = "Barkskin", category = "DEFENSIVE" },
+    { spellId = spells.SurvivalInstincts, name = "Survival Instincts", category = "DEFENSIVE" },
+    { spellId = spells.RageOfTheSleeper, name = "Rage of the Sleeper", category = "DEFENSIVE" },
+    { spellId = spells.BristlingFur, name = "Bristling Fur", category = "OFFENSIVE" },
 }
 
--- =============================================================================
--- ROTATION PRIORITY
--- =============================================================================
-
-GuardianDruid.rotationPriority = {
-    -- 1. Frenzied Regeneration when low HP
+guardianDruid.rotationPriority = {
     {
-        spellId = SPELLS.FRENZIED_REGENERATION,
+        spellId = spells.FrenziedRegeneration,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
-            if hp and hp < THRESHOLDS.FRENZIED_REGEN_HP then
-                local cdInfo = TA.SecretValues:GetCooldownInfo(SPELLS.FRENZIED_REGENERATION)
+            if hp and hp < thresholds.FrenziedRegenHp then
+                local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spells.FrenziedRegeneration)
                 if cdInfo.charges and cdInfo.charges >= 1 then
                     return true, "URGENT", "Heal up!"
                 end
@@ -269,21 +329,16 @@ GuardianDruid.rotationPriority = {
             return false
         end,
     },
-
-    -- 2. Ironfur maintenance
-    -- Note: Resource check is handled by EvaluatePriorityEntry/CanCastSpell
     {
-        spellId = SPELLS.IRONFUR,
+        spellId = spells.Ironfur,
         defaultPriority = "HIGH",
         condition = function(self)
             local needsRefresh, reason = self:BuffNeedsRefresh(
-                BUFFS.IRONFUR,
-                THRESHOLDS.IRONFUR_REFRESH,
-                THRESHOLDS.IRONFUR_MIN_STACKS
+                buffs.Ironfur,
+                thresholds.IronfurRefresh,
+                thresholds.IronfurMinStacks
             )
-
             if needsRefresh then
-                -- CanCastSpell already verified we have enough rage
                 if reason == "DOWN" then
                     return true, "URGENT", "Ironfur DOWN!"
                 else
@@ -293,64 +348,50 @@ GuardianDruid.rotationPriority = {
             return false
         end,
     },
-
-    -- 3. Mangle (with Gore proc or on CD)
     {
-        spellId = SPELLS.MANGLE,
+        spellId = spells.Mangle,
         defaultPriority = "HIGH",
         condition = function(self)
-            -- Check for Gore proc (instant reset)
-            local goreInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.GORE)
+            local goreInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.Gore)
             if goreInfo.exists then
                 return true, "HIGH", "Gore proc!"
             end
-
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.MANGLE)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.Mangle)
             return usable == true, "NORMAL", nil
         end,
     },
-
-    -- 4. Thrash (maintain DoT)
     {
-        spellId = SPELLS.THRASH,
+        spellId = spells.Thrash,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.THRASH)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.Thrash)
             return usable == true, "NORMAL", nil
         end,
     },
-
-    -- 5. Moonfire (Galactic Guardian proc)
     {
-        spellId = SPELLS.MOONFIRE,
+        spellId = spells.Moonfire,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.GALACTIC_GUARDIAN)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.GalacticGuardian)
             if procInfo.exists then
                 return true, "HIGH", "Free Moonfire!"
             end
             return false
         end,
     },
-
-    -- 6. Maul (with Tooth and Claw proc)
-    -- Note: Can't reliably check "excess rage" during combat due to secret values
     {
-        spellId = SPELLS.MAUL,
+        spellId = spells.Maul,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.TOOTH_AND_CLAW)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ToothAndClaw)
             if procInfo.exists then
                 return true, "HIGH", "Free Maul!"
             end
-            -- Without the proc, don't recommend (Ironfur is better use of rage)
             return false
         end,
     },
-
-    -- 7. Swipe (filler)
     {
-        spellId = SPELLS.SWIPE,
+        spellId = spells.Swipe,
         defaultPriority = "NORMAL",
         condition = function(self)
             local enemies = self:GetEnemyCount()
@@ -362,9 +403,5 @@ GuardianDruid.rotationPriority = {
     },
 }
 
--- =============================================================================
--- REGISTER MODULE
--- =============================================================================
-
-GuardianDruid:Register()
-TA.GuardianDruid = GuardianDruid
+guardianDruid:Register()
+TankAssist.GuardianDruid = guardianDruid

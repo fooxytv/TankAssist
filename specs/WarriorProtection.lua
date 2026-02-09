@@ -1,58 +1,142 @@
--- TankAssist Protection Warrior Module
--- Stub implementation - expand based on Blood DK/Brewmaster patterns
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.Constants.ProtectionWarrior = {
+    Spells = {
+        ShieldSlam = 23922,
+        ThunderClap = 6343,
+        Revenge = 6572,
+        Devastate = 20243,
+        ShieldBlock = 2565,
+        IgnorePain = 190456,
+        ShieldWall = 871,
+        LastStand = 12975,
+        DemoralizingShout = 1160,
+        SpellReflection = 23920,
+        Avatar = 401150,
+        Ravager = 228920,
+        Shockwave = 46968,
+        HeroicThrow = 57755,
+        Charge = 100,
+        Intervene = 3411,
+        RallyingCry = 97462,
+        ChampionsSpear = 376079,
+        ThunderousRoar = 384318,
+    },
 
-local ProtWarrior = TA.SpecBase:New(73, "Protection Warrior")
+    SpellCosts = {
+        [23922] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [6343] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [6572] = {
+            resource = "RAGE",
+            cost = 20,
+        },
+        [20243] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+        [2565] = {
+            resource = "RAGE",
+            cost = 30,
+        },
+        [190456] = {
+            resource = "RAGE",
+            cost = 40,
+        },
+        [46968] = {
+            resource = "RAGE",
+            cost = 0,
+        },
+    },
 
-local SPELLS = TA.Constants.PROTECTION_WARRIOR.SPELLS
-local BUFFS = TA.Constants.PROTECTION_WARRIOR.BUFFS
-local THRESHOLDS = TA.Constants.PROTECTION_WARRIOR.THRESHOLDS
+    Buffs = {
+        ShieldBlock = 132404,
+        IgnorePain = 190456,
+        ShieldWall = 871,
+        LastStand = 12975,
+        Avatar = 401150,
+        Ravager = 228920,
+        RevengeProc = 5302,
+        ViolentOutburst = 386478,
+        Vanguard = 71,
+    },
 
--- =============================================================================
--- SECONDARY SPELLS (unified system - uses CanCastSpell for proper cooldown/charge tracking)
--- =============================================================================
+    Thresholds = {
+        ShieldBlockRefresh = 2,
+        IgnorePainMaxAbsorb = 0.5,
+        LowRageThreshold = 40,
+        RevengeRage = 20,
+    },
 
-ProtWarrior.secondarySpells = {
-    -- EMERGENCY: Shield Wall at critical health
+    Cooldowns = {
+        Major = { 401150, 228920, 376079 },
+        Defensive = { 871, 12975, 23920, 1160 },
+        Offensive = { 384318 },
+    },
+
+    CooldownDurations = {
+        [23922] = 9,
+        [6343] = 6,
+        [6572] = 0,
+        [2565] = 16,
+        [190456] = 0,
+        [871] = 180,
+        [12975] = 180,
+        [1160] = 45,
+        [23920] = 25,
+        [401150] = 90,
+        [46968] = 40,
+    },
+    ChargeSpells = {
+        [2565] = { maxCharges = 2, rechargeTime = 16 },
+    },
+}
+
+TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.ProtectionWarrior)
+
+local protWarrior = TankAssist.SpecBase:New(73, "Protection Warrior")
+
+local spells = TankAssist.Constants.ProtectionWarrior.Spells
+local buffs = TankAssist.Constants.ProtectionWarrior.Buffs
+local thresholds = TankAssist.Constants.ProtectionWarrior.Thresholds
+
+protWarrior.secondarySpells = {
     {
-        spellId = SPELLS.SHIELD_WALL,
+        spellId = spells.ShieldWall,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.30)
         end,
     },
-
-    -- EMERGENCY: Last Stand when very low
     {
-        spellId = SPELLS.LAST_STAND,
+        spellId = spells.LastStand,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.35)
         end,
     },
-
-    -- MITIGATION: Shield Block maintenance (charge-based)
     {
-        spellId = SPELLS.SHIELD_BLOCK,
+        spellId = spells.ShieldBlock,
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHIELD_BLOCK)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShieldBlock)
             if not buffInfo.exists then
                 return true
             end
-            -- Refresh if expiring soon
             local remaining = buffInfo.expirationTime and (buffInfo.expirationTime - GetTime()) or 0
             return remaining < 2
         end,
     },
-
-    -- SHIELD: Ignore Pain when health drops
     {
-        spellId = SPELLS.IGNORE_PAIN,
+        spellId = spells.IgnorePain,
         category = "SHIELD",
         urgency = "HIGH",
         condition = function(self)
@@ -60,92 +144,73 @@ ProtWarrior.secondarySpells = {
             return self:HealthBelow(0.60) and rage and rage >= 40
         end,
     },
-
-    -- DEFENSIVE: Demoralizing Shout
     {
-        spellId = SPELLS.DEMORALIZING_SHOUT,
+        spellId = spells.DemoralizingShout,
         category = "DEFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HealthBelow(0.50) and self:HasTarget()
         end,
     },
-
-    -- DEFENSIVE: Spell Reflection
     {
-        spellId = SPELLS.SPELL_REFLECTION,
+        spellId = spells.SpellReflection,
         category = "DEFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Could check for incoming spell casts in the future
             return self:HasTarget()
         end,
     },
-
-    -- AOE: Thunder Clap
     {
-        spellId = SPELLS.THUNDER_CLAP,
+        spellId = spells.ThunderClap,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- AOE: Revenge with proc (free!)
     {
-        spellId = SPELLS.REVENGE,
+        spellId = spells.Revenge,
         category = "AOE",
         urgency = "HIGH",
         condition = function(self)
-            local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.REVENGE_PROC)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.RevengeProc)
             return procInfo.exists
         end,
     },
-
-    -- AOE: Shockwave (if talented)
     {
-        spellId = SPELLS.SHOCKWAVE,
+        spellId = spells.Shockwave,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- OFFENSIVE: Avatar
     {
-        spellId = SPELLS.AVATAR,
+        spellId = spells.Avatar,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Ravager (if talented)
     {
-        spellId = SPELLS.RAVAGER,
+        spellId = spells.Ravager,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Thunderous Roar (if talented)
     {
-        spellId = SPELLS.THUNDEROUS_ROAR,
+        spellId = spells.ThunderousRoar,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- AOE: Revenge (with rage, no proc)
     {
-        spellId = SPELLS.REVENGE,
+        spellId = spells.Revenge,
         category = "AOE",
         urgency = "LOW",
         condition = function(self)
@@ -153,10 +218,8 @@ ProtWarrior.secondarySpells = {
             return self:HasTarget() and rage and rage >= 40
         end,
     },
-
-    -- FILLER: Shield Slam
     {
-        spellId = SPELLS.SHIELD_SLAM,
+        spellId = spells.ShieldSlam,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
@@ -165,36 +228,34 @@ ProtWarrior.secondarySpells = {
     },
 }
 
--- Legacy: Keep aoeSpells for backwards compatibility but it won't be used
-ProtWarrior.aoeSpells = {
+protWarrior.aoeSpells = {
     {
-        spellId = SPELLS.THUNDER_CLAP,
+        spellId = spells.ThunderClap,
         priority = 1,
         condition = function() return true end,
     },
     {
-        spellId = SPELLS.REVENGE,
+        spellId = spells.Revenge,
         priority = 2,
-        -- Prioritize when free Revenge proc is up
         condition = function()
-            local procInfo = TA.SecretValues:GetBuffInfo("player", TA.Constants.PROTECTION_WARRIOR.BUFFS.REVENGE_PROC)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", TankAssist.Constants.ProtectionWarrior.Buffs.RevengeProc)
             return procInfo.exists
         end,
     },
     {
-        spellId = SPELLS.SHOCKWAVE,
+        spellId = spells.Shockwave,
         priority = 3,
         condition = function()
-            return IsSpellKnown(SPELLS.SHOCKWAVE)
+            return IsSpellKnown(spells.Shockwave)
         end,
     },
 }
 
-function ProtWarrior:GetBestAoESpell()
+function protWarrior:GetBestAoESpell()
     for _, aoeData in ipairs(self.aoeSpells) do
         local spellId = aoeData.spellId
         if spellId and IsSpellKnown(spellId) then
-            local cdInfo = TA.SecretValues:GetCooldownInfo(spellId)
+            local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
             local isReady = not cdInfo.onCooldown or (cdInfo.charges and cdInfo.charges > 0)
             local conditionMet = not aoeData.condition or aoeData.condition()
             if isReady and conditionMet then
@@ -202,113 +263,120 @@ function ProtWarrior:GetBestAoESpell()
             end
         end
     end
-    return SPELLS.THUNDER_CLAP
+    return spells.ThunderClap
 end
 
-
--- =============================================================================
--- TRACKED BUFFS
--- =============================================================================
-
-ProtWarrior.buffsToTrack = {
+protWarrior.buffsToTrack = {
     {
-        spellId = BUFFS.SHIELD_BLOCK,
+        spellId = buffs.ShieldBlock,
         name = "Shield Block",
-        refreshSpell = SPELLS.SHIELD_BLOCK,
-        refreshThreshold = THRESHOLDS.SHIELD_BLOCK_REFRESH,
+        refreshSpell = spells.ShieldBlock,
+        refreshThreshold = thresholds.ShieldBlockRefresh,
         priority = "CRITICAL",
     },
     {
-        -- Ignore Pain: absorb shield
-        -- Note: Absorb AMOUNT is a secret value and cannot be tracked
-        -- We can only track whether the shield EXISTS (up/down)
-        spellId = BUFFS.IGNORE_PAIN,
+        spellId = buffs.IgnorePain,
         name = "Ignore Pain",
-        refreshSpell = SPELLS.IGNORE_PAIN,
+        refreshSpell = spells.IgnorePain,
         refreshThreshold = 2,
         priority = "HIGH",
-        isAbsorb = true, -- Flag for UI to show as absorb indicator
+        isAbsorb = true,
     },
     {
-        spellId = BUFFS.SHIELD_WALL,
+        spellId = buffs.ShieldWall,
         name = "Shield Wall",
-        refreshSpell = SPELLS.SHIELD_WALL,
+        refreshSpell = spells.ShieldWall,
         refreshThreshold = 0,
         priority = "HIGH",
     },
 }
 
--- =============================================================================
--- TANK ACTIONS (for TankActionsDisplay)
--- =============================================================================
-
-ProtWarrior.tankActions = {
+protWarrior.tankActions = {
     MITIGATION = {
-        spellId = SPELLS.SHIELD_BLOCK,
+        spellId = spells.ShieldBlock,
         name = "Shield Block",
         condition = function()
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHIELD_BLOCK)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShieldBlock)
             return not buffInfo.exists
         end,
     },
     SHIELD = {
-        spellId = SPELLS.IGNORE_PAIN,
+        spellId = spells.IgnorePain,
         name = "Ignore Pain",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.7
         end,
     },
     DEFENSIVE = {
-        spellId = SPELLS.SHIELD_WALL,
+        spellId = spells.ShieldWall,
         name = "Shield Wall",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.4
         end,
     },
     HEAL = {
-        spellId = SPELLS.IGNORE_PAIN,
+        spellId = spells.IgnorePain,
         name = "Ignore Pain",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.5
         end,
     },
 }
 
--- =============================================================================
--- TRACKED COOLDOWNS
--- =============================================================================
-
-ProtWarrior.cooldownsToTrack = {
-    { spellId = SPELLS.AVATAR, name = "Avatar", category = "MAJOR" },
-    { spellId = SPELLS.RAVAGER, name = "Ravager", category = "MAJOR" },
-    { spellId = SPELLS.CHAMPIONS_SPEAR, name = "Champion's Spear", category = "MAJOR" },
-    { spellId = SPELLS.SHIELD_WALL, name = "Shield Wall", category = "DEFENSIVE" },
-    { spellId = SPELLS.LAST_STAND, name = "Last Stand", category = "DEFENSIVE" },
-    { spellId = SPELLS.SPELL_REFLECTION, name = "Spell Reflection", category = "DEFENSIVE" },
-    { spellId = SPELLS.DEMORALIZING_SHOUT, name = "Demoralizing Shout", category = "DEFENSIVE" },
-    { spellId = SPELLS.THUNDEROUS_ROAR, name = "Thunderous Roar", category = "OFFENSIVE" },
+protWarrior.cooldownsToTrack = {
+    {
+        spellId = spells.Avatar,
+        name = "Avatar",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.Ravager,
+        name = "Ravager",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.ChampionsSpear,
+        name = "Champion's Spear",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.ShieldWall,
+        name = "Shield Wall",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.LastStand,
+        name = "Last Stand",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.SpellReflection,
+        name = "Spell Reflection",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.DemoralizingShout,
+        name = "Demoralizing Shout",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.ThunderousRoar,
+        name = "Thunderous Roar",
+        category = "OFFENSIVE",
+    },
 }
 
--- =============================================================================
--- ROTATION PRIORITY
--- =============================================================================
-
-ProtWarrior.rotationPriority = {
-    -- ==========================================================================
-    -- TANK ALERTS (only show when actually needed)
-    -- ==========================================================================
-
-    -- 1. Shield Wall (EMERGENCY - very low health)
+protWarrior.rotationPriority = {
     {
-        spellId = SPELLS.SHIELD_WALL,
+        spellId = spells.ShieldWall,
         defaultPriority = "URGENT",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.3 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.SHIELD_WALL)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.ShieldWall)
                 if usable then
                     return true, "URGENT", "EMERGENCY!"
                 end
@@ -316,15 +384,13 @@ ProtWarrior.rotationPriority = {
             return false
         end,
     },
-
-    -- 2. Last Stand (EMERGENCY when Shield Wall unavailable)
     {
-        spellId = SPELLS.LAST_STAND,
+        spellId = spells.LastStand,
         defaultPriority = "URGENT",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.35 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.LAST_STAND)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.LastStand)
                 if usable then
                     return true, "URGENT", "EMERGENCY!"
                 end
@@ -332,16 +398,14 @@ ProtWarrior.rotationPriority = {
             return false
         end,
     },
-
-    -- 3. Ignore Pain (when taking damage and health drops)
     {
-        spellId = SPELLS.IGNORE_PAIN,
+        spellId = spells.IgnorePain,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
             local rage = self:GetResource("RAGE")
             if hp and hp < 0.6 and rage and rage >= 40 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.IGNORE_PAIN)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.IgnorePain)
                 if usable then
                     return true, "HIGH", "Absorb damage!"
                 end
@@ -349,17 +413,11 @@ ProtWarrior.rotationPriority = {
             return false
         end,
     },
-
-    -- ==========================================================================
-    -- ROTATION PRIORITIES (maintenance and DPS)
-    -- ==========================================================================
-
-    -- 4. Shield Block maintenance
     {
-        spellId = SPELLS.SHIELD_BLOCK,
+        spellId = spells.ShieldBlock,
         defaultPriority = "HIGH",
         condition = function(self)
-            local needsRefresh = self:BuffNeedsRefresh(BUFFS.SHIELD_BLOCK, THRESHOLDS.SHIELD_BLOCK_REFRESH)
+            local needsRefresh = self:BuffNeedsRefresh(buffs.ShieldBlock, thresholds.ShieldBlockRefresh)
             if needsRefresh then
                 local rage = self:GetResource("RAGE")
                 if rage and rage >= 30 then
@@ -369,68 +427,50 @@ ProtWarrior.rotationPriority = {
             return false
         end,
     },
-    
-    -- 2. Shield Slam (main ability)
     {
-        spellId = SPELLS.SHIELD_SLAM,
+        spellId = spells.ShieldSlam,
         defaultPriority = "HIGH",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.SHIELD_SLAM)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.ShieldSlam)
             return usable == true, "HIGH", nil
         end,
     },
-    
-    -- 3. Thunder Clap
     {
-        spellId = SPELLS.THUNDER_CLAP,
+        spellId = spells.ThunderClap,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.THUNDER_CLAP)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.ThunderClap)
             return usable == true, "NORMAL", nil
         end,
     },
-    
-    -- 4. Revenge (proc or high rage)
     {
-        spellId = SPELLS.REVENGE,
+        spellId = spells.Revenge,
         defaultPriority = "NORMAL",
         condition = function(self)
-            -- Check for free Revenge proc
-            local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.REVENGE_PROC)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.RevengeProc)
             if procInfo.exists then
                 return true, "HIGH", "Free Revenge!"
             end
-            
-            -- Or use with high rage
             local rage = self:GetResource("RAGE")
             if rage and rage >= 60 then
                 return true, "NORMAL", nil
             end
-            
             return false
         end,
     },
-    
-    -- 5. Ignore Pain (absorb management)
     {
-        spellId = SPELLS.IGNORE_PAIN,
+        spellId = spells.IgnorePain,
         defaultPriority = "NORMAL",
         condition = function(self)
             local rage = self:GetResource("RAGE")
             local hp = self:GetHealthPercent()
-            
             if rage and rage >= 60 and hp and hp < 0.8 then
                 return true, "NORMAL", "Build absorb"
             end
-            
             return false
         end,
     },
 }
 
--- =============================================================================
--- REGISTER
--- =============================================================================
-
-ProtWarrior:Register()
-TA.ProtWarrior = ProtWarrior
+protWarrior:Register()
+TankAssist.ProtWarrior = protWarrior

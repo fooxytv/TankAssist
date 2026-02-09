@@ -1,41 +1,142 @@
--- TankAssist Protection Paladin Module
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.Constants.ProtectionPaladin = {
+    Spells = {
+        Judgment = 275779,
+        ShieldOfTheRighteous = 53600,
+        AvengersShield = 31935,
+        HammerOfTheRighteous = 53595,
+        BlessedHammer = 204019,
+        Consecration = 26573,
+        WordOfGlory = 85673,
+        ArdentDefender = 31850,
+        GuardianOfAncientKings = 86659,
+        DivineShield = 642,
+        LayOnHands = 633,
+        AvengingWrath = 31884,
+        MomentOfGlory = 327193,
+        Sentinel = 389539,
+        EyeOfTyr = 387174,
+        HammerOfWrath = 24275,
+        DivineToll = 375576,
+        HandOfReckoning = 62124,
+    },
 
-local ProtPaladin = TA.SpecBase:New(66, "Protection Paladin")
+    SpellCosts = {
+        [275779] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+        [53600] = {
+            resource = "HOLY_POWER",
+            cost = 3,
+        },
+        [31935] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+        [53595] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+        [204019] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+        [26573] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+        [85673] = {
+            resource = "HOLY_POWER",
+            cost = 3,
+        },
+        [24275] = {
+            resource = "HOLY_POWER",
+            cost = 0,
+        },
+    },
 
-local SPELLS = TA.Constants.PROTECTION_PALADIN.SPELLS
-local BUFFS = TA.Constants.PROTECTION_PALADIN.BUFFS
-local THRESHOLDS = TA.Constants.PROTECTION_PALADIN.THRESHOLDS
+    Buffs = {
+        ShieldOfTheRighteous = 132403,
+        Consecration = 188370,
+        ArdentDefender = 31850,
+        GuardianOfAncientKings = 86659,
+        AvengingWrath = 31884,
+        Sentinel = 389539,
+        MomentOfGlory = 327193,
+        ShiningLight = 327510,
+        BlessedAssurance = 433019,
+    },
 
--- AoE spells in priority order
-ProtPaladin.aoeSpells = {
+    Thresholds = {
+        SotrRefresh = 3,
+        ConsecrationRefresh = 1,
+        WordOfGloryHp = 0.5,
+        HolyPowerMax = 5,
+    },
+
+    Cooldowns = {
+        Major = { 31884, 389539, 375576 },
+        Defensive = { 31850, 86659, 642, 633 },
+        Offensive = { 387174 },
+    },
+
+    CooldownDurations = {
+        [275779] = 6,
+        [31935] = 15,
+        [53600] = 0,
+        [53595] = 0,
+        [26573] = 4,
+        [85673] = 0,
+        [31850] = 120,
+        [86659] = 300,
+        [31884] = 60,
+        [375576] = 60,
+        [387174] = 60,
+        [633] = 600,
+        [642] = 300,
+        [389539] = 120,
+    },
+    StackingBuffs = {
+        [132403] = { buffId = 132403, duration = 4.5 },
+    },
+}
+
+TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.ProtectionPaladin)
+
+local protPaladin = TankAssist.SpecBase:New(66, "Protection Paladin")
+
+local spells = TankAssist.Constants.ProtectionPaladin.Spells
+local buffs = TankAssist.Constants.ProtectionPaladin.Buffs
+local thresholds = TankAssist.Constants.ProtectionPaladin.Thresholds
+
+protPaladin.aoeSpells = {
     {
-        spellId = SPELLS.AVENGERS_SHIELD,
+        spellId = spells.AvengersShield,
         priority = 1,
         condition = function() return true end,
     },
     {
-        spellId = SPELLS.CONSECRATION,
+        spellId = spells.Consecration,
         priority = 2,
-        -- Use when Consecration buff is down
         condition = function()
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", TA.Constants.PROTECTION_PALADIN.BUFFS.CONSECRATION)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", TankAssist.Constants.ProtectionPaladin.Buffs.Consecration)
             return not buffInfo.exists
         end,
     },
     {
-        spellId = SPELLS.HAMMER_OF_THE_RIGHTEOUS,
+        spellId = spells.HammerOfTheRighteous,
         priority = 3,
         condition = function() return true end,
     },
 }
 
-function ProtPaladin:GetBestAoESpell()
+function protPaladin:GetBestAoESpell()
     for _, aoeData in ipairs(self.aoeSpells) do
         local spellId = aoeData.spellId
         if spellId and IsSpellKnown(spellId) then
-            local cdInfo = TA.SecretValues:GetCooldownInfo(spellId)
+            local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
             local isReady = not cdInfo.onCooldown or (cdInfo.charges and cdInfo.charges > 0)
             local conditionMet = not aoeData.condition or aoeData.condition()
             if isReady and conditionMet then
@@ -43,56 +144,43 @@ function ProtPaladin:GetBestAoESpell()
             end
         end
     end
-    return SPELLS.CONSECRATION
+    return spells.Consecration
 end
 
--- =============================================================================
--- SECONDARY SPELLS (unified system like Brewmaster)
--- Ordered by priority - first match wins
--- =============================================================================
-
-ProtPaladin.secondarySpells = {
-    -- EMERGENCY: Lay on Hands (full heal, use at very low health)
+protPaladin.secondarySpells = {
     {
-        spellId = SPELLS.LAY_ON_HANDS,
+        spellId = spells.LayOnHands,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.20)
         end,
     },
-
-    -- EMERGENCY: Guardian of Ancient Kings
     {
-        spellId = SPELLS.GUARDIAN_OF_ANCIENT_KINGS,
+        spellId = spells.GuardianOfAncientKings,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.30)
         end,
     },
-
-    -- EMERGENCY: Ardent Defender
     {
-        spellId = SPELLS.ARDENT_DEFENDER,
+        spellId = spells.ArdentDefender,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.35)
         end,
     },
-
-    -- HEAL: Word of Glory with Shining Light proc (free heal)
     {
-        spellId = SPELLS.WORD_OF_GLORY,
+        spellId = spells.WordOfGlory,
         category = "HEAL",
         urgency = "HIGH",
         condition = function(self)
-            local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHINING_LIGHT)
+            local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShiningLight)
             if procInfo.exists then
                 return self:HealthBelow(0.80)
             end
-            -- Or emergency heal at low health with Holy Power
             if self:HealthBelow(0.50) then
                 local holyPower = self:GetResource("HOLY_POWER")
                 return holyPower and holyPower >= 3
@@ -100,10 +188,8 @@ ProtPaladin.secondarySpells = {
             return false
         end,
     },
-
-    -- MITIGATION: Shield of the Righteous (maintain buff)
     {
-        spellId = SPELLS.SHIELD_OF_THE_RIGHTEOUS,
+        spellId = spells.ShieldOfTheRighteous,
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
@@ -111,94 +197,76 @@ ProtPaladin.secondarySpells = {
             if not holyPower or holyPower < 3 then
                 return false
             end
-            -- Check if buff is down or expiring
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHIELD_OF_THE_RIGHTEOUS)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShieldOfTheRighteous)
             if not buffInfo.exists then
                 return true
             end
-            -- Refresh if less than 3 seconds remaining
             local remaining = (buffInfo.expirationTime or 0) - GetTime()
             return remaining < 3
         end,
     },
-
-    -- OFFENSIVE: Avenging Wrath (major CD)
     {
-        spellId = SPELLS.AVENGING_WRATH,
+        spellId = spells.AvengingWrath,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Divine Toll (big AoE damage + Holy Power)
     {
-        spellId = SPELLS.DIVINE_TOLL,
+        spellId = spells.DivineToll,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Eye of Tyr (if talented)
     {
-        spellId = SPELLS.EYE_OF_TYR,
+        spellId = spells.EyeOfTyr,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Sentinel (if talented)
     {
-        spellId = SPELLS.SENTINEL,
+        spellId = spells.Sentinel,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- AOE: Avenger's Shield (15s CD, high priority)
     {
-        spellId = SPELLS.AVENGERS_SHIELD,
+        spellId = spells.AvengersShield,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- AOE: Judgment (6s CD, generates Holy Power)
     {
-        spellId = SPELLS.JUDGMENT,
+        spellId = spells.Judgment,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- AOE: Consecration (maintain buff)
     {
-        spellId = SPELLS.CONSECRATION,
+        spellId = spells.Consecration,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             if not self:HasTarget() then
                 return false
             end
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.CONSECRATION)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.Consecration)
             return not buffInfo.exists
         end,
     },
-
-    -- FILLER: Hammer of the Righteous
     {
-        spellId = SPELLS.HAMMER_OF_THE_RIGHTEOUS,
+        spellId = spells.HammerOfTheRighteous,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
@@ -207,92 +275,115 @@ ProtPaladin.secondarySpells = {
     },
 }
 
-ProtPaladin.buffsToTrack = {
+protPaladin.buffsToTrack = {
     {
-        spellId = BUFFS.SHIELD_OF_THE_RIGHTEOUS,
+        spellId = buffs.ShieldOfTheRighteous,
         name = "Shield of the Righteous",
-        refreshSpell = SPELLS.SHIELD_OF_THE_RIGHTEOUS,
-        refreshThreshold = THRESHOLDS.SOTR_REFRESH,
+        refreshSpell = spells.ShieldOfTheRighteous,
+        refreshThreshold = thresholds.SotrRefresh,
         priority = "CRITICAL",
     },
     {
-        spellId = BUFFS.CONSECRATION,
+        spellId = buffs.Consecration,
         name = "Consecration",
-        refreshSpell = SPELLS.CONSECRATION,
-        refreshThreshold = THRESHOLDS.CONSECRATION_REFRESH,
+        refreshSpell = spells.Consecration,
+        refreshThreshold = thresholds.ConsecrationRefresh,
         priority = "HIGH",
     },
     {
-        spellId = BUFFS.ARDENT_DEFENDER,
+        spellId = buffs.ArdentDefender,
         name = "Ardent Defender",
         refreshThreshold = 0,
         priority = "HIGH",
     },
 }
 
--- =============================================================================
--- TANK ACTIONS (for TankActionsDisplay)
--- =============================================================================
-
-ProtPaladin.tankActions = {
+protPaladin.tankActions = {
     MITIGATION = {
-        spellId = SPELLS.SHIELD_OF_THE_RIGHTEOUS,
+        spellId = spells.ShieldOfTheRighteous,
         name = "Shield of the Righteous",
         condition = function()
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHIELD_OF_THE_RIGHTEOUS)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShieldOfTheRighteous)
             return not buffInfo.exists
         end,
     },
     SHIELD = {
-        spellId = SPELLS.WORD_OF_GLORY,
+        spellId = spells.WordOfGlory,
         name = "Word of Glory",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.6
         end,
     },
     DEFENSIVE = {
-        spellId = SPELLS.ARDENT_DEFENDER,
+        spellId = spells.ArdentDefender,
         name = "Ardent Defender",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.4
         end,
     },
     HEAL = {
-        spellId = SPELLS.WORD_OF_GLORY,
+        spellId = spells.WordOfGlory,
         name = "Word of Glory",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.5
         end,
     },
 }
 
-ProtPaladin.cooldownsToTrack = {
-    { spellId = SPELLS.AVENGING_WRATH, name = "Avenging Wrath", category = "MAJOR" },
-    { spellId = SPELLS.SENTINEL, name = "Sentinel", category = "MAJOR" },
-    { spellId = SPELLS.DIVINE_TOLL, name = "Divine Toll", category = "MAJOR" },
-    { spellId = SPELLS.ARDENT_DEFENDER, name = "Ardent Defender", category = "DEFENSIVE" },
-    { spellId = SPELLS.GUARDIAN_OF_ANCIENT_KINGS, name = "Guardian of Ancient Kings", category = "DEFENSIVE" },
-    { spellId = SPELLS.DIVINE_SHIELD, name = "Divine Shield", category = "DEFENSIVE" },
-    { spellId = SPELLS.LAY_ON_HANDS, name = "Lay on Hands", category = "DEFENSIVE" },
-    { spellId = SPELLS.EYE_OF_TYR, name = "Eye of Tyr", category = "OFFENSIVE" },
+protPaladin.cooldownsToTrack = {
+    {
+        spellId = spells.AvengingWrath,
+        name = "Avenging Wrath",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.Sentinel,
+        name = "Sentinel",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.DivineToll,
+        name = "Divine Toll",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.ArdentDefender,
+        name = "Ardent Defender",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.GuardianOfAncientKings,
+        name = "Guardian of Ancient Kings",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.DivineShield,
+        name = "Divine Shield",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.LayOnHands,
+        name = "Lay on Hands",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.EyeOfTyr,
+        name = "Eye of Tyr",
+        category = "OFFENSIVE",
+    },
 }
 
-ProtPaladin.rotationPriority = {
-    -- ==========================================================================
-    -- TANK ALERTS (only show when actually needed)
-    -- ==========================================================================
-
-    -- 1. Ardent Defender (EMERGENCY - very low health)
+protPaladin.rotationPriority = {
     {
-        spellId = SPELLS.ARDENT_DEFENDER,
+        spellId = spells.ArdentDefender,
         defaultPriority = "URGENT",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.3 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.ARDENT_DEFENDER)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.ArdentDefender)
                 if usable then
                     return true, "URGENT", "EMERGENCY!"
                 end
@@ -300,15 +391,13 @@ ProtPaladin.rotationPriority = {
             return false
         end,
     },
-
-    -- 2. Guardian of Ancient Kings (EMERGENCY)
     {
-        spellId = SPELLS.GUARDIAN_OF_ANCIENT_KINGS,
+        spellId = spells.GuardianOfAncientKings,
         defaultPriority = "URGENT",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.35 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.GUARDIAN_OF_ANCIENT_KINGS)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.GuardianOfAncientKings)
                 if usable then
                     return true, "URGENT", "EMERGENCY!"
                 end
@@ -316,20 +405,16 @@ ProtPaladin.rotationPriority = {
             return false
         end,
     },
-
-    -- 3. Word of Glory (self-heal when low HP)
     {
-        spellId = SPELLS.WORD_OF_GLORY,
+        spellId = spells.WordOfGlory,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.5 then
-                -- Check for free proc first
-                local procInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SHINING_LIGHT)
+                local procInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ShiningLight)
                 if procInfo.exists then
                     return true, "URGENT", "Free heal!"
                 end
-                -- Or if we have Holy Power and really low
                 if hp < 0.4 then
                     local holyPower = self:GetResource("HOLY_POWER")
                     if holyPower and holyPower >= 3 then
@@ -340,17 +425,11 @@ ProtPaladin.rotationPriority = {
             return false
         end,
     },
-
-    -- ==========================================================================
-    -- ROTATION PRIORITIES (maintenance and DPS)
-    -- ==========================================================================
-
-    -- 4. Shield of the Righteous maintenance
     {
-        spellId = SPELLS.SHIELD_OF_THE_RIGHTEOUS,
+        spellId = spells.ShieldOfTheRighteous,
         defaultPriority = "HIGH",
         condition = function(self)
-            local needsRefresh = self:BuffNeedsRefresh(BUFFS.SHIELD_OF_THE_RIGHTEOUS, THRESHOLDS.SOTR_REFRESH)
+            local needsRefresh = self:BuffNeedsRefresh(buffs.ShieldOfTheRighteous, thresholds.SotrRefresh)
             if needsRefresh then
                 local hp = self:GetResource("HOLY_POWER")
                 if hp and hp >= 3 then
@@ -360,45 +439,37 @@ ProtPaladin.rotationPriority = {
             return false
         end,
     },
-    
-    -- 3. Judgment (generates HP, reduces SotR cooldown)
     {
-        spellId = SPELLS.JUDGMENT,
+        spellId = spells.Judgment,
         defaultPriority = "HIGH",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.JUDGMENT)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.Judgment)
             return usable == true, "HIGH", nil
         end,
     },
-    
-    -- 4. Avenger's Shield
     {
-        spellId = SPELLS.AVENGERS_SHIELD,
+        spellId = spells.AvengersShield,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.AVENGERS_SHIELD)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.AvengersShield)
             return usable == true, "NORMAL", nil
         end,
     },
-    
-    -- 5. Hammer of the Righteous/Blessed Hammer
     {
-        spellId = SPELLS.HAMMER_OF_THE_RIGHTEOUS,
+        spellId = spells.HammerOfTheRighteous,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.HAMMER_OF_THE_RIGHTEOUS)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.HammerOfTheRighteous)
             return usable == true, "NORMAL", nil
         end,
     },
-    
-    -- 6. Consecration (keep active)
     {
-        spellId = SPELLS.CONSECRATION,
+        spellId = spells.Consecration,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.CONSECRATION)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.Consecration)
             if not buffInfo.exists or buffInfo.isSecret then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.CONSECRATION)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.Consecration)
                 return usable == true, "NORMAL", "Consecration down"
             end
             return false
@@ -406,5 +477,5 @@ ProtPaladin.rotationPriority = {
     },
 }
 
-ProtPaladin:Register()
-TA.ProtPaladin = ProtPaladin
+protPaladin:Register()
+TankAssist.ProtPaladin = protPaladin

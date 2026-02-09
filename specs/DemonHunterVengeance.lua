@@ -1,68 +1,146 @@
--- TankAssist Vengeance Demon Hunter Module
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.Constants.VengeanceDemonHunter = {
+    Spells = {
+        Shear = 203782,
+        Fracture = 263642,
+        SoulCleave = 228477,
+        SpiritBomb = 247454,
+        ImmolationAura = 258920,
+        SigilOfFlame = 204596,
+        SigilOfSilence = 202137,
+        SigilOfMisery = 207684,
+        SigilOfChains = 202138,
+        SigilOfSpite = 390163,
+        DemonSpikes = 203720,
+        FieryBrand = 204021,
+        Metamorphosis = 187827,
+        FelDevastation = 212084,
+        InfernalStrike = 189110,
+        TheHunt = 370965,
+        SoulCarver = 207407,
+    },
 
-local VengeanceDH = TA.SpecBase:New(581, "Vengeance Demon Hunter")
+    SpellCosts = {
+        [203782] = {
+            resource = "FURY",
+            cost = 0,
+        },
+        [263642] = {
+            resource = "FURY",
+            cost = 25,
+        },
+        [228477] = {
+            resource = "FURY",
+            cost = 30,
+        },
+        [247454] = {
+            resource = "FURY",
+            cost = 40,
+        },
+        [258920] = {
+            resource = "FURY",
+            cost = 0,
+        },
+        [204596] = {
+            resource = "FURY",
+            cost = 0,
+        },
+        [212084] = {
+            resource = "FURY",
+            cost = 50,
+        },
+    },
 
-local SPELLS = TA.Constants.VENGEANCE_DH.SPELLS
-local BUFFS = TA.Constants.VENGEANCE_DH.BUFFS
-local THRESHOLDS = TA.Constants.VENGEANCE_DH.THRESHOLDS
+    Buffs = {
+        DemonSpikes = 203819,
+        Metamorphosis = 187827,
+        SoulFragments = 203981,
+        FieryBrand = 207744,
+        ImmolationAura = 258920,
+        CalcifiedSpikes = 391171,
+        Painbringer = 207387,
+    },
 
--- =============================================================================
--- SECONDARY SPELLS (unified system - uses CanCastSpell for proper cooldown tracking)
--- =============================================================================
+    Thresholds = {
+        DemonSpikesRefresh = 2,
+        SoulFragmentsSpiritBomb = 4,
+        FuryForSoulCleave = 30,
+        LowHealthPercent = 0.4,
+    },
 
-VengeanceDH.secondarySpells = {
-    -- EMERGENCY: Metamorphosis at critical health
+    Cooldowns = {
+        Major = { 187827, 370965, 390163 },
+        Defensive = { 204021, 212084 },
+        Offensive = { 207407 },
+    },
+
+    CooldownDurations = {
+        [203782] = 0,
+        [263642] = 4.5,
+        [228477] = 0,
+        [247454] = 0,
+        [258920] = 30,
+        [204596] = 30,
+        [390163] = 60,
+        [203720] = 17,
+        [204021] = 60,
+        [187827] = 180,
+        [212084] = 40,
+    },
+    ChargeSpells = {
+        [203720] = { maxCharges = 1, rechargeTime = 17 },
+    },
+}
+
+TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.VengeanceDemonHunter)
+
+local vengeanceDH = TankAssist.SpecBase:New(581, "Vengeance Demon Hunter")
+
+local spells = TankAssist.Constants.VengeanceDemonHunter.Spells
+local buffs = TankAssist.Constants.VengeanceDemonHunter.Buffs
+local thresholds = TankAssist.Constants.VengeanceDemonHunter.Thresholds
+
+vengeanceDH.secondarySpells = {
     {
-        spellId = SPELLS.METAMORPHOSIS,
+        spellId = spells.Metamorphosis,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.30)
         end,
     },
-
-    -- HEAL: Soul Cleave when low health
-    -- Note: Fury check is handled by CanCastSpell/IsSpellUsable
     {
-        spellId = SPELLS.SOUL_CLEAVE,
+        spellId = spells.SoulCleave,
         category = "HEAL",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.50)
         end,
     },
-
-    -- MITIGATION: Demon Spikes maintenance (charge-based)
     {
-        spellId = SPELLS.DEMON_SPIKES,
+        spellId = spells.DemonSpikes,
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.DEMON_SPIKES)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.DemonSpikes)
             if not buffInfo.exists then
                 return true
             end
-            -- Refresh if expiring soon
             local remaining = buffInfo.expirationTime and (buffInfo.expirationTime - GetTime()) or 0
             return remaining < 2
         end,
     },
-
-    -- DEFENSIVE: Fiery Brand when taking damage
     {
-        spellId = SPELLS.FIERY_BRAND,
+        spellId = spells.FieryBrand,
         category = "DEFENSIVE",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.50) and self:HasTarget()
         end,
     },
-
-    -- AOE: Spirit Bomb (high priority when we have fragments)
     {
-        spellId = SPELLS.SPIRIT_BOMB,
+        spellId = spells.SpiritBomb,
         category = "AOE",
         urgency = "HIGH",
         condition = function(self)
@@ -70,71 +148,57 @@ VengeanceDH.secondarySpells = {
             return self:HasTarget() and fragments and fragments >= 4
         end,
     },
-
-    -- AOE: Sigil of Flame
     {
-        spellId = SPELLS.SIGIL_OF_FLAME,
+        spellId = spells.SigilOfFlame,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget()
         end,
     },
-
-    -- AOE: Immolation Aura
     {
-        spellId = SPELLS.IMMOLATION_AURA,
+        spellId = spells.ImmolationAura,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.IMMOLATION_AURA)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ImmolationAura)
             return not buffInfo.exists and self:HasTarget()
         end,
     },
-
-    -- AOE: Fel Devastation (if talented)
     {
-        spellId = SPELLS.FEL_DEVASTATION,
+        spellId = spells.FelDevastation,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: The Hunt (if talented)
     {
-        spellId = SPELLS.THE_HUNT,
+        spellId = spells.TheHunt,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Sigil of Spite (if talented)
     {
-        spellId = SPELLS.SIGIL_OF_SPITE,
+        spellId = spells.SigilOfSpite,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Soul Carver (if talented)
     {
-        spellId = SPELLS.SOUL_CARVER,
+        spellId = spells.SoulCarver,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- FILLER: Fracture (generate souls)
     {
-        spellId = SPELLS.FRACTURE,
+        spellId = spells.Fracture,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
@@ -142,37 +206,34 @@ VengeanceDH.secondarySpells = {
             return self:HasTarget() and (not fragments or fragments < 4)
         end,
     },
-
-    -- FILLER: Shear (if Fracture not talented)
     {
-        spellId = SPELLS.SHEAR,
+        spellId = spells.Shear,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
-            return self:HasTarget() and not IsSpellKnown(SPELLS.FRACTURE)
+            return self:HasTarget() and not IsSpellKnown(spells.Fracture)
         end,
     },
 }
 
--- Legacy: Keep aoeSpells for backwards compatibility but it won't be used
-VengeanceDH.aoeSpells = {
+vengeanceDH.aoeSpells = {
     {
-        spellId = SPELLS.SIGIL_OF_FLAME,
+        spellId = spells.SigilOfFlame,
         priority = 1,
         condition = function() return true end,
     },
     {
-        spellId = SPELLS.IMMOLATION_AURA,
+        spellId = spells.ImmolationAura,
         priority = 2,
         condition = function() return true end,
     },
 }
 
-function VengeanceDH:GetBestAoESpell()
+function vengeanceDH:GetBestAoESpell()
     for _, aoeData in ipairs(self.aoeSpells) do
         local spellId = aoeData.spellId
         if spellId and IsSpellKnown(spellId) then
-            local cdInfo = TA.SecretValues:GetCooldownInfo(spellId)
+            local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
             local isReady = not cdInfo.onCooldown or (cdInfo.charges and cdInfo.charges > 0)
             local conditionMet = not aoeData.condition or aoeData.condition()
             if isReady and conditionMet then
@@ -180,130 +241,128 @@ function VengeanceDH:GetBestAoESpell()
             end
         end
     end
-    -- Return nil instead of a spell on cooldown
     return nil
 end
 
--- =============================================================================
--- SOUL FRAGMENT TRACKING
--- =============================================================================
-
--- Soul fragments are tracked via a visual buff
-function VengeanceDH:GetSoulFragments()
-    local fragmentInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.SOUL_FRAGMENTS)
+function vengeanceDH:GetSoulFragments()
+    local fragmentInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.SoulFragments)
     if fragmentInfo.isSecret then
         return nil
     end
     return fragmentInfo.stacks or 0
 end
 
--- =============================================================================
--- TRACKED BUFFS
--- =============================================================================
-
-VengeanceDH.buffsToTrack = {
+vengeanceDH.buffsToTrack = {
     {
-        spellId = BUFFS.DEMON_SPIKES,
+        spellId = buffs.DemonSpikes,
         name = "Demon Spikes",
-        refreshSpell = SPELLS.DEMON_SPIKES,
-        refreshThreshold = THRESHOLDS.DEMON_SPIKES_REFRESH,
+        refreshSpell = spells.DemonSpikes,
+        refreshThreshold = thresholds.DemonSpikesRefresh,
         priority = "CRITICAL",
     },
     {
-        spellId = BUFFS.FIERY_BRAND,
+        spellId = buffs.FieryBrand,
         name = "Fiery Brand",
-        refreshSpell = SPELLS.FIERY_BRAND,
+        refreshSpell = spells.FieryBrand,
         refreshThreshold = 0,
         priority = "HIGH",
     },
     {
-        spellId = BUFFS.METAMORPHOSIS,
+        spellId = buffs.Metamorphosis,
         name = "Metamorphosis",
-        refreshSpell = SPELLS.METAMORPHOSIS,
+        refreshSpell = spells.Metamorphosis,
         refreshThreshold = 0,
         priority = "HIGH",
     },
 }
 
--- =============================================================================
--- TANK ACTIONS (for TankActionsDisplay)
--- =============================================================================
-
-VengeanceDH.tankActions = {
+vengeanceDH.tankActions = {
     MITIGATION = {
-        spellId = SPELLS.DEMON_SPIKES,
+        spellId = spells.DemonSpikes,
         name = "Demon Spikes",
         condition = function()
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", TA.Constants.VENGEANCE_DH.BUFFS.DEMON_SPIKES)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", TankAssist.Constants.VengeanceDemonHunter.Buffs.DemonSpikes)
             return not buffInfo.exists
         end,
     },
     SHIELD = {
-        spellId = SPELLS.SOUL_CLEAVE,
+        spellId = spells.SoulCleave,
         name = "Soul Cleave",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.7
         end,
     },
     DEFENSIVE = {
-        spellId = SPELLS.METAMORPHOSIS,
+        spellId = spells.Metamorphosis,
         name = "Metamorphosis",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.4
         end,
     },
     HEAL = {
-        spellId = SPELLS.SOUL_CLEAVE,
+        spellId = spells.SoulCleave,
         name = "Soul Cleave",
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.5
         end,
     },
 }
 
--- =============================================================================
--- TRACKED COOLDOWNS
--- =============================================================================
-
-VengeanceDH.cooldownsToTrack = {
-    { spellId = SPELLS.METAMORPHOSIS, name = "Metamorphosis", category = "MAJOR" },
-    { spellId = SPELLS.THE_HUNT, name = "The Hunt", category = "MAJOR" },
-    { spellId = SPELLS.SIGIL_OF_SPITE, name = "Sigil of Spite", category = "MAJOR" },
-    { spellId = SPELLS.FIERY_BRAND, name = "Fiery Brand", category = "DEFENSIVE" },
-    { spellId = SPELLS.FEL_DEVASTATION, name = "Fel Devastation", category = "DEFENSIVE" },
-    { spellId = SPELLS.SOUL_CARVER, name = "Soul Carver", category = "OFFENSIVE" },
+vengeanceDH.cooldownsToTrack = {
+    {
+        spellId = spells.Metamorphosis,
+        name = "Metamorphosis",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.TheHunt,
+        name = "The Hunt",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.SigilOfSpite,
+        name = "Sigil of Spite",
+        category = "MAJOR",
+    },
+    {
+        spellId = spells.FieryBrand,
+        name = "Fiery Brand",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.FelDevastation,
+        name = "Fel Devastation",
+        category = "DEFENSIVE",
+    },
+    {
+        spellId = spells.SoulCarver,
+        name = "Soul Carver",
+        category = "OFFENSIVE",
+    },
 }
 
--- =============================================================================
--- ROTATION PRIORITY
--- =============================================================================
-
-VengeanceDH.rotationPriority = {
-    -- 1. Soul Cleave when low HP (emergency)
-    -- Note: Fury check is handled by CanCastSpell/IsSpellUsable
+vengeanceDH.rotationPriority = {
     {
-        spellId = SPELLS.SOUL_CLEAVE,
+        spellId = spells.SoulCleave,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
-            if hp and hp < THRESHOLDS.LOW_HEALTH_PERCENT then
+            if hp and hp < thresholds.LowHealthPercent then
                 return true, "URGENT", "Low HP - heal!"
             end
             return false
         end,
     },
-    
-    -- 2. Demon Spikes maintenance
     {
-        spellId = SPELLS.DEMON_SPIKES,
+        spellId = spells.DemonSpikes,
         defaultPriority = "HIGH",
         condition = function(self)
-            local needsRefresh = self:BuffNeedsRefresh(BUFFS.DEMON_SPIKES, THRESHOLDS.DEMON_SPIKES_REFRESH)
+            local needsRefresh = self:BuffNeedsRefresh(buffs.DemonSpikes, thresholds.DemonSpikesRefresh)
             if needsRefresh then
-                local cdInfo = TA.SecretValues:GetCooldownInfo(SPELLS.DEMON_SPIKES)
+                local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spells.DemonSpikes)
                 if cdInfo.charges and cdInfo.charges >= 1 then
                     return true, "HIGH", "Demon Spikes"
                 end
@@ -311,84 +370,67 @@ VengeanceDH.rotationPriority = {
             return false
         end,
     },
-    
-    -- 3. Spirit Bomb at 4+ souls
     {
-        spellId = SPELLS.SPIRIT_BOMB,
+        spellId = spells.SpiritBomb,
         defaultPriority = "HIGH",
         condition = function(self)
-            if not IsSpellKnown(SPELLS.SPIRIT_BOMB) then
+            if not IsSpellKnown(spells.SpiritBomb) then
                 return false
             end
-            
             local fragments = self:GetSoulFragments()
-            if fragments and fragments >= THRESHOLDS.SOUL_FRAGMENTS_SPIRIT_BOMB then
+            if fragments and fragments >= thresholds.SoulFragmentsSpiritBomb then
                 return true, "HIGH", "Spirit Bomb ready"
             end
             return false
         end,
     },
-    
-    -- 4. Immolation Aura (maintain)
     {
-        spellId = SPELLS.IMMOLATION_AURA,
+        spellId = spells.ImmolationAura,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local buffInfo = TA.SecretValues:GetBuffInfo("player", BUFFS.IMMOLATION_AURA)
+            local buffInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.ImmolationAura)
             if not buffInfo.exists then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.IMMOLATION_AURA)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.ImmolationAura)
                 return usable == true, "NORMAL", nil
             end
             return false
         end,
     },
-    
-    -- 5. Fracture (generate souls and fury)
     {
-        spellId = SPELLS.FRACTURE,
+        spellId = spells.Fracture,
         defaultPriority = "NORMAL",
         condition = function(self)
-            if not IsSpellKnown(SPELLS.FRACTURE) then
+            if not IsSpellKnown(spells.Fracture) then
                 return false
             end
-            
             local fragments = self:GetSoulFragments()
             if fragments and fragments < 4 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.FRACTURE)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.Fracture)
                 return usable == true, "NORMAL", nil
             end
             return false
         end,
     },
-    
-    -- 6. Sigil of Flame
     {
-        spellId = SPELLS.SIGIL_OF_FLAME,
+        spellId = spells.SigilOfFlame,
         defaultPriority = "NORMAL",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.SIGIL_OF_FLAME)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.SigilOfFlame)
             return usable == true, "NORMAL", nil
         end,
     },
-    
-    -- 7. Soul Cleave (when castable - has enough fury)
-    -- Note: Fury check handled by CanCastSpell, just verify we have target
     {
-        spellId = SPELLS.SOUL_CLEAVE,
+        spellId = spells.SoulCleave,
         defaultPriority = "NORMAL",
         condition = function(self)
-            -- CanCastSpell verified we have fury, just need target
             return self:HasTarget()
         end,
     },
-    
-    -- 8. Shear (filler)
     {
-        spellId = SPELLS.SHEAR,
+        spellId = spells.Shear,
         defaultPriority = "NORMAL",
         condition = function(self)
-            -- Only if Fracture isn't known
-            if IsSpellKnown(SPELLS.FRACTURE) then
+            if IsSpellKnown(spells.Fracture) then
                 return false
             end
             return true, "NORMAL", nil
@@ -396,5 +438,5 @@ VengeanceDH.rotationPriority = {
     },
 }
 
-VengeanceDH:Register()
-TA.VengeanceDH = VengeanceDH
+vengeanceDH:Register()
+TankAssist.VengeanceDH = vengeanceDH

@@ -43,5 +43,6 @@ specs\PaladinProtection.lua
 specs\DemonHunterVengeance.lua
 specs\DruidGuardian.lua
 
-# Rotation Data (external APL-style definitions)
+# Data (external definitions)
+data\ClassCooldowns.lua
 data\RotationData.lua

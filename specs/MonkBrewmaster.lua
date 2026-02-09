@@ -1,50 +1,146 @@
--- TankAssist Brewmaster Monk Module
--- Complete implementation for Brewmaster tanking
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.Constants.Brewmaster = {
+    Spells = {
+        TigerPalm = 100780,
+        BlackoutKick = 205523,
+        KegSmash = 121253,
+        BreathOfFire = 115181,
+        SpinningCraneKick = 322729,
+        RushingJadeWind = 116847,
+        PurifyingBrew = 119582,
+        CelestialBrew = 322507,
+        FortifyingBrew = 115203,
+        ZenMeditation = 115176,
+        InvokeNiuzao = 132578,
+        ExplodingKeg = 325153,
+        BonedustBrew = 386276,
+        WeaponsOfOrder = 387184,
+        DampenHarm = 122278,
+        DiffuseMagic = 122783,
+        ExpelHarm = 322101,
+        Clash = 324312,
+        RingOfPeace = 116844,
+        SummonWhiteTigerStatue = 388686,
+    },
 
-local Brewmaster = TA.SpecBase:New(268, "Brewmaster Monk")
+    SpellCosts = {
+        [100780] = {
+            resource = "ENERGY",
+            cost = 50,
+        },
+        [205523] = {
+            resource = "ENERGY",
+            cost = 0,
+        },
+        [121253] = {
+            resource = "ENERGY",
+            cost = 40,
+        },
+        [115181] = {
+            resource = "ENERGY",
+            cost = 0,
+        },
+        [322729] = {
+            resource = "ENERGY",
+            cost = 25,
+        },
+        [116847] = {
+            resource = "ENERGY",
+            cost = 0,
+        },
+        [322101] = {
+            resource = "ENERGY",
+            cost = 15,
+        },
+    },
 
-local SPELLS = TA.Constants.BREWMASTER.SPELLS
+    Buffs = {
+        Shuffle = 322120,
+        CelestialBrew = 322507,
+        FortifyingBrew = 115203,
+        ZenMeditation = 115176,
+        BlackoutCombo = 228563,
+        CharredPassions = 386963,
+        PretenseOfInstability = 393516,
+        ElusiveBrawler = 195630,
+        WeaponsOfOrder = 387184,
+    },
 
--- =============================================================================
--- SECONDARY SPELL SYSTEM
--- Ordered by priority (first match wins)
--- Categories: EMERGENCY, MITIGATION, HEAL, SHIELD, AOE, FILLER
--- =============================================================================
+    Debuffs = {
+        LightStagger = 124275,
+        ModerateStagger = 124274,
+        HeavyStagger = 124273,
+        BreathOfFireDot = 123725,
+    },
 
-Brewmaster.secondarySpells = {
-    -- EMERGENCY: Major defensive when very low health
+    Thresholds = {
+        PurifyStaggerPercent = 0.06,
+        HeavyStaggerPercent = 0.10,
+        ShuffleRefresh = 3,
+        KegSmashEnergy = 40,
+    },
+
+    Cooldowns = {
+        Major = { 132578, 387184 },
+        Defensive = { 115203, 115176, 122278, 122783 },
+        Offensive = { 325153, 386276 },
+    },
+
+    CooldownDurations = {
+        [121253] = 8,
+        [115181] = 15,
+        [322729] = 0,
+        [100780] = 0,
+        [205523] = 3,
+        [116847] = 6,
+        [322507] = 45,
+        [119582] = 20,
+        [115203] = 180,
+        [322101] = 15,
+        [115176] = 300,
+        [132578] = 180,
+        [325153] = 60,
+        [386276] = 60,
+        [387184] = 120,
+        [122278] = 120,
+        [122783] = 90,
+    },
+    ChargeSpells = {
+        [119582] = { maxCharges = 2, rechargeTime = 20 },
+    },
+}
+
+TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.Brewmaster)
+
+local brewmaster = TankAssist.SpecBase:New(268, "Brewmaster Monk")
+local spells = TankAssist.Constants.Brewmaster.Spells
+
+brewmaster.secondarySpells = {
     {
-        spellId = SPELLS.FORTIFYING_BREW,
+        spellId = spells.FortifyingBrew,
         category = "EMERGENCY",
         urgency = "URGENT",
         condition = function(self)
             return self:HealthBelow(0.30)
         end,
     },
-
-    -- HEAL: Self-healing when low health
     {
-        spellId = SPELLS.EXPEL_HARM,
+        spellId = spells.ExpelHarm,
         category = "HEAL",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.50)
         end,
     },
-
-    -- MITIGATION: Purifying Brew when there's any stagger
     {
-        spellId = SPELLS.PURIFYING_BREW,
+        spellId = spells.PurifyingBrew,
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
             local stagger = self:GetStaggerInfo()
-            -- Recommend when there's any stagger (light, moderate, or heavy)
-            -- The urgency varies based on level - heavy is more urgent
             if stagger.level == "HEAVY" then
-                return true -- Will get URGENT priority from category
+                return true
             end
             if stagger.level == "MODERATE" or stagger.level == "LIGHT" then
                 return true
@@ -52,124 +148,95 @@ Brewmaster.secondarySpells = {
             return false
         end,
     },
-
-    -- SHIELD: Celestial Brew when health drops
     {
-        spellId = SPELLS.CELESTIAL_BREW,
+        spellId = spells.CelestialBrew,
         category = "SHIELD",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.60)
         end,
     },
-
-    -- AOE: Keg Smash (core rotational, high priority AoE)
     {
-        spellId = SPELLS.KEG_SMASH,
+        spellId = spells.KegSmash,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return true
         end,
     },
-
-    -- AOE: Breath of Fire (maintain debuff)
     {
-        spellId = SPELLS.BREATH_OF_FIRE,
+        spellId = spells.BreathOfFire,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
             return true
         end,
     },
-
-    -- AOE: Rushing Jade Wind (if talented)
     {
-        spellId = SPELLS.RUSHING_JADE_WIND,
+        spellId = spells.RushingJadeWind,
         category = "AOE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Only recommend if spell is known (talented)
-            if not IsSpellKnown(SPELLS.RUSHING_JADE_WIND) then
+            if not IsSpellKnown(spells.RushingJadeWind) then
                 return false
             end
             return true
         end,
     },
-
-    -- FILLER: Spinning Crane Kick (always available as last resort)
     {
-        spellId = SPELLS.SPINNING_CRANE_KICK,
+        spellId = spells.SpinningCraneKick,
         category = "FILLER",
         urgency = "LOW",
         condition = function(self)
             return true
         end,
     },
-
-    -- OFFENSIVE: Invoke Niuzao (major offensive cooldown)
     {
-        spellId = SPELLS.INVOKE_NIUZAO,
+        spellId = spells.InvokeNiuzao,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Only recommend in combat with a target and when we have some stagger
-            -- (Niuzao's Stomp damage scales with stagger)
             if not self:HasTarget() or not self:InCombat() then
                 return false
             end
             local stagger = self:GetStaggerInfo()
-            -- Recommend when we have moderate+ stagger for good damage
             return stagger.level == "HEAVY" or stagger.level == "MODERATE"
         end,
     },
-
-    -- OFFENSIVE: Exploding Keg (if talented, good AoE)
     {
-        spellId = SPELLS.EXPLODING_KEG,
+        spellId = spells.ExplodingKeg,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Recommend in combat with target
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Bonedust Brew (if talented, damage amp)
     {
-        spellId = SPELLS.BONEDUST_BREW,
+        spellId = spells.BonedustBrew,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Recommend in combat with target
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- OFFENSIVE: Weapons of Order (if talented, big CD)
     {
-        spellId = SPELLS.WEAPONS_OF_ORDER,
+        spellId = spells.WeaponsOfOrder,
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            -- Only recommend during combat with target
             return self:HasTarget() and self:InCombat()
         end,
     },
-
-    -- DEFENSIVE TALENT: Dampen Harm (if talented, emergency)
     {
-        spellId = SPELLS.DAMPEN_HARM,
+        spellId = spells.DampenHarm,
         category = "EMERGENCY",
         urgency = "HIGH",
         condition = function(self)
             return self:HealthBelow(0.40)
         end,
     },
-
-    -- DEFENSIVE TALENT: Diffuse Magic (if talented, for magic damage)
     {
-        spellId = SPELLS.DIFFUSE_MAGIC,
+        spellId = spells.DiffuseMagic,
         category = "EMERGENCY",
         urgency = "HIGH",
         condition = function(self)
@@ -178,39 +245,26 @@ Brewmaster.secondarySpells = {
     },
 }
 
--- Note: Old aoeSpells and priorityUtilities replaced by unified secondarySpells system above
-local BUFFS = TA.Constants.BREWMASTER.BUFFS
-local DEBUFFS = TA.Constants.BREWMASTER.DEBUFFS
-local THRESHOLDS = TA.Constants.BREWMASTER.THRESHOLDS
-local COOLDOWNS = TA.Constants.BREWMASTER.COOLDOWNS
+local buffs = TankAssist.Constants.Brewmaster.Buffs
+local debuffs = TankAssist.Constants.Brewmaster.Debuffs
+local thresholds = TankAssist.Constants.Brewmaster.Thresholds
+local cooldowns = TankAssist.Constants.Brewmaster.Cooldowns
 
--- =============================================================================
--- STAGGER TRACKING
--- Brewmaster's unique damage smoothing mechanic
--- STAGGER IS EXPLICITLY WHITELISTED BY BLIZZARD - full access!
--- =============================================================================
-
--- Get current stagger level using the whitelisted API
-function Brewmaster:GetStaggerInfo()
-    -- Stagger is declassified - use SecretValues helper that uses UnitPower
-    return TA.SecretValues:GetStaggerInfo()
+function brewmaster:GetStaggerInfo()
+    return TankAssist.SecretValues:GetStaggerInfo()
 end
 
--- Should we purify?
-function Brewmaster:ShouldPurify()
+function brewmaster:ShouldPurify()
     local stagger = self:GetStaggerInfo()
 
-    -- Heavy stagger - always purify urgently
     if stagger.level == "HEAVY" then
         return true, "URGENT"
     end
 
-    -- Moderate stagger - high priority
     if stagger.level == "MODERATE" then
         return true, "HIGH"
     end
 
-    -- Light stagger - still recommend, normal priority
     if stagger.level == "LIGHT" then
         return true, "NORMAL"
     end
@@ -218,157 +272,126 @@ function Brewmaster:ShouldPurify()
     return false, "NORMAL"
 end
 
--- =============================================================================
--- TRACKED BUFFS
--- =============================================================================
-
-Brewmaster.buffsToTrack = {
+brewmaster.buffsToTrack = {
     {
-        spellId = BUFFS.SHUFFLE,
+        spellId = buffs.Shuffle,
         name = "Shuffle",
-        refreshSpell = SPELLS.BLACKOUT_KICK,
-        refreshThreshold = THRESHOLDS.SHUFFLE_REFRESH,
+        refreshSpell = spells.BlackoutKick,
+        refreshThreshold = thresholds.ShuffleRefresh,
         priority = "CRITICAL",
     },
     {
-        spellId = BUFFS.CELESTIAL_BREW,
+        spellId = buffs.CelestialBrew,
         name = "Celestial Brew",
-        refreshSpell = SPELLS.CELESTIAL_BREW,
+        refreshSpell = spells.CelestialBrew,
         refreshThreshold = 0,
         priority = "HIGH",
     },
     {
-        spellId = BUFFS.FORTIFYING_BREW,
+        spellId = buffs.FortifyingBrew,
         name = "Fortifying Brew",
-        refreshSpell = SPELLS.FORTIFYING_BREW,
+        refreshSpell = spells.FortifyingBrew,
         refreshThreshold = 0,
         priority = "HIGH",
     },
-    -- Stagger is shown separately via custom UI
 }
 
--- =============================================================================
--- TANK ACTIONS (for TankActionsDisplay)
--- These show in the dedicated tank cooldowns bar
--- =============================================================================
-
-Brewmaster.tankActions = {
+brewmaster.tankActions = {
     MITIGATION = {
-        spellId = SPELLS.PURIFYING_BREW,
+        spellId = spells.PurifyingBrew,
         name = "Purifying Brew",
-        -- Highlight when stagger is moderate or above
         condition = function()
-            local stagger = TA.SecretValues:GetStaggerInfo()
+            local stagger = TankAssist.SecretValues:GetStaggerInfo()
             return stagger.level == "HEAVY" or stagger.level == "MODERATE"
         end,
     },
     SHIELD = {
-        spellId = SPELLS.CELESTIAL_BREW,
+        spellId = spells.CelestialBrew,
         name = "Celestial Brew",
-        -- Highlight when health is below 70%
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.7
         end,
     },
     DEFENSIVE = {
-        spellId = SPELLS.FORTIFYING_BREW,
+        spellId = spells.FortifyingBrew,
         name = "Fortifying Brew",
-        -- Highlight when health is critical
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.4
         end,
     },
     HEAL = {
-        spellId = SPELLS.EXPEL_HARM,
+        spellId = spells.ExpelHarm,
         name = "Expel Harm",
-        -- Highlight when health is below 50%
         condition = function()
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             return hp and hp < 0.5
         end,
     },
 }
 
--- =============================================================================
--- TRACKED COOLDOWNS
--- =============================================================================
-
-Brewmaster.cooldownsToTrack = {
-    -- Major
+brewmaster.cooldownsToTrack = {
     {
-        spellId = SPELLS.INVOKE_NIUZAO,
+        spellId = spells.InvokeNiuzao,
         name = "Invoke Niuzao",
         category = "MAJOR",
     },
     {
-        spellId = SPELLS.WEAPONS_OF_ORDER,
+        spellId = spells.WeaponsOfOrder,
         name = "Weapons of Order",
         category = "MAJOR",
     },
-    -- Defensive
     {
-        spellId = SPELLS.FORTIFYING_BREW,
+        spellId = spells.FortifyingBrew,
         name = "Fortifying Brew",
         category = "DEFENSIVE",
     },
     {
-        spellId = SPELLS.ZEN_MEDITATION,
+        spellId = spells.ZenMeditation,
         name = "Zen Meditation",
         category = "DEFENSIVE",
     },
     {
-        spellId = SPELLS.DAMPEN_HARM,
+        spellId = spells.DampenHarm,
         name = "Dampen Harm",
         category = "DEFENSIVE",
     },
     {
-        spellId = SPELLS.DIFFUSE_MAGIC,
+        spellId = spells.DiffuseMagic,
         name = "Diffuse Magic",
         category = "DEFENSIVE",
     },
-    -- Brews (special handling)
     {
-        spellId = SPELLS.PURIFYING_BREW,
+        spellId = spells.PurifyingBrew,
         name = "Purifying Brew",
         category = "DEFENSIVE",
     },
     {
-        spellId = SPELLS.CELESTIAL_BREW,
+        spellId = spells.CelestialBrew,
         name = "Celestial Brew",
         category = "DEFENSIVE",
     },
-    -- Offensive
     {
-        spellId = SPELLS.EXPLODING_KEG,
+        spellId = spells.ExplodingKeg,
         name = "Exploding Keg",
         category = "OFFENSIVE",
     },
     {
-        spellId = SPELLS.BONEDUST_BREW,
+        spellId = spells.BonedustBrew,
         name = "Bonedust Brew",
         category = "OFFENSIVE",
     },
 }
 
--- =============================================================================
--- ROTATION PRIORITY
--- =============================================================================
-
-Brewmaster.rotationPriority = {
-    -- ==========================================================================
-    -- TANK ALERTS (only show when actually needed)
-    -- ==========================================================================
-
-    -- 1. Fortifying Brew (EMERGENCY - very low health)
+brewmaster.rotationPriority = {
     {
-        spellId = SPELLS.FORTIFYING_BREW,
+        spellId = spells.FortifyingBrew,
         defaultPriority = "URGENT",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.35 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.FORTIFYING_BREW)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.FortifyingBrew)
                 if usable then
                     return true, "URGENT", "EMERGENCY!"
                 end
@@ -376,18 +399,14 @@ Brewmaster.rotationPriority = {
             return false
         end,
     },
-
-    -- 2. Purifying Brew when there's any stagger
     {
-        spellId = SPELLS.PURIFYING_BREW,
+        spellId = spells.PurifyingBrew,
         defaultPriority = "HIGH",
         condition = function(self)
             local shouldPurify, urgency = self:ShouldPurify()
-
             if shouldPurify == nil then
-                return false -- Can't determine
+                return false
             end
-
             if shouldPurify then
                 if urgency == "URGENT" then
                     return true, "URGENT", "Heavy Stagger!"
@@ -397,20 +416,16 @@ Brewmaster.rotationPriority = {
                     return true, "NORMAL", "Clear stagger"
                 end
             end
-
             return false
         end,
     },
-
-    -- 3. Celestial Brew for shield (when health drops)
     {
-        spellId = SPELLS.CELESTIAL_BREW,
+        spellId = spells.CelestialBrew,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
-            -- More aggressive - show at 60% health
             if hp and hp < 0.6 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.CELESTIAL_BREW)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.CelestialBrew)
                 if usable then
                     return true, "HIGH", "Shield up"
                 end
@@ -418,15 +433,13 @@ Brewmaster.rotationPriority = {
             return false
         end,
     },
-
-    -- 4. Expel Harm (self-heal when low)
     {
-        spellId = SPELLS.EXPEL_HARM,
+        spellId = spells.ExpelHarm,
         defaultPriority = "HIGH",
         condition = function(self)
             local hp = self:GetHealthPercent()
             if hp and hp < 0.5 then
-                local usable = TA.SecretValues:IsSpellUsable(SPELLS.EXPEL_HARM)
+                local usable = TankAssist.SecretValues:IsSpellUsable(spells.ExpelHarm)
                 if usable then
                     return true, "HIGH", "Heal yourself!"
                 end
@@ -434,25 +447,17 @@ Brewmaster.rotationPriority = {
             return false
         end,
     },
-
-    -- ==========================================================================
-    -- ROTATION PRIORITIES (maintenance and DPS)
-    -- ==========================================================================
-    
-    -- 3. Blackout Kick for Shuffle maintenance
     {
-        spellId = SPELLS.BLACKOUT_KICK,
+        spellId = spells.BlackoutKick,
         defaultPriority = "HIGH",
         condition = function(self)
             local needsRefresh, reason = self:BuffNeedsRefresh(
-                BUFFS.SHUFFLE,
-                THRESHOLDS.SHUFFLE_REFRESH
+                buffs.Shuffle,
+                thresholds.ShuffleRefresh
             )
-            
             if needsRefresh == nil then
                 return false
             end
-            
             if needsRefresh then
                 if reason == "DOWN" then
                     return true, "URGENT", "Shuffle DOWN!"
@@ -460,94 +465,68 @@ Brewmaster.rotationPriority = {
                     return true, "HIGH", "Refresh Shuffle"
                 end
             end
-            
             return false
         end,
     },
-    
-    -- 4. Keg Smash (core ability, always use on CD)
     {
-        spellId = SPELLS.KEG_SMASH,
+        spellId = spells.KegSmash,
         defaultPriority = "HIGH",
         condition = function(self)
-            local usable = TA.SecretValues:IsSpellUsable(SPELLS.KEG_SMASH)
+            local usable = TankAssist.SecretValues:IsSpellUsable(spells.KegSmash)
             local energy = self:GetResource("ENERGY")
-            
-            if usable and energy and energy >= THRESHOLDS.KEG_SMASH_ENERGY then
+            if usable and energy and energy >= thresholds.KegSmashEnergy then
                 return true, "HIGH", nil
             end
-            
             return false
         end,
     },
-    
-    -- 5. Breath of Fire (maintain debuff)
     {
-        spellId = SPELLS.BREATH_OF_FIRE,
+        spellId = spells.BreathOfFire,
         defaultPriority = "NORMAL",
         condition = function(self)
-            -- Only recommend if we have a target to hit
             if not self:HasTarget() then
                 return false
             end
-
-            -- Check if Breath of Fire debuff needs refreshing on target
-            -- Note: Target debuffs may be secret in 12.0, so we fall back to cooldown-based logic
-            local debuffInfo = TA.SecretValues:GetBuffInfo("target", DEBUFFS.BREATH_OF_FIRE_DOT)
+            local debuffInfo = TankAssist.SecretValues:GetBuffInfo("target", debuffs.BreathOfFireDot)
             if debuffInfo.isSecret then
-                -- Can't check debuff, recommend if off cooldown
                 return true, "NORMAL", nil
             end
-
-            -- Recommend if debuff is down or about to expire
             if not debuffInfo.exists then
                 return true, "HIGH", "BoF debuff down"
             end
-
             local remaining = (debuffInfo.expirationTime or 0) - GetTime()
             if remaining < 3 then
                 return true, "NORMAL", "Refresh BoF"
             end
-
             return false
         end,
     },
-
-    -- 6. Rushing Jade Wind (if talented)
     {
-        spellId = SPELLS.RUSHING_JADE_WIND,
+        spellId = spells.RushingJadeWind,
         defaultPriority = "NORMAL",
         condition = function(self)
-            if not IsSpellKnown(SPELLS.RUSHING_JADE_WIND) then
+            if not IsSpellKnown(spells.RushingJadeWind) then
                 return false
             end
-
-            -- Check if buff is down or about to expire
-            local rjwInfo = TA.SecretValues:GetBuffInfo("player", SPELLS.RUSHING_JADE_WIND)
+            local rjwInfo = TankAssist.SecretValues:GetBuffInfo("player", spells.RushingJadeWind)
             if not rjwInfo.exists then
                 return true, "HIGH", "RJW down"
             end
-
-            -- Also recommend if about to expire (< 2 seconds remaining)
             local remaining = (rjwInfo.expirationTime or 0) - GetTime()
             if remaining > 0 and remaining < 2 then
                 return true, "NORMAL", "RJW expiring"
             end
-
             return false
         end,
     },
-    
-    -- 7. Spinning Crane Kick (AoE - 3+ targets)
     {
-        spellId = SPELLS.SPINNING_CRANE_KICK,
+        spellId = spells.SpinningCraneKick,
         defaultPriority = "NORMAL",
         condition = function(self)
             local enemies = self:GetEnemyCount()
             if enemies >= 3 then
                 local energy = self:GetResource("ENERGY")
                 if energy and energy >= 40 then
-                    -- Higher priority with more enemies
                     if enemies >= 5 then
                         return true, "HIGH", "AoE! (5+ mobs)"
                     end
@@ -557,17 +536,13 @@ Brewmaster.rotationPriority = {
             return false
         end,
     },
-    
-    -- 8. Tiger Palm (filler)
     {
-        spellId = SPELLS.TIGER_PALM,
+        spellId = spells.TigerPalm,
         defaultPriority = "NORMAL",
         condition = function(self)
-            -- Use Tiger Palm as filler when nothing else is available
             local energy = self:GetResource("ENERGY")
-            if energy and energy >= 50 then -- Keep some energy pooled
-                -- Don't use if Keg Smash is about to come up
-                local kegCD = TA.SecretValues:GetCooldownInfo(SPELLS.KEG_SMASH)
+            if energy and energy >= 50 then
+                local kegCD = TankAssist.SecretValues:GetCooldownInfo(spells.KegSmash)
                 if kegCD.remaining and kegCD.remaining > 1 then
                     return true, "NORMAL", nil
                 end
@@ -577,46 +552,29 @@ Brewmaster.rotationPriority = {
     },
 }
 
--- =============================================================================
--- CUSTOM UPDATE LOGIC
--- =============================================================================
-
-function Brewmaster:OnUpdate()
-    -- Track stagger for custom display
+function brewmaster:OnUpdate()
     self.currentStagger = self:GetStaggerInfo()
 end
 
--- =============================================================================
--- CUSTOM UI ADDITION: STAGGER BAR
--- Stagger is whitelisted so we have full access to the data
--- =============================================================================
-
-function Brewmaster:GetStaggerDisplayInfo()
+function brewmaster:GetStaggerDisplayInfo()
     local stagger = self:GetStaggerInfo()
-    
+
     local colors = {
         NONE = { 0.5, 0.5, 0.5 },
         LIGHT = { 0.2, 0.8, 0.2 },
         MODERATE = { 1, 0.8, 0 },
         HEAVY = { 1, 0.2, 0.2 },
     }
-    
+
     return {
         level = stagger.level,
         percent = stagger.percent,
         amount = stagger.amount,
         color = colors[stagger.level] or colors.NONE,
         shouldPurify = stagger.level == "HEAVY" or stagger.level == "MODERATE",
-        -- Stagger is whitelisted - never secret!
         isSecret = false,
     }
 end
 
--- =============================================================================
--- REGISTER MODULE
--- =============================================================================
-
-Brewmaster:Register()
-
--- Store reference
-TA.Brewmaster = Brewmaster
+brewmaster:Register()
+TankAssist.Brewmaster = brewmaster
