@@ -1,0 +1,2 @@
+-- AceAddon-3.0: Download from https://www.wowace.com/projects/ace3
+-- TankAssist works without Ace libraries (uses fallback in Core.lua)

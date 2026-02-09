@@ -1,0 +1,47 @@
+## Interface: 120000
+## Title: TankAssist
+## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
+## Author: Simon
+## Version: 1.0.0
+## SavedVariables: TankAssistDB
+## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
+
+# Libraries
+libs\LibStub\LibStub.lua
+libs\AceAddon-3.0\AceAddon-3.0.lua
+libs\AceEvent-3.0\AceEvent-3.0.lua
+libs\AceDB-3.0\AceDB-3.0.lua
+libs\AceConsole-3.0\AceConsole-3.0.lua
+
+# LibEQOL Edit Mode Integration
+# Lua files only - XML templates excluded to avoid conflicts with other addons
+# LibStub ensures only one version loads if multiple addons bundle this library
+libs\LibEQOL\LibEQOLSettingsMode.lua
+libs\LibEQOL\LibEQOLSettingsMultiDropdown.lua
+libs\LibEQOL\LibEQOLSettingsScrollDropdown.lua
+libs\LibEQOL\LibEQOLSettingsColorOverrides.lua
+libs\LibEQOL\LibEQOLSettingsSoundDropdown.lua
+libs\LibEQOL\LibEQOLEditMode.lua
+libs\LibEQOL\LibEQOL.lua
+
+# Core
+core\Constants.lua
+core\Utils.lua
+core\SecretValues.lua
+core\Core.lua
+
+# UI Components
+ui\AssistedCombatDisplay.lua
+ui\ConfigPanel.lua
+
+# Tank Spec Modules
+specs\SpecBase.lua
+specs\DeathKnightBlood.lua
+specs\MonkBrewmaster.lua
+specs\WarriorProtection.lua
+specs\PaladinProtection.lua
+specs\DemonHunterVengeance.lua
+specs\DruidGuardian.lua
+
+# Rotation Data (external APL-style definitions)
+data\RotationData.lua
