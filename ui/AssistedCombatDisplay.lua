@@ -97,6 +97,10 @@ function acd:Create()
     self:RegisterEditMode()
     self:RegisterCombatEvents()
 
+    if not self:IsEnabled() and not self:IsInEditMode() then
+        self.frame:Hide()
+    end
+
     return self.frame
 end
 
@@ -182,6 +186,22 @@ function acd:BuildLEMSettings()
 
     return {
         {
+            order = 99,
+            name = "Enabled",
+            kind = lem.SettingType.Checkbox,
+            default = true,
+            get = function(layoutName)
+                local enabled = TankAssist.Addon.db.profile.assistedCombat.enabled
+                if enabled == nil then
+                    return true
+                end
+                return enabled
+            end,
+            set = function(layoutName, value)
+                self_ref:SetEnabled(value)
+            end,
+        },
+        {
             order = 100,
             name = "Scale",
             kind = lem.SettingType.Slider,
@@ -263,6 +283,14 @@ function acd:RegisterEditModeLibEQOL()
     lem:AddFrame(self.frame, OnPositionChanged, defaults)
     lem:AddFrameSettings(self.frame, self:BuildLEMSettings())
     lem:SetFrameResetVisible(self.frame, true)
+
+    lem:RegisterCallback("enter", function()
+        self_ref:OnEditModeEnter()
+    end)
+
+    lem:RegisterCallback("exit", function()
+        self_ref:OnEditModeExit()
+    end)
 
     TankAssist.Utils:Debug("TankAssist registered with LibEQOL Edit Mode")
 end
@@ -370,6 +398,8 @@ function acd:OnEditModeEnter()
     if not self.frame then return end
     self.editMode = true
     self.frame:SetMovable(true)
+    self.frame:Show()
+    self:UpdateDisabledVisual()
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Show()
     end
@@ -378,6 +408,10 @@ end
 function acd:OnEditModeExit()
     if not self.frame then return end
     self.editMode = false
+    self:UpdateDisabledVisual()
+    if not self:IsEnabled() then
+        self.frame:Hide()
+    end
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Hide()
     end
@@ -562,14 +596,42 @@ function acd:ClearIcon(icon)
 end
 
 function acd:Show()
-    if self.frame then
+    if self.frame and (self:IsEnabled() or self:IsInEditMode()) then
         self.frame:Show()
     end
 end
 
 function acd:Hide()
-    if self.frame then
+    if self.frame and not self:IsInEditMode() then
         self.frame:Hide()
+    end
+end
+
+function acd:IsEnabled()
+    local enabled = TankAssist.Addon.db.profile.assistedCombat.enabled
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function acd:SetEnabled(enabled)
+    TankAssist.Addon.db.profile.assistedCombat.enabled = enabled
+    if enabled or self:IsInEditMode() then
+        self.frame:Show()
+    else
+        self.frame:Hide()
+    end
+    self:UpdateDisabledVisual()
+end
+
+function acd:UpdateDisabledVisual()
+    if not self.frame then return end
+
+    if self:IsEnabled() then
+        self.frame:SetAlpha(1.0)
+    else
+        self.frame:SetAlpha(0.4)
     end
 end
 
@@ -608,7 +670,7 @@ function acd:ResetPosition()
 end
 
 function acd:IsInEditMode()
-    return self.editMode
+    return self.editMode or (EditModeManagerFrame and EditModeManagerFrame.editModeActive)
 end
 
 function acd:EnterEditMode()

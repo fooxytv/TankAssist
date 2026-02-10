@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3-alpha.7b67e00] - 2026-02-10
+
+_No changes since previous release._
+
 ## [0.1.2-alpha.ed33179] - 2026-02-10
 
 ### Changed
-- Bump version to 0.1.1-alpha.c88c94c
+- Bump version to 0.1.2-alpha.ed33179
 
 ## [0.1.0] - 2025-02-10
 
