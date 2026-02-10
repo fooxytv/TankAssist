@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4-alpha.b372c9a] - 2026-02-10
+
+### Added
+- Shadow stack tracking system for buffs like Bone Shield (Blood DK)
+- "Hide When Mounted" and "Hide In Pet Battles" display options for the combat overlay
+- Auto-hide combat display during pet battles and while mounted
+
+### Changed
+- Improved Bone Shield stack tracking for Blood DK using shadow stacks for more accurate readings
+- Refactored combat display visibility into centralized `ShouldBeVisible`/`UpdateVisibility` logic
+- Fixed packaging script to produce correctly structured zip files with addon subfolder
+- Fixed deploy script to extract to the correct addon directory
+
 ## [0.1.3-alpha.7b67e00] - 2026-02-10
 
 - Added enable/disable toggle in Edit Mode
