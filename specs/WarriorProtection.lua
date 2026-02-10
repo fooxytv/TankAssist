@@ -326,48 +326,7 @@ protWarrior.tankActions = {
     },
 }
 
-protWarrior.cooldownsToTrack = {
-    {
-        spellId = spells.Avatar,
-        name = "Avatar",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.Ravager,
-        name = "Ravager",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.ChampionsSpear,
-        name = "Champion's Spear",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.ShieldWall,
-        name = "Shield Wall",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.LastStand,
-        name = "Last Stand",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.SpellReflection,
-        name = "Spell Reflection",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.DemoralizingShout,
-        name = "Demoralizing Shout",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.ThunderousRoar,
-        name = "Thunderous Roar",
-        category = "OFFENSIVE",
-    },
-}
+protWarrior.cooldownsToTrack = protWarrior:BuildCooldownsToTrack()
 
 protWarrior.rotationPriority = {
     {

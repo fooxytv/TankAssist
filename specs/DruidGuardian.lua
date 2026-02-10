@@ -304,15 +304,7 @@ guardianDruid.tankActions = {
     },
 }
 
-guardianDruid.cooldownsToTrack = {
-    { spellId = spells.IncarnationGuardian, name = "Incarnation", category = "MAJOR" },
-    { spellId = spells.Berserk, name = "Berserk", category = "MAJOR" },
-    { spellId = spells.ConvokeTheSpirits, name = "Convoke", category = "MAJOR" },
-    { spellId = spells.Barkskin, name = "Barkskin", category = "DEFENSIVE" },
-    { spellId = spells.SurvivalInstincts, name = "Survival Instincts", category = "DEFENSIVE" },
-    { spellId = spells.RageOfTheSleeper, name = "Rage of the Sleeper", category = "DEFENSIVE" },
-    { spellId = spells.BristlingFur, name = "Bristling Fur", category = "OFFENSIVE" },
-}
+guardianDruid.cooldownsToTrack = guardianDruid:BuildCooldownsToTrack()
 
 guardianDruid.rotationPriority = {
     {

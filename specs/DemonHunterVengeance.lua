@@ -311,38 +311,7 @@ vengeanceDH.tankActions = {
     },
 }
 
-vengeanceDH.cooldownsToTrack = {
-    {
-        spellId = spells.Metamorphosis,
-        name = "Metamorphosis",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.TheHunt,
-        name = "The Hunt",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.SigilOfSpite,
-        name = "Sigil of Spite",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.FieryBrand,
-        name = "Fiery Brand",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.FelDevastation,
-        name = "Fel Devastation",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.SoulCarver,
-        name = "Soul Carver",
-        category = "OFFENSIVE",
-    },
-}
+vengeanceDH.cooldownsToTrack = vengeanceDH:BuildCooldownsToTrack()
 
 vengeanceDH.rotationPriority = {
     {

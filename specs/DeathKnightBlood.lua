@@ -113,7 +113,6 @@ local bloodDK = TankAssist.SpecBase:New(250, "Blood Death Knight")
 local spells = TankAssist.Constants.BloodDeathKnight.Spells
 local buffs = TankAssist.Constants.BloodDeathKnight.Buffs
 local thresholds = TankAssist.Constants.BloodDeathKnight.Thresholds
-local cooldowns = TankAssist.Constants.BloodDeathKnight.Cooldowns
 
 bloodDK.secondarySpells = {
     {
@@ -297,16 +296,7 @@ bloodDK.tankActions = {
     },
 }
 
-bloodDK.cooldownsToTrack = {
-    { spellId = spells.DancingRuneWeapon, name = "Dancing Rune Weapon", category = "MAJOR" },
-    { spellId = spells.VampiricBlood, name = "Vampiric Blood", category = "MAJOR" },
-    { spellId = spells.IceboundFortitude, name = "Icebound Fortitude", category = "DEFENSIVE" },
-    { spellId = spells.AntiMagicShell, name = "Anti-Magic Shell", category = "DEFENSIVE" },
-    { spellId = spells.RuneTap, name = "Rune Tap", category = "DEFENSIVE" },
-    { spellId = spells.Tombstone, name = "Tombstone", category = "DEFENSIVE" },
-    { spellId = spells.AbominationLimb, name = "Abomination Limb", category = "OFFENSIVE" },
-    { spellId = spells.EmpowerRuneWeapon, name = "Empower Rune Weapon", category = "OFFENSIVE" },
-}
+bloodDK.cooldownsToTrack = bloodDK:BuildCooldownsToTrack()
 
 bloodDK.rotationPriority = {
     {

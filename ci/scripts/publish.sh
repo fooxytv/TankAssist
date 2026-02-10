@@ -21,17 +21,79 @@ new_version="$(echo "$raw_version" | tr -d '[:cntrl:]')"
 
 echo "Version to publish: [$new_version]"
 
-echo "Committing version bump (if any changes)..."
+last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+if [[ -z "$last_tag" ]]; then
+    echo "No previous tags found, generating changelog from initial commit."
+    last_tag=$(git rev-list --max-parents=0 HEAD)
+fi
+
+# Generate changelog using Claude Code CLI
+if command -v claude &> /dev/null; then
+    echo "Generating changelog with Claude Code..."
+
+    diff_output=$(git diff "$last_tag"..HEAD --stat)
+    commit_log=$(git log "$last_tag"..HEAD --pretty=format:"- %s" --no-merges)
+    changed_files=$(git diff "$last_tag"..HEAD --name-only)
+
+    changelog_prompt="Generate a changelog entry for version $new_version of a WoW tank addon called TankAssist.
+
+Previous tag: $last_tag
+
+Commits since last release:
+$commit_log
+
+Files changed:
+$changed_files
+
+Diff stats:
+$diff_output
+
+Output ONLY the changelog section in this exact format (no extra text):
+## [$new_version] - $(date +%Y-%m-%d)
+
+### Added
+- (list new features, or remove section if none)
+
+### Changed
+- (list changes, or remove section if none)
+
+### Fixed
+- (list bug fixes, or remove section if none)
+
+Be concise. Group related changes. Skip empty sections."
+
+    changelog_entry=$(echo "$changelog_prompt" | claude --print 2>/dev/null || echo "")
+
+    if [[ -n "$changelog_entry" ]]; then
+        echo "Updating CHANGELOG.md..."
+
+        # Insert new entry after the [Unreleased] section
+        if [[ -f "CHANGELOG.md" ]]; then
+            # Create temp file with new entry inserted
+            awk -v entry="$changelog_entry" '
+                /^## \[Unreleased\]/ {
+                    print
+                    print ""
+                    print entry
+                    next
+                }
+                { print }
+            ' CHANGELOG.md > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
+            echo "Changelog updated."
+        fi
+    else
+        echo "Claude Code not available or failed, skipping auto-changelog."
+    fi
+else
+    echo "Claude Code CLI not found, skipping auto-changelog."
+fi
+
+echo "Committing version bump and changelog..."
 git add .
 git commit -m "Bump version to $new_version" || {
     echo "No changes to commit (or commit failed)."
 }
-
-last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
-if [[ -z "$last_tag" ]]; then
-    echo "No previous tags found, so we may be generating a full changelog from the start."
-    last_tag=$(git rev-list --max-parents=0 HEAD)
-fi
 
 new_tag="v${new_version}"
 echo "Creating new tag: $new_tag"

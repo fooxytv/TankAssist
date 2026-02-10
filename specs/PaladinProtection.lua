@@ -333,48 +333,7 @@ protPaladin.tankActions = {
     },
 }
 
-protPaladin.cooldownsToTrack = {
-    {
-        spellId = spells.AvengingWrath,
-        name = "Avenging Wrath",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.Sentinel,
-        name = "Sentinel",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.DivineToll,
-        name = "Divine Toll",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.ArdentDefender,
-        name = "Ardent Defender",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.GuardianOfAncientKings,
-        name = "Guardian of Ancient Kings",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.DivineShield,
-        name = "Divine Shield",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.LayOnHands,
-        name = "Lay on Hands",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.EyeOfTyr,
-        name = "Eye of Tyr",
-        category = "OFFENSIVE",
-    },
-}
+protPaladin.cooldownsToTrack = protPaladin:BuildCooldownsToTrack()
 
 protPaladin.rotationPriority = {
     {

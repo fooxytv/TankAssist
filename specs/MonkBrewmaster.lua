@@ -248,7 +248,6 @@ brewmaster.secondarySpells = {
 local buffs = TankAssist.Constants.Brewmaster.Buffs
 local debuffs = TankAssist.Constants.Brewmaster.Debuffs
 local thresholds = TankAssist.Constants.Brewmaster.Thresholds
-local cooldowns = TankAssist.Constants.Brewmaster.Cooldowns
 
 function brewmaster:GetStaggerInfo()
     return TankAssist.SecretValues:GetStaggerInfo()
@@ -331,58 +330,7 @@ brewmaster.tankActions = {
     },
 }
 
-brewmaster.cooldownsToTrack = {
-    {
-        spellId = spells.InvokeNiuzao,
-        name = "Invoke Niuzao",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.WeaponsOfOrder,
-        name = "Weapons of Order",
-        category = "MAJOR",
-    },
-    {
-        spellId = spells.FortifyingBrew,
-        name = "Fortifying Brew",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.ZenMeditation,
-        name = "Zen Meditation",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.DampenHarm,
-        name = "Dampen Harm",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.DiffuseMagic,
-        name = "Diffuse Magic",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.PurifyingBrew,
-        name = "Purifying Brew",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.CelestialBrew,
-        name = "Celestial Brew",
-        category = "DEFENSIVE",
-    },
-    {
-        spellId = spells.ExplodingKeg,
-        name = "Exploding Keg",
-        category = "OFFENSIVE",
-    },
-    {
-        spellId = spells.BonedustBrew,
-        name = "Bonedust Brew",
-        category = "OFFENSIVE",
-    },
-}
+brewmaster.cooldownsToTrack = brewmaster:BuildCooldownsToTrack()
 
 brewmaster.rotationPriority = {
     {

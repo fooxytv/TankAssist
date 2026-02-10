@@ -300,6 +300,26 @@ function TankAssist.SpecBase:HealthAbove(threshold)
     return hp and hp >= threshold
 end
 
+function TankAssist.SpecBase:BuildCooldownsToTrack()
+    local specConstants = self:GetSpecConstants()
+    if not specConstants or not specConstants.Cooldowns then
+        return {}
+    end
+
+    local result = {}
+    for category, spellIds in pairs(specConstants.Cooldowns) do
+        for _, spellId in ipairs(spellIds) do
+            local spellInfo = C_Spell.GetSpellInfo(spellId)
+            table.insert(result, {
+                spellId = spellId,
+                name = spellInfo and spellInfo.name or "Unknown",
+                category = category:upper(),
+            })
+        end
+    end
+    return result
+end
+
 function TankAssist.SpecBase:Register()
     if TankAssist.Addon then
         TankAssist.Addon:RegisterSpecModule(self.specId, self)
