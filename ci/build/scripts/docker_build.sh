@@ -84,7 +84,7 @@ if [[ -n "$ANTHROPIC_API_KEY" ]]; then
     echo "Claude Code API key detected."
 # Option 2: Mount existing Claude config (from OAuth login)
 elif [[ -d "$HOME/.claude" ]]; then
-    claude_volume="-v $HOME/.claude:/root/.claude:ro"
+    claude_volume="-v $HOME/.claude:/root/.claude"
     echo "Mounting Claude config from ~/.claude"
 fi
 

@@ -101,7 +101,7 @@ else {
         $driveLetter = $claudeConfigUnix.Substring(0, 1).ToLower()
         $pathWithoutDrive = $claudeConfigUnix.Substring(2)
         $claudeConfigDocker = "/${driveLetter}${pathWithoutDrive}"
-        $claudeVolumeArgs += @("-v", "${claudeConfigDocker}:/root/.claude:ro")
+        $claudeVolumeArgs += @("-v", "${claudeConfigDocker}:/root/.claude")
         Write-Host "Mounting Claude config from ~/.claude"
     }
 }
