@@ -9,11 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.3-alpha.7b67e00] - 2026-02-10
 
-*No changes since last release. Version bump only.*
-
-## [0.1.3-alpha.7b67e00] - 2026-02-10
-
 - Added enable/disable toggle in Edit Mode
+- Added support for disabling out of combat, mounted and pet battles
 - Added shadow stack tracking for Bone Shield
 - Cleaned up naming conventions
 
