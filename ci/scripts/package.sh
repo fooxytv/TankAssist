@@ -22,14 +22,30 @@ if [ -d "./ci/dist" ]; then
 fi
 
 echo "Creating 'dist' directory.."
-mkdir ./ci/dist
+mkdir -p ./ci/dist
+
+# Stage files into a subfolder so the zip contains TankAssist/ at the top level
+staging_dir="./ci/dist/${addon_name}"
+mkdir -p "$staging_dir"
+
+echo "Copying addon files to staging directory.."
+rsync -a --exclude='.git' --exclude='.github' --exclude='ci' --exclude='.vscode' \
+    --exclude='.env*' --exclude='.claude' --exclude='CLAUDE.md' --exclude='README.md' \
+    --exclude='CHANGELOG.md' --exclude='.luacheckrc' --exclude='code' \
+    --exclude='.gitignore' --exclude='LICENSE' \
+    ./ "$staging_dir/"
 
 zip_file="ci/dist/${addon_name}-${version}.zip"
 echo "Packaging addon into $zip_file.."
 
-zip -r "$zip_file" . -x "*.git*" ".github/*" "dist/*" "ci/*" "README.md" "CHANGELOG.md" ".vscode/*" ".env*" "code/*" ".claude/*" "CLAUDE.md" ".luacheckrc" "specs/*.spec.lua"
+cd ./ci/dist
+zip -r "../../${zip_file}" "${addon_name}"
+cd ../..
 
-if [ $? -eq 0 ]; then
+# Clean up staging directory
+rm -rf "$staging_dir"
+
+if [ -f "$zip_file" ]; then
     echo -e "\033[32mSuccessfully packaged addon.\033[0m"
 else
     echo -e "\033[31mError: Failed to package addon.\033[0m"
