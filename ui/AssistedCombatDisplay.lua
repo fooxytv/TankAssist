@@ -245,6 +245,34 @@ function acd:BuildLEMSettings()
                 TankAssist.Addon.db.profile.assistedCombat.showKeybinds = value
             end,
         },
+        {
+            order = 103,
+            name = "Hide When Mounted",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.hideWhenMounted or false
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.hideWhenMounted = value
+                self_ref:UpdateVisibility()
+            end,
+        },
+        {
+            order = 104,
+            name = "Hide In Pet Battles",
+            kind = lem.SettingType.Checkbox,
+            default = true,
+            get = function(layoutName)
+                local val = TankAssist.Addon.db.profile.assistedCombat.hideInPetBattles
+                if val == nil then return true end
+                return val
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.hideInPetBattles = value
+                self_ref:UpdateVisibility()
+            end,
+        },
     }
 end
 
@@ -408,10 +436,8 @@ end
 function acd:OnEditModeExit()
     if not self.frame then return end
     self.editMode = false
-    self:UpdateDisabledVisual()
-    if not self:IsEnabled() then
-        self.frame:Hide()
-    end
+    self:UpdateVisibility()
+    self:UpdateCombatVisuals()
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Hide()
     end
@@ -421,6 +447,9 @@ function acd:RegisterCombatEvents()
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    eventFrame:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+    eventFrame:RegisterEvent("PET_BATTLE_OPENING_START")
+    eventFrame:RegisterEvent("PET_BATTLE_CLOSE")
     eventFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             self.inCombat = true
@@ -428,11 +457,18 @@ function acd:RegisterCombatEvents()
         elseif event == "PLAYER_REGEN_ENABLED" then
             self.inCombat = false
             self:UpdateCombatVisuals()
+        elseif event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
+            self:UpdateVisibility()
+        elseif event == "PET_BATTLE_OPENING_START" then
+            self:UpdateVisibility()
+        elseif event == "PET_BATTLE_CLOSE" then
+            self:UpdateVisibility()
         end
     end)
     self.inCombat = UnitAffectingCombat("player")
     C_Timer.After(0.1, function()
         self:UpdateCombatVisuals()
+        self:UpdateVisibility()
     end)
 end
 
@@ -596,7 +632,7 @@ function acd:ClearIcon(icon)
 end
 
 function acd:Show()
-    if self.frame and (self:IsEnabled() or self:IsInEditMode()) then
+    if self.frame and self:ShouldBeVisible() then
         self.frame:Show()
     end
 end
@@ -632,6 +668,41 @@ function acd:UpdateDisabledVisual()
         self.frame:SetAlpha(1.0)
     else
         self.frame:SetAlpha(0.4)
+    end
+end
+
+function acd:ShouldBeVisible()
+    if not self:IsEnabled() and not self:IsInEditMode() then
+        return false
+    end
+
+    local settings = TankAssist.Addon.db.profile.assistedCombat
+
+    if settings.hideWhenMounted and IsMounted() then
+        return false
+    end
+
+    if settings.hideInPetBattles and C_PetBattles and C_PetBattles.IsInBattle() then
+        return false
+    end
+
+    return true
+end
+
+function acd:UpdateVisibility()
+    if not self.frame then return end
+
+    if self:IsInEditMode() then
+        self.frame:Show()
+        self:UpdateDisabledVisual()
+        return
+    end
+
+    if self:ShouldBeVisible() then
+        self.frame:Show()
+        self:UpdateDisabledVisual()
+    else
+        self.frame:Hide()
     end
 end
 

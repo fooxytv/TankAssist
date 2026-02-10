@@ -104,6 +104,15 @@ TankAssist.Constants.BloodDeathKnight = {
         [194679] = { maxCharges = 2, rechargeTime = 25 },
         [50842] = { maxCharges = 2, rechargeTime = 7.5 },
     },
+    KnownShadowStackBuffs = {
+        [195181] = {
+            maxStacks = 10,
+            grantedBy = {
+                [195182] = 3,
+                [195292] = 2,
+            },
+        },
+    },
 }
 
 TankAssist.SecretValues:RegisterSpellData(TankAssist.Constants.BloodDeathKnight)
@@ -113,6 +122,27 @@ local bloodDK = TankAssist.SpecBase:New(250, "Blood Death Knight")
 local spells = TankAssist.Constants.BloodDeathKnight.Spells
 local buffs = TankAssist.Constants.BloodDeathKnight.Buffs
 local thresholds = TankAssist.Constants.BloodDeathKnight.Thresholds
+
+function bloodDK:GetBoneShieldStacks()
+    local shadowStacks = TankAssist.SecretValues:GetShadowStackCount(buffs.BoneShield)
+    if shadowStacks ~= nil then
+        return shadowStacks
+    end
+
+    local bsInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.BoneShield)
+    if bsInfo.isSecret or bsInfo.stacks == nil then
+        return nil
+    end
+    return bsInfo.stacks
+end
+
+function bloodDK:NeedsBoneShield()
+    local stacks = self:GetBoneShieldStacks()
+    if stacks == nil then
+        return nil
+    end
+    return stacks < thresholds.BoneShieldMin
+end
 
 bloodDK.secondarySpells = {
     {
@@ -160,11 +190,11 @@ bloodDK.secondarySpells = {
         category = "MITIGATION",
         urgency = "HIGH",
         condition = function(self)
-            local bsInfo = TankAssist.SecretValues:GetBuffInfo("player", buffs.BoneShield)
-            if not bsInfo.exists then
+            local stacks = self:GetBoneShieldStacks()
+            if stacks == nil then
                 return true
             end
-            return bsInfo.stacks and bsInfo.stacks < 5
+            return stacks < thresholds.BoneShieldMin
         end,
     },
     {
@@ -265,9 +295,11 @@ bloodDK.tankActions = {
         spellId = spells.Marrowrend,
         name = "Marrowrend",
         condition = function()
-            local bsInfo = TankAssist.SecretValues:GetBuffInfo("player", TankAssist.Constants.BloodDeathKnight.Buffs.BoneShield)
-            if not bsInfo.exists then return true end
-            return bsInfo.stacks and bsInfo.stacks < 5
+            local stacks = bloodDK:GetBoneShieldStacks()
+            if stacks == nil then
+                return true
+            end
+            return stacks < thresholds.BoneShieldMin
         end,
     },
     SHIELD = {
@@ -346,24 +378,20 @@ bloodDK.rotationPriority = {
         spellId = spells.Marrowrend,
         defaultPriority = "HIGH",
         condition = function(self)
-            local needsRefresh, reason = self:BuffNeedsRefresh(
-                buffs.BoneShield,
-                5,
-                thresholds.BoneShieldMin
-            )
-            if needsRefresh == nil then
+            local stacks = self:GetBoneShieldStacks()
+
+            if stacks == nil then
                 return false
             end
-            if needsRefresh then
-                local runes = self:GetResource("RUNES")
-                if runes and runes >= 2 then
-                    if reason == "DOWN" then
-                        return true, "URGENT", "Bone Shield DOWN!"
-                    else
-                        return true, "HIGH", "Bone Shield low"
-                    end
-                end
+
+            if stacks == 0 then
+                return true, "URGENT", "Bone Shield DOWN!"
             end
+
+            if stacks < thresholds.BoneShieldMin then
+                return true, "HIGH", "Bone Shield low (" .. stacks .. ")"
+            end
+
             return false
         end,
     },
@@ -399,8 +427,8 @@ bloodDK.rotationPriority = {
         condition = function(self)
             local runes = self:GetResource("RUNES")
             if runes and runes >= 3 then
-                local needsBoneShield = self:BuffNeedsRefresh(buffs.BoneShield, 5, thresholds.BoneShieldMin)
-                if not needsBoneShield then
+                local needsBoneShield = self:NeedsBoneShield()
+                if needsBoneShield == false then
                     return true, "NORMAL", nil
                 end
             end

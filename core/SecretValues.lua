@@ -120,6 +120,8 @@ end
 
 secretValues.KnownChargeSpells = {}
 secretValues.KnownCooldowns = {}
+secretValues.KnownShadowStackBuffs = {}
+secretValues.trackedShadowStacks = {}
 
 function secretValues:OnSpellCast(spellId)
     local now = GetTime()
@@ -168,6 +170,70 @@ function secretValues:OnSpellCast(spellId)
     end
 
     self:TrackStackingBuff(spellId)
+    self:TrackShadowStacks(spellId)
+end
+
+function secretValues:TrackShadowStacks(spellId)
+    for buffId, buffConfig in pairs(self.KnownShadowStackBuffs) do
+        if buffConfig.grantedBy and buffConfig.grantedBy[spellId] then
+            local stacksToAdd = buffConfig.grantedBy[spellId]
+            if not self.trackedShadowStacks[buffId] then
+                self.trackedShadowStacks[buffId] = {
+                    stacks = 0,
+                    lastUpdate = GetTime(),
+                }
+            end
+
+            local tracking = self.trackedShadowStacks[buffId]
+            tracking.stacks = math.min(tracking.stacks + stacksToAdd, buffConfig.maxStacks or 10)
+            tracking.lastUpdate = GetTime()
+
+            if self.debugTracking then
+                local buffInfo = C_Spell.GetSpellInfo(buffId)
+                local buffName = buffInfo and buffInfo.name or "Unknown"
+                local spellInfo = C_Spell.GetSpellInfo(spellId)
+                local spellName = spellInfo and spellInfo.name or "Unknown"
+                print("|cFF00FF00[TA Shadow Stacks]|r", spellName, "granted", stacksToAdd, "stacks of", buffName, "- Total:", tracking.stacks)
+            end
+        end
+    end
+end
+
+function secretValues:GetShadowStackCount(buffId)
+    local buffConfig = self.KnownShadowStackBuffs[buffId]
+    if not buffConfig then
+        return nil
+    end
+
+    local auraInfo = C_UnitAuras.GetPlayerAuraBySpellID(buffId)
+    if not auraInfo then
+        if self.trackedShadowStacks[buffId] then
+            self.trackedShadowStacks[buffId].stacks = 0
+        end
+        return 0
+    end
+
+    local tracking = self.trackedShadowStacks[buffId]
+    if not tracking then
+        return nil
+    end
+
+    return tracking.stacks
+end
+
+function secretValues:ResetShadowStacks(buffId)
+    if self.trackedShadowStacks[buffId] then
+        self.trackedShadowStacks[buffId].stacks = 0
+        self.trackedShadowStacks[buffId].lastUpdate = GetTime()
+    end
+end
+
+function secretValues:ConsumeShadowStack(buffId, amount)
+    amount = amount or 1
+    if self.trackedShadowStacks[buffId] then
+        self.trackedShadowStacks[buffId].stacks = math.max(0, self.trackedShadowStacks[buffId].stacks - amount)
+        self.trackedShadowStacks[buffId].lastUpdate = GetTime()
+    end
 end
 
 secretValues.debugTracking = false
@@ -260,6 +326,11 @@ function secretValues:RegisterSpellData(specConstants)
     if specConstants.SpellCosts then
         for spellId, data in pairs(specConstants.SpellCosts) do
             self.KnownSpellCosts[spellId] = data
+        end
+    end
+    if specConstants.KnownShadowStackBuffs then
+        for buffId, data in pairs(specConstants.KnownShadowStackBuffs) do
+            self.KnownShadowStackBuffs[buffId] = data
         end
     end
 end
