@@ -157,7 +157,7 @@ protWarrior.secondarySpells = {
         category = "DEFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
-            return self:HasTarget()
+            return IsSpellKnown(spells.SpellReflection) and self:HasTarget()
         end,
     },
     {

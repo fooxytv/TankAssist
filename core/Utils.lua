@@ -208,6 +208,8 @@ function utils:FormatKeybind(key)
     key = key:gsub("BUTTON", "M")
     key = key:gsub("MOUSEWHEELUP", "WU")
     key = key:gsub("MOUSEWHEELDOWN", "WD")
+    key = key:gsub("SHIFT%-MOUSEWHEELUP", "S-WU")
+    key = key:gsub("SHIFT%-MOUSEWHEELDOWN", "S-WD")
     return key
 end
 

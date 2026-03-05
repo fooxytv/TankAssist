@@ -60,17 +60,18 @@ end
 
 function acd:Create()
     local settings = TankAssist.Addon.db.profile.assistedCombat
-
     self.frame = CreateFrame("Frame", "TankAssistRotationFrame", UIParent, "BackdropTemplate")
     self.frame:SetSize(settings.iconSize * 2 + 4, settings.iconSize + 2)
     self.frame.editModeName = "TankAssist"
-    self.frame:SetPoint(
-        settings.position.point or "CENTER",
-        UIParent,
-        settings.position.relativePoint or "CENTER",
-        settings.position.x or 0,
-        settings.position.y or -200
-    )
+
+    local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+    local pos = settings.position or {}
+    if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
+        self.frame:SetPoint(pos.point, UIParent, validAnchors[pos.relativePoint] and pos.relativePoint or pos.point, pos.x, pos.y)
+    else
+        settings.position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
+        self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+    end
     self.frame:SetScale(settings.scale or 1.0)
     self.frame:SetClampedToScreen(true)
 
@@ -259,7 +260,41 @@ function acd:BuildLEMSettings()
             end,
         },
         {
-            order = 104,
+            order = 105,
+            name = "In Combat Opacity",
+            kind = lem.SettingType.Slider,
+            default = 1.0,
+            minValue = 0.1,
+            maxValue = 1.0,
+            valueStep = 0.1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.inCombatAlpha or 1.0
+            end,
+            set = function(layoutName, value)
+                value = math.floor(value * 10 + 0.5) / 10
+                TankAssist.Addon.db.profile.assistedCombat.inCombatAlpha = value
+                self_ref:UpdateCombatVisuals()
+            end,
+        },
+        {
+            order = 106,
+            name = "Out of Combat Opacity",
+            kind = lem.SettingType.Slider,
+            default = 0.5,
+            minValue = 0.1,
+            maxValue = 1.0,
+            valueStep = 0.1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.outOfCombatAlpha or 0.5
+            end,
+            set = function(layoutName, value)
+                value = math.floor(value * 10 + 0.5) / 10
+                TankAssist.Addon.db.profile.assistedCombat.outOfCombatAlpha = value
+                self_ref:UpdateCombatVisuals()
+            end,
+        },
+        {
+            order = 107,
             name = "Hide In Pet Battles",
             kind = lem.SettingType.Checkbox,
             default = true,
@@ -298,12 +333,33 @@ function acd:RegisterEditModeLibEQOL()
         y = -200,
     }
 
-    local function OnPositionChanged(point, relativePoint, x, y)
+    local function OnPositionChanged(...)
+        local point, relativePoint, x, y
+        for i = 1, select("#", ...) do
+            local v = select(i, ...)
+            if type(v) == "string" and not point then
+                -- skip non-anchor strings (layout names like "UiScale-Classic")
+                local anchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+                if anchors[v] then
+                    point = v
+                end
+            elseif type(v) == "string" and point and not relativePoint then
+                local anchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+                if anchors[v] then
+                    relativePoint = v
+                end
+            elseif type(v) == "number" and not x then
+                x = v
+            elseif type(v) == "number" and x and not y then
+                y = v
+            end
+        end
+        if not point then return end
         TankAssist.Addon.db.profile.assistedCombat.position = {
             point = point,
-            relativePoint = relativePoint,
-            x = x,
-            y = y,
+            relativePoint = relativePoint or point,
+            x = x or 0,
+            y = y or 0,
         }
         TankAssist.Utils:Debug("Position saved via LibEQOL:", point, x, y)
     end
@@ -410,15 +466,16 @@ end
 
 function acd:RestorePosition()
     if not self.frame then return end
+    local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
     local settings = TankAssist.Addon.db.profile.assistedCombat
+    local pos = settings.position or {}
     self.frame:ClearAllPoints()
-    self.frame:SetPoint(
-        settings.position.point or "CENTER",
-        UIParent,
-        settings.position.relativePoint or "CENTER",
-        settings.position.x or 0,
-        settings.position.y or -200
-    )
+    if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
+        self.frame:SetPoint(pos.point, UIParent, validAnchors[pos.relativePoint] and pos.relativePoint or pos.point, pos.x, pos.y)
+    else
+        settings.position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
+        self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+    end
     self.frame:SetScale(settings.scale or 1.0)
 end
 
@@ -474,16 +531,15 @@ end
 
 function acd:UpdateCombatVisuals()
     if not self.frame then return end
+    local settings = TankAssist.Addon.db.profile.assistedCombat
     if self.inCombat then
-        self.frame:SetAlpha(1.0)
-        self.mainIcon:SetAlpha(1.0)
-        self.aoeIcon:SetAlpha(1.0)
-        self.frame:SetBackdropColor(0, 0, 0, 0.4)
+        local alpha = settings.inCombatAlpha or 1.0
+        self.frame:SetAlpha(alpha)
+        self.frame:SetBackdropColor(0, 0, 0, alpha * 0.4)
     else
-        self.frame:SetAlpha(0.2)
-        self.mainIcon:SetAlpha(0.3)
-        self.aoeIcon:SetAlpha(0.3)
-        self.frame:SetBackdropColor(0, 0, 0, 0.1)
+        local alpha = settings.outOfCombatAlpha or 0.5
+        self.frame:SetAlpha(alpha)
+        self.frame:SetBackdropColor(0, 0, 0, alpha * 0.4)
     end
 end
 
@@ -527,6 +583,7 @@ function acd:Update()
 end
 
 function acd:UpdateIcon(icon, spellId, spellType, priority)
+    if not icon then return end
     if not spellId then
         self:ClearIcon(icon)
         return
@@ -665,7 +722,7 @@ function acd:UpdateDisabledVisual()
     if not self.frame then return end
 
     if self:IsEnabled() then
-        self.frame:SetAlpha(1.0)
+        self:UpdateCombatVisuals()
     else
         self.frame:SetAlpha(0.4)
     end
@@ -767,8 +824,8 @@ end
 
 local function Initialize()
     if TankAssist.Addon then
-        TankAssist.Addon.assistedCombatDisplay = acd
         acd:Create()
+        TankAssist.Addon.assistedCombatDisplay = acd
     end
 end
 

@@ -60,6 +60,8 @@ local defaults = {
             enabled = true,
             iconSize = 50,
             scale = 1.0,
+            inCombatAlpha = 1.0,
+            outOfCombatAlpha = 0.5,
             showKeybinds = true,
             hideWhenMounted = false,
             hideInPetBattles = true,
@@ -69,6 +71,72 @@ local defaults = {
                 x = 0,
                 y = -200,
             },
+        },
+        targetCastBar = {
+            enabled = true,
+            width = 200,
+            height = 20,
+            scale = 1.0,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 100 },
+            interruptibleColor = { 1.0, 0.7, 0.0 },
+            nonInterruptibleColor = { 0.6, 0.3, 0.3 },
+            channelColor = { 0.0, 0.6, 1.0 },
+            bgColor = { 0.15, 0.15, 0.15, 0.8 },
+            borderColor = { 0.3, 0.3, 0.3 },
+            showSpellName = true,
+            showCastTime = true,
+            fontSize = 11,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            barTexture = "Solid",
+            nameAlignment = "LEFT",
+            timerAlignment = "RIGHT",
+            textPosition = "ABOVE",
+            showIcon = true,
+            iconPosition = "LEFT",
+        },
+        playerCastBar = {
+            enabled = true,
+            width = 200,
+            height = 20,
+            scale = 1.0,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -100 },
+            interruptibleColor = { 0.0, 0.6, 1.0 },
+            nonInterruptibleColor = { 0.0, 0.6, 1.0 },
+            channelColor = { 0.0, 0.8, 0.4 },
+            bgColor = { 0.15, 0.15, 0.15, 0.8 },
+            borderColor = { 0.3, 0.3, 0.3 },
+            showSpellName = true,
+            showCastTime = true,
+            fontSize = 11,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            barTexture = "Solid",
+            nameAlignment = "LEFT",
+            timerAlignment = "RIGHT",
+            textPosition = "ABOVE",
+            showIcon = true,
+            iconPosition = "LEFT",
+        },
+        externalCooldowns = {
+            enabled = true,
+            iconSize = 36,
+            scale = 1.0,
+            showOnlyInCombat = false,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -260 },
+        },
+        cooldownAlerts = {
+            enabled = true,
+            iconSize = 36,
+            scale = 1.0,
+            displayMode = "ICON_ONLY",
+            showOnlyInCombat = false,
+            countdownDuration = 3,
+            alertStyle = "BOTH",
+            timerPosition = "INSIDE",
+            soundEnabled = false,
+            trackedSpells = {},
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
         },
         specs = {},
         sounds = {
@@ -180,8 +248,25 @@ end
 
 function addon:OnUpdate()
     if not self.db.profile.enabled then return end
+
     if self.assistedCombatDisplay and self.db.profile.assistedCombat.enabled then
         self.assistedCombatDisplay:Update()
+    end
+
+    if self.targetCastBar and self.db.profile.targetCastBar.enabled then
+        self.targetCastBar:Update()
+    end
+
+    if self.playerCastBar and self.db.profile.playerCastBar.enabled then
+        self.playerCastBar:Update()
+    end
+
+    if self.externalCooldowns and self.db.profile.externalCooldowns.enabled then
+        self.externalCooldowns:Update()
+    end
+
+    if self.cooldownAlerts and self.db.profile.cooldownAlerts.enabled then
+        self.cooldownAlerts:Update()
     end
 
     if self.activeSpecModule and self.activeSpecModule.OnUpdate then
@@ -334,8 +419,12 @@ function addon:SetupUI()
         self.db.profile.display.position.y = y
     end)
     self.assistedCombatDisplay = nil
+    self.targetCastBar = nil
+    self.playerCastBar = nil
     self.cooldownTracker = nil
     self.buffMaintenance = nil
+    self.externalCooldowns = nil
+    self.cooldownAlerts = nil
 end
 
 function addon:UpdateUIForSpec()
@@ -622,6 +711,82 @@ function addon:HandleSlashCommand(msg)
             self:Print("Debug mode " .. (enabled and "enabled" or "disabled"))
         end
         
+    elseif cmd == "alert" then
+        local subCmd = args[2]
+        if subCmd == "list" then
+            local spells = self.db.profile.cooldownAlerts.trackedSpells
+            if #spells == 0 then
+                self:Print("No spells tracked. Use '/ta alert defaults' to load spec defaults.")
+            else
+                self:Print("Tracked cooldown alerts:")
+                for _, spellId in ipairs(spells) do
+                    local spellInfo = C_Spell.GetSpellInfo(spellId)
+                    local spellName = spellInfo and spellInfo.name or "Unknown"
+                    print(string.format("  %s (ID: %d)", spellName, spellId))
+                end
+            end
+        elseif subCmd == "add" then
+            local spellId = tonumber(args[3])
+            if not spellId then
+                self:Print("Usage: /ta alert add <spellId>")
+                return
+            end
+            if self.cooldownAlerts then
+                self.cooldownAlerts:AddTrackedSpell(spellId)
+            else
+                -- Manually add if UI not yet initialized
+                local spells = self.db.profile.cooldownAlerts.trackedSpells
+                for _, id in ipairs(spells) do
+                    if id == spellId then
+                        self:Print("Spell already tracked.")
+                        return
+                    end
+                end
+                table.insert(spells, spellId)
+                local spellInfo = C_Spell.GetSpellInfo(spellId)
+                self:Print("Now tracking: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+            end
+        elseif subCmd == "remove" then
+            local spellId = tonumber(args[3])
+            if not spellId then
+                self:Print("Usage: /ta alert remove <spellId>")
+                return
+            end
+            if self.cooldownAlerts then
+                self.cooldownAlerts:RemoveTrackedSpell(spellId)
+            else
+                local spells = self.db.profile.cooldownAlerts.trackedSpells
+                for i, id in ipairs(spells) do
+                    if id == spellId then
+                        table.remove(spells, i)
+                        local spellInfo = C_Spell.GetSpellInfo(spellId)
+                        self:Print("Removed: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+                        return
+                    end
+                end
+                self:Print("Spell not found in tracked list.")
+            end
+        elseif subCmd == "defaults" then
+            if self.cooldownAlerts then
+                self.cooldownAlerts:LoadSpecDefaults()
+            else
+                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
+            end
+        elseif subCmd == "clear" then
+            self.db.profile.cooldownAlerts.trackedSpells = {}
+            if self.cooldownAlerts then
+                self.cooldownAlerts.spellStates = {}
+            end
+            self:Print("Cleared all tracked cooldown alerts.")
+        else
+            self:Print("Alert commands:")
+            print("  /ta alert list - Show tracked spells")
+            print("  /ta alert add <spellId> - Track a spell")
+            print("  /ta alert remove <spellId> - Stop tracking a spell")
+            print("  /ta alert defaults - Load spec default spells")
+            print("  /ta alert clear - Clear all tracked spells")
+        end
+
     elseif cmd == "reset" then
         self.db.profile.display.position = {
             point = "CENTER",
@@ -662,6 +827,7 @@ function addon:PrintHelp()
     print("  /ta debug tracking - Show tracked cooldowns (internal timers)")
     print("  /ta debug combat - Show combat state")
     print("  /ta debug settings - Show saved settings")
+    print("  /ta alert - Cooldown alert commands (list/add/remove/defaults/clear)")
     print("  /ta test - Run test mode")
     print("")
     print("  To reposition: Use WoW's Edit Mode (Escape > Edit Mode)")
@@ -683,18 +849,20 @@ function addon:RunTestMode()
     end
 end
 
-local loadFrame = CreateFrame("Frame")
-loadFrame:RegisterEvent("ADDON_LOADED")
-loadFrame:RegisterEvent("PLAYER_LOGIN")
-loadFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        if addon.OnInitialize then
-            addon:OnInitialize()
+if not (LibStub and LibStub("AceAddon-3.0", true)) then
+    local loadFrame = CreateFrame("Frame")
+    loadFrame:RegisterEvent("ADDON_LOADED")
+    loadFrame:RegisterEvent("PLAYER_LOGIN")
+    loadFrame:SetScript("OnEvent", function(self, event, arg1)
+        if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+            if addon.OnInitialize then
+                addon:OnInitialize()
+            end
+        elseif event == "PLAYER_LOGIN" then
+            if addon.OnEnable then
+                addon:OnEnable()
+            end
+            self:UnregisterEvent("PLAYER_LOGIN")
         end
-    elseif event == "PLAYER_LOGIN" then
-        if addon.OnEnable then
-            addon:OnEnable()
-        end
-        self:UnregisterEvent("PLAYER_LOGIN")
-    end
-end)
+    end)
+end
