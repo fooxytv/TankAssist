@@ -156,6 +156,18 @@ function secretValues:OnSpellCast(spellId)
         return
     end
 
+    -- Try to learn actual CD duration from the API at cast time
+    -- Use pcall because cdInfo.duration may be a secret value in combat
+    local cdInfo = C_Spell.GetSpellCooldown(spellId)
+    if cdInfo and cdInfo.duration then
+        local ok, isReal = pcall(function()
+            return cdInfo.duration > 1.5
+        end)
+        if ok and isReal then
+            self.KnownCooldowns[spellId] = cdInfo.duration
+        end
+    end
+
     local knownCD = self.KnownCooldowns[spellId]
     if knownCD and knownCD > 0 then
         self.trackedCooldowns[spellId] = {
@@ -293,7 +305,6 @@ function secretValues:GetTrackedCooldown(spellId)
     local remaining = tracked.duration - elapsed
 
     if remaining <= 0 then
-        self.trackedCooldowns[spellId] = nil
         return 0
     end
 

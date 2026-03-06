@@ -1,179 +1,146 @@
 # TankAssist
 
-A tank rotation assistant addon for World of Warcraft 12.0 (Midnight) that works within Blizzard's new API restrictions.
+A tank assistant addon for World of Warcraft 12.0 (Midnight) designed to work within Blizzard's Assisted Combat API restrictions.
 
-## Overview
+## Features
 
-TankAssist provides three tiers of functionality:
-
-### Tier 1: Blizzard Assisted Combat Integration
-- Displays Blizzard's built-in rotation recommendations in a customizable UI
+### Assisted Combat Display
+- Displays Blizzard's built-in rotation recommendations in a customisable UI
 - Shows keybinds for recommended abilities
 - Works anywhere the Assisted Combat system works
 
-### Tier 2: Cooldown Tracking
-- Tracks major defensive and offensive cooldowns
-- Shows cooldown timers and charge counts
-- Color-coded by category (Major/Defensive/Offensive)
+### Player & Target Cast Bars
+- Fully customisable replacements for Blizzard's default cast bars
+- Configurable width, height, scale, and colours (cast, channel, non-interruptible, background, border)
+- Text options: spell name, cast timer, font face/size, alignment, position (above/inside/below)
+- Spell icon display with left/right positioning
+- Bar texture selection (Solid, Blizzard, Smooth, Flat)
+- Target cast bar shows interrupted state with linger and fade-out
+- Option to hide Blizzard's default player cast bar
 
-### Tier 3: Buff Maintenance
-- Tracks tank-specific maintenance buffs
-- Shows buff duration and stack counts
-- Alerts when buffs need refreshing (e.g., Bone Shield, Shuffle, Ironfur)
+### External Cooldown Tracking
+- Monitors healer and ally defensive cooldowns active on the player
+- Supported externals: Pain Suppression, Guardian Spirit, Ironbark, Life Cocoon, Blessing of Sacrifice, Blessing of Protection, Blessing of Spellwarding, Rallying Cry
+- Real-time duration display with cooldown sweep animation
+- Handles Blizzard's secret values gracefully (shows "?" when duration is hidden)
+
+### Cooldown Alerts
+- Tracks your own player cooldowns (interrupts, defensives) and alerts when they come off cooldown
+- Countdown timer with ready flash animation
+- Per-spec defaults for all 6 tank specs
+- Three alert styles: Ready Only, Countdown Only, Countdown + Ready
+- Shadow tracking via UNIT_SPELLCAST_SUCCEEDED to work around secret value restrictions
+
+### Cooldown & Buff Tracking
+- Tracks major defensive and offensive cooldowns with timers and charge counts
+- Colour-coded by category (Major/Defensive/Offensive)
+- Tracks tank-specific maintenance buffs (Bone Shield, Shuffle, Ironfur, etc.)
+- Alerts when buffs need refreshing
+
+### Shared Display Options
+The following settings are available for External Cooldowns and Cooldown Alerts:
+- **Display Mode**: Icon Only, Icon + Name, Name Only
+- **Timer Position**: Inside Icon or Below Icon
+- **Border Color**: Configurable via colour picker
+- **Icon Size** and **Scale** sliders
+
+### Edit Mode Integration
+All UI components integrate with WoW's Edit Mode via LibEQOL:
+- Drag to reposition any frame
+- In-place settings via sliders, dropdowns, checkboxes, and colour pickers
+- All settings saved per-character and persist across reloads
 
 ## Supported Specs
 
-- **Blood Death Knight** - Full implementation
-  - Bone Shield stack tracking
-  - Runic Power management
-  - Crimson Scourge proc tracking
-  
-- **Brewmaster Monk** - Full implementation
-  - Stagger level tracking
-  - Purifying Brew recommendations
-  - Shuffle maintenance
-  
-- **Protection Warrior** - Implemented
-  - Shield Block uptime
-  - Revenge proc tracking
-  - Rage management
-  
-- **Protection Paladin** - Implemented
-  - Shield of the Righteous uptime
-  - Holy Power tracking
-  - Shining Light proc tracking
-  
-- **Vengeance Demon Hunter** - Implemented
-  - Soul Fragment tracking
-  - Demon Spikes uptime
-  - Spirit Bomb recommendations
-  
-- **Guardian Druid** - Implemented
-  - Ironfur stack tracking
-  - Gore/Galactic Guardian procs
-  - Frenzied Regeneration management
+| Spec | Key Mechanics |
+|------|---------------|
+| **Blood Death Knight** | Bone Shield stacks, Runic Power, Crimson Scourge procs |
+| **Brewmaster Monk** | Stagger tracking, Purifying Brew, Shuffle maintenance |
+| **Protection Warrior** | Shield Block uptime, Revenge procs, Rage management |
+| **Protection Paladin** | Shield of the Righteous, Holy Power, Shining Light procs |
+| **Vengeance Demon Hunter** | Soul Fragments, Demon Spikes, Spirit Bomb |
+| **Guardian Druid** | Ironfur stacks, Gore/Galactic Guardian procs, Frenzied Regen |
 
 ## Installation
 
-1. Download and extract to your `World of Warcraft/_retail_/Interface/AddOns/` folder
-2. Ensure the folder is named `TankAssist`
-3. Restart WoW or `/reload`
+1. Download the latest release from [GitHub Releases](https://github.com/fooxytv/TankAssist/releases) or CurseForge
+2. Extract to your `World of Warcraft/_retail_/Interface/AddOns/` folder
+3. Ensure the folder is named `TankAssist`
+4. Restart WoW or `/reload`
 
 ## Slash Commands
 
+### General
 ```
-/ta or /tankassist - Show help
-/ta toggle        - Enable/disable addon
-/ta lock          - Lock frame position
-/ta unlock        - Unlock frame for dragging
-/ta config        - Open configuration panel
-/ta reset         - Reset frame position
-/ta debug on/off  - Toggle debug mode
-/ta test          - Run diagnostic tests
+/ta                  - Show help
+/ta toggle           - Enable/disable addon
+/ta config           - Open configuration panel
+/ta reset            - Reset frame position
+/ta test             - Run diagnostic tests
+```
+
+### Positioning
+```
+/ta edit             - Instructions for using Edit Mode
+/ta lock             - (same as edit)
+/ta unlock           - (same as edit)
+```
+All frames are repositioned via WoW's Edit Mode (Escape > Edit Mode).
+
+### Cooldown Alerts
+```
+/ta alert            - Show alert command help
+/ta alert list       - Show tracked spells
+/ta alert add <id>   - Track a spell by ID
+/ta alert remove <id>- Stop tracking a spell
+/ta alert defaults   - Load default spells for current tank spec
+/ta alert clear      - Clear all tracked spells
+```
+
+### Debug
+```
+/ta debug on/off     - Toggle debug mode
+/ta debug utility    - Toggle tank utility debug output
+/ta debug stagger    - Show stagger diagnostic (Brewmaster)
+/ta debug health     - Show health percent
+/ta debug rage       - Show rage/resource info
+/ta debug secondary  - Show secondary spell selection
+/ta debug tracking   - Show tracked cooldowns (internal timers)
+/ta debug combat     - Show combat state
+/ta debug settings   - Show saved settings
 ```
 
 ## API Restrictions in 12.0
 
-This addon is designed to work within Blizzard's new "Secret Values" system. The situation is more nuanced than "everything is restricted":
+This addon is designed to work within Blizzard's "Secret Values" system.
 
-### What's DECLASSIFIED (Always Accessible)
+### What's Accessible
+- **Secondary Resources**: Stagger, Holy Power, Soul Fragments, Chi, Combo Points, Runes
+- **Your Own Cooldowns**: Accessible through the Cooldown Manager API
+- **Your Own Spell Casts**: Cast bar info is accessible
+- **Specific Spells**: Maelstrom Weapon, DH Devourer spells, Combat Res, GCD
 
-Blizzard explicitly whitelisted these for addon access:
-
-- **Secondary Resources**: Stagger, Holy Power, Soul Fragments, Chi, Combo Points, Runes, Arcane Charges
-- **Specific Spells**: Maelstrom Weapon, DH Devourer spells, Combat Res, GCD, Skyriding abilities
-- **Your Own Cooldowns**: Generally accessible through the Cooldown Manager API
-- **Your Own Spell Casts**: Castbar info is accessible
-
-### What's RESTRICTED (Secret Values)
-
+### What's Restricted (Secret Values)
 - **Enemy State**: Health, casts, debuffs (especially in M+)
-- **Enemy Identity**: Names simplified in M+, nameplate restrictions
-- **Complex Logic**: Can't do `if health < 30% then X` in tainted code
-- **Primary Resources**: Health, Mana, Rage, Energy - can DISPLAY but not do logic
+- **Primary Resources**: Health, Mana, Rage, Energy — can display but not use in logic
+- **Complex Logic**: Can't do conditional logic on restricted values in tainted code
 
-### What This Means for Tanks
-
-**Good news for tanks!** Most tank tracking needs are covered:
-
-| Spec | Key Mechanic | Status |
-|------|--------------|--------|
-| Brewmaster | Stagger | ✅ **Explicitly whitelisted** |
-| Vengeance DH | Soul Fragments | ✅ **Explicitly whitelisted** |
-| Protection Paladin | Holy Power | ✅ Secondary resource |
-| Blood DK | Bone Shield, Runes | ⚠️ Buff tracking varies, Runes accessible |
-| Guardian Druid | Ironfur stacks | ⚠️ Buff tracking may be limited |
-| Protection Warrior | Shield Block | ⚠️ Buff tracking may be limited |
-
-### How Centered Cooldown Manager Works
-
-Addons like Centered Cooldown Manager work because:
-1. Blizzard provides the Cooldown Manager API
-2. Cooldown availability is generally trackable
-3. Some spells are explicitly whitelisted
-
-Our addon uses similar techniques - if CDM works, TankAssist should work too.
-
-## Configuration
-
-Access the config panel via `/ta config` or through the interface options.
-
-### Display Options
-- **Scale**: Adjust UI size (0.5 - 2.0)
-- **Show out of combat**: Display when not in combat
-- **Show without target**: Display without an enemy target
-- **Hide in M+**: Hide when API is limited in keystones
-
-### Assisted Combat
-- **Enable**: Show Blizzard's rotation recommendations
-- **Show keybinds**: Display ability keybinds
-
-### Cooldown Tracker
-- **Show Major**: Display major cooldowns (DRW, Metamorphosis, etc.)
-- **Show Defensive**: Display defensive cooldowns
-- **Show Offensive**: Display offensive cooldowns
-
-### Buff Maintenance
-- **Warning threshold**: Seconds before buff expires to show warning
-
-## How It Works
-
-### Blizzard's Assisted Combat
-The addon hooks into Blizzard's `C_Spell.GetAssistedHighlight()` API (and fallbacks) to display what Blizzard recommends you press next. This is the same system that powers the "Single-Button Assistant" feature.
-
-### Spec Module System
-Each tank spec has a dedicated module that defines:
-- **Maintenance buffs** to track
-- **Cooldowns** to display
-- **Rotation priority** for fallback recommendations
-
-### Secret Values Handling
-The `SecretValues.lua` module handles checking for and working around API restrictions:
-```lua
--- Check if a value is secret
-if TA.SecretValues:IsSecret(value) then
-    -- Handle gracefully
-end
-
--- Safe buff checking with fallback
-local info = TA.SecretValues:GetBuffInfo("player", spellId)
-if info.isSecret then
-    -- Show "unknown" state
-end
-```
+### How TankAssist Handles This
+- **Shadow Tracking**: Monitors `UNIT_SPELLCAST_SUCCEEDED` events and calculates remaining cooldowns from known durations, avoiding secret value APIs entirely
+- **Secret Value Detection**: `SecretValues.lua` wraps API calls with `IsSecret()` checks and graceful fallbacks
+- **Assisted Combat**: Hooks into `C_Spell.GetAssistedHighlight()` which Blizzard provides for addon use
 
 ## Extending the Addon
 
 ### Adding a New Spec
 
-1. Create a new file in `Specs/`
-2. Inherit from `TA.SpecBase`
+1. Create a new file in `specs/<Class>/`
+2. Inherit from `TankAssist.SpecBase`
 3. Define `buffsToTrack`, `cooldownsToTrack`, and `rotationPriority`
 4. Register with `spec:Register()`
 
-Example:
 ```lua
-local MySpec = TA.SpecBase:New(SPEC_ID, "Spec Name")
+local MySpec = TankAssist.SpecBase:New(SPEC_ID, "Spec Name")
 
 MySpec.buffsToTrack = {
     {
@@ -184,51 +151,39 @@ MySpec.buffsToTrack = {
     },
 }
 
-MySpec.rotationPriority = {
-    {
-        spellId = 12345,
-        condition = function(self)
-            -- Return true to recommend, false to skip
-            return self:BuffNeedsRefresh(12345, 3)
-        end,
-    },
-}
-
 MySpec:Register()
 ```
 
 ### Updating Rotation Data
 
-The `Data/RotationData.lua` file contains APL-style rotation definitions that can be updated independently of the core addon code.
+The `data/RotationData.lua` file contains APL-style rotation definitions that can be updated independently of the core addon code.
 
 ## Troubleshooting
 
 ### Addon not showing
-1. Check you're a tank spec
-2. Try `/ta unlock` to see if frame is off-screen
+1. Check you're in a tank spec
+2. Use WoW's Edit Mode to check if frames are off-screen
 3. Run `/ta test` for diagnostics
+
+### Cooldown Alerts not appearing
+1. Run `/ta alert list` to check if spells are tracked
+2. Run `/ta alert defaults` to load spells for your current spec
+3. Ensure the alert style is set to show what you expect (Edit Mode settings)
 
 ### Limited functionality in M+
 This is expected due to API restrictions. The addon will show what's available.
 
 ### Recommendations seem wrong
 1. Check if Blizzard's Assisted Combat is enabled in Interface Options
-2. The addon prioritizes Blizzard's recommendation over its own
+2. The addon prioritises Blizzard's recommendation over its own
 
 ## Credits
 
 - SimulationCraft for rotation reference
 - Wowhead/Icy Veins for tanking guides
 - WoWUIDev Discord for API documentation
+- LibEQOL for Edit Mode integration
 
 ## License
 
 MIT License - Feel free to modify and distribute.
-
-## Changelog
-
-### 1.0.0
-- Initial release for WoW 12.0
-- Support for all 6 tank specs
-- Blizzard Assisted Combat integration
-- Cooldown and buff tracking

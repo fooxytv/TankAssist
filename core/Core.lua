@@ -141,6 +141,8 @@ local defaults = {
             borderColor = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
             soundEnabled = false,
             trackedSpells = {},
+            trackedSpellsBySpec = {},
+            customCooldowns = {},
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
         },
         specs = {},
@@ -514,11 +516,7 @@ function addon:HandleSlashCommand(msg)
         print("  4. Click 'Save Changes' when done")
         
     elseif cmd == "config" or cmd == "options" then
-        if self.configPanel then
-            self.configPanel:Show()
-        else
-            self:Print("Config panel not yet implemented. Use slash commands.")
-        end
+        TankAssist.ConfigPanel:Toggle()
         
     elseif cmd == "debug" then
         local subCmd = args[2]
@@ -577,6 +575,15 @@ function addon:HandleSlashCommand(msg)
             print("    GetResource('HOLY_POWER'):", holyPower)
 
         elseif subCmd == "tracking" or subCmd == "cooldowns" then
+            -- If "on" or "off" follows, toggle live tracking debug
+            local toggleArg = args[3]
+            if toggleArg == "on" then
+                TankAssist.SecretValues:SetDebugTracking(true)
+                return
+            elseif toggleArg == "off" then
+                TankAssist.SecretValues:SetDebugTracking(false)
+                return
+            end
             self:Print("Tracked cooldowns (internal timer):")
             local hasTracked = false
             for spellId, data in pairs(TankAssist.SecretValues.trackedCooldowns) do
@@ -719,11 +726,11 @@ function addon:HandleSlashCommand(msg)
     elseif cmd == "alert" then
         local subCmd = args[2]
         if subCmd == "list" then
-            local spells = self.db.profile.cooldownAlerts.trackedSpells
+            local spells = self.cooldownAlerts and self.cooldownAlerts:GetTrackedSpells() or {}
             if #spells == 0 then
-                self:Print("No spells tracked. Use '/ta alert defaults' to load spec defaults.")
+                self:Print("No spells tracked for this spec. Use '/ta alert defaults' to load spec defaults.")
             else
-                self:Print("Tracked cooldown alerts:")
+                self:Print("Tracked cooldown alerts (current spec):")
                 for _, spellId in ipairs(spells) do
                     local spellInfo = C_Spell.GetSpellInfo(spellId)
                     local spellName = spellInfo and spellInfo.name or "Unknown"
@@ -739,17 +746,7 @@ function addon:HandleSlashCommand(msg)
             if self.cooldownAlerts then
                 self.cooldownAlerts:AddTrackedSpell(spellId)
             else
-                -- Manually add if UI not yet initialized
-                local spells = self.db.profile.cooldownAlerts.trackedSpells
-                for _, id in ipairs(spells) do
-                    if id == spellId then
-                        self:Print("Spell already tracked.")
-                        return
-                    end
-                end
-                table.insert(spells, spellId)
-                local spellInfo = C_Spell.GetSpellInfo(spellId)
-                self:Print("Now tracking: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
             end
         elseif subCmd == "remove" then
             local spellId = tonumber(args[3])
@@ -760,16 +757,7 @@ function addon:HandleSlashCommand(msg)
             if self.cooldownAlerts then
                 self.cooldownAlerts:RemoveTrackedSpell(spellId)
             else
-                local spells = self.db.profile.cooldownAlerts.trackedSpells
-                for i, id in ipairs(spells) do
-                    if id == spellId then
-                        table.remove(spells, i)
-                        local spellInfo = C_Spell.GetSpellInfo(spellId)
-                        self:Print("Removed: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
-                        return
-                    end
-                end
-                self:Print("Spell not found in tracked list.")
+                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
             end
         elseif subCmd == "defaults" then
             if self.cooldownAlerts then
@@ -778,11 +766,12 @@ function addon:HandleSlashCommand(msg)
                 self:Print("Cooldown alerts not yet initialized. Try after /reload.")
             end
         elseif subCmd == "clear" then
-            self.db.profile.cooldownAlerts.trackedSpells = {}
             if self.cooldownAlerts then
+                local spells = self.cooldownAlerts:GetTrackedSpells()
+                wipe(spells)
                 self.cooldownAlerts.spellStates = {}
             end
-            self:Print("Cleared all tracked cooldown alerts.")
+            self:Print("Cleared all tracked cooldown alerts for this spec.")
         else
             self:Print("Alert commands:")
             print("  /ta alert list - Show tracked spells")
