@@ -48,6 +48,19 @@ jobs:
             fi
           done
 
+      - name: Detect release type from tag
+        id: detect_type
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" == *alpha* ]]; then
+            echo "release_type=alpha" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == *beta* ]]; then
+            echo "release_type=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_type=release" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Tag: $TAG -> Release type: $(grep release_type "$GITHUB_OUTPUT" | cut -d= -f2)"
+
       - name: Generate Changelog
         id: changelog
         run: |
@@ -104,7 +117,7 @@ jobs:
           project_id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
           game_endpoint: "wow"
           token: ${{ secrets.CURSEFORGE_TOKEN }}
-          release_type: ${{ github.event.inputs.release_type || 'release' }}
+          release_type: ${{ github.event.inputs.release_type || steps.detect_type.outputs.release_type || 'release' }}
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
           game_versions: ${{ github.event.inputs.game_versions }}
