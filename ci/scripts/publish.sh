@@ -100,12 +100,66 @@ echo "Creating new tag: $new_tag"
 git tag -a "$new_tag" -m "Release $new_version"
 
 echo ""
-echo "Tag created: $new_tag"
+echo "Pushing to remote..."
+git push origin "$branch"
+git push origin "$new_tag"
+
+echo "Packaging addon..."
+./ci/scripts/package.sh
+
+# Find the packaged zip file
+zip_file=$(find ci/dist -name "*.zip" | head -n 1)
+
+if [[ -z "$zip_file" ]]; then
+    echo "Warning: No zip file found in ci/dist/, skipping GitHub release asset upload."
+fi
+
+# Build release notes from changelog entry
+release_notes=""
+if [[ -n "${changelog_entry:-}" ]]; then
+    release_notes="$changelog_entry"
+else
+    release_notes="Release $new_version"
+fi
+
+# Create GitHub release with the tag
+if command -v gh &> /dev/null; then
+    echo "Creating GitHub release for $new_tag..."
+
+    gh_args=(
+        "$new_tag"
+        --title "Release $new_version"
+        --notes "$release_notes"
+    )
+
+    # Mark as pre-release if it contains alpha/beta/rc
+    if [[ "$new_version" == *alpha* ]] || [[ "$new_version" == *beta* ]] || [[ "$new_version" == *rc* ]]; then
+        gh_args+=(--prerelease)
+    fi
+
+    gh release create "${gh_args[@]}"
+
+    # Upload zip as release asset if available
+    if [[ -n "$zip_file" ]]; then
+        echo "Uploading $zip_file to release..."
+        gh release upload "$new_tag" "$zip_file" --clobber
+        echo "Release asset uploaded."
+    fi
+
+    echo ""
+    echo "GitHub release created: $new_tag"
+else
+    echo "gh CLI not found, skipping GitHub release creation."
+    echo ""
+    echo "To create a GitHub release manually, run:"
+    echo "  gh release create $new_tag --title \"Release $new_version\" --notes-file CHANGELOG.md"
+fi
+
 echo ""
-echo "To push to remote and create a GitHub release, run:"
-echo "  git push origin $branch"
-echo "  git push origin $new_tag"
-echo ""
-echo "To create a CurseForge release:"
-echo "  1. Run: ./ci/scripts/package.sh"
-echo "  2. Upload the zip from ci/dist/ to CurseForge"
+echo "To upload to CurseForge:"
+if [[ -n "$zip_file" ]]; then
+    echo "  Upload $zip_file to CurseForge"
+else
+    echo "  1. Run: ./ci/scripts/package.sh"
+    echo "  2. Upload the zip from ci/dist/ to CurseForge"
+fi
