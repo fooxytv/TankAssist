@@ -74,18 +74,24 @@ if [[ -n "${!drives[*]}" ]]; then
     echo "Mounting drives: ${!drives[*]}"
 fi
 
-# Pass Claude Code credentials
+# Pass credentials
 env_args=""
 claude_volume=""
 
-# Option 1: API key from environment
-if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+# Claude Code: API key from environment
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     env_args="-e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
     echo "Claude Code API key detected."
-# Option 2: Mount existing Claude config (from OAuth login)
+# Claude Code: Mount existing Claude config (from OAuth login)
 elif [[ -d "$HOME/.claude" ]]; then
     claude_volume="-v $HOME/.claude:/root/.claude"
     echo "Mounting Claude config from ~/.claude"
+fi
+
+# GitHub token for git push and gh CLI
+if [[ -n "${GH_TOKEN:-}" ]]; then
+    env_args="$env_args -e GH_TOKEN=$GH_TOKEN"
+    echo "GitHub token detected."
 fi
 
 docker run --rm -ti \

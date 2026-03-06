@@ -10,6 +10,23 @@ set -euo pipefail
 #   or with pre-release types:
 #   ./publish.sh minor alpha
 #
+# Requires GH_TOKEN env var for git push and GitHub release creation.
+# Set it in your .env file or pass it to docker run:
+#   docker run -e GH_TOKEN=ghp_xxx ...
+#
+
+if [[ -z "${GH_TOKEN:-}" ]]; then
+    echo "Error: GH_TOKEN environment variable is not set."
+    echo "Create a GitHub PAT at https://github.com/settings/tokens"
+    echo "Then add GH_TOKEN=ghp_xxx to your .env file."
+    exit 1
+fi
+
+# Configure git to use the token for HTTPS pushes
+git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
+
+# gh CLI also uses GH_TOKEN automatically
+export GH_TOKEN
 
 bump_type="${1:-patch}"
 pre_release_type="${2:-}"
