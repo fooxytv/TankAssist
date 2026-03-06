@@ -148,8 +148,9 @@ function ec:CreateExternalIcon()
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
 
-    -- Green/healer-tinted border
-    local borderColor = { 0.2, 0.8, 0.3, 1 }
+    -- Border color (configurable via Edit Mode settings)
+    local saved = self:GetSettings().borderColor or { r = 0.2, g = 0.8, b = 0.3, a = 1 }
+    local borderColor = { saved.r or 0.2, saved.g or 0.8, saved.b or 0.3, saved.a or 1 }
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderTop:SetPoint("TOPLEFT", 0, 0)
     frame.icon.borderTop:SetPoint("TOPRIGHT", 0, 0)
@@ -174,11 +175,26 @@ function ec:CreateExternalIcon()
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
 
-    -- Timer text below icon
-    frame.timer = frame:CreateFontString(nil, "OVERLAY")
-    frame.timer:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    frame.timer:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
-    frame.timer:SetTextColor(1, 1, 1, 1)
+    -- Timer text — inside icon (centered, large)
+    frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
+    frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
+    frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
+    frame.timerInside:SetTextColor(1, 1, 1, 1)
+
+    -- Timer text — below icon (original style)
+    frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
+    frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
+    frame.timerBelow:SetTextColor(1, 1, 1, 1)
+
+    -- Keep .timer as alias for backward compat
+    frame.timer = frame.timerBelow
+
+    -- Spell name text (for ICON_NAME display mode)
+    frame.spellName = frame:CreateFontString(nil, "OVERLAY")
+    frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    frame.spellName:SetTextColor(1, 1, 1, 1)
+    frame.spellName:SetWordWrap(false)
 
     -- Tooltip on hover
     frame.icon:EnableMouse(true)
@@ -238,20 +254,42 @@ function ec:Update()
     end
 
     local iconSize = settings.iconSize
+    local displayMode = settings.displayMode or "ICON_ONLY"
+    local timerPosition = settings.timerPosition or "BELOW"
     local spacing = 4
-    local totalWidth = #activeExternals * iconSize + (#activeExternals - 1) * spacing
-    self.frame:SetSize(totalWidth, iconSize + 15)
+
+    local iconWidth = iconSize
+    if displayMode == "ICON_NAME" then
+        iconWidth = iconSize + 50
+    elseif displayMode == "NAME_ONLY" then
+        iconWidth = 80
+    end
+    local totalWidth = #activeExternals * iconWidth + (#activeExternals - 1) * spacing
+    local totalHeight = displayMode == "NAME_ONLY" and 20 or (iconSize + 15)
+    self.frame:SetSize(totalWidth, totalHeight)
 
     for i, ext in ipairs(activeExternals) do
         local icon = self:GetIcon(i)
 
+        -- Hide both timers, then show the active one as needed
+        icon.timerInside:Hide()
+        icon.timerInside:SetText("")
+        icon.timerBelow:Hide()
+        icon.timerBelow:SetText("")
+
         -- Update icon size
-        icon:SetSize(iconSize, iconSize + 15)
-        icon.icon:SetSize(iconSize, iconSize)
+        if displayMode == "NAME_ONLY" then
+            icon:SetSize(iconWidth, 20)
+            icon.icon:Hide()
+        else
+            icon:SetSize(iconWidth, iconSize + 15)
+            icon.icon:SetSize(iconSize, iconSize)
+            icon.icon:Show()
+        end
 
         -- Position
         icon:ClearAllPoints()
-        icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconSize + spacing), 0)
+        icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconWidth + spacing), 0)
 
         -- Spell texture (with fallback for cross-class spells)
         local spellInfo = C_Spell.GetSpellInfo(ext.spellId)
@@ -259,26 +297,59 @@ function ec:Update()
         icon.icon.texture:SetTexture(spellIcon or ext.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = ext.spellId
 
-        -- Cooldown sweep
+        -- Spell name display
+        icon.spellName:ClearAllPoints()
+        if displayMode == "ICON_NAME" then
+            if timerPosition == "BELOW" then
+                icon.spellName:SetPoint("TOP", icon.timerBelow, "BOTTOM", 0, -1)
+            else
+                icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
+            end
+            icon.spellName:SetText(ext.name)
+            icon.spellName:Show()
+        elseif displayMode == "NAME_ONLY" then
+            icon.spellName:SetPoint("CENTER", icon, "CENTER", 0, 0)
+            icon.spellName:Show()
+        else
+            icon.spellName:SetText("")
+            icon.spellName:Hide()
+        end
+
+        -- Cooldown sweep and timer
         if not ext.isSecret and ext.duration > 0 and ext.expirationTime > 0 then
             local startTime = ext.expirationTime - ext.duration
             icon.cooldown:SetCooldown(startTime, ext.duration)
             local remaining = ext.expirationTime - now
             if remaining > 0 then
+                local timerText
                 if remaining < 10 then
-                    icon.timer:SetText(format("%.1f", remaining))
+                    timerText = format("%.1f", remaining)
                 else
-                    icon.timer:SetText(format("%.0f", remaining))
+                    timerText = format("%.0f", remaining)
                 end
-            else
-                icon.timer:SetText("")
+
+                if displayMode == "NAME_ONLY" then
+                    icon.spellName:SetText(ext.name .. " " .. timerText)
+                elseif timerPosition == "BELOW" then
+                    icon.timerBelow:SetText(timerText)
+                    icon.timerBelow:Show()
+                else
+                    icon.timerInside:SetText(timerText)
+                    icon.timerInside:Show()
+                end
             end
         else
             icon.cooldown:Clear()
             if ext.isSecret then
-                icon.timer:SetText("?")
-            else
-                icon.timer:SetText("")
+                if displayMode == "NAME_ONLY" then
+                    icon.spellName:SetText(ext.name .. " ?")
+                elseif timerPosition == "BELOW" then
+                    icon.timerBelow:SetText("?")
+                    icon.timerBelow:Show()
+                else
+                    icon.timerInside:SetText("?")
+                    icon.timerInside:Show()
+                end
             end
         end
 
@@ -358,6 +429,75 @@ function ec:BuildLEMSettings()
         },
         {
             order = 102,
+            name = "Display Mode",
+            kind = lem.SettingType.Dropdown,
+            default = "Icon Only",
+            values = {
+                { text = "Icon Only" },
+                { text = "Icon + Name" },
+                { text = "Name Only" },
+            },
+            get = function(layoutName)
+                local mode = self_ref:GetSettings().displayMode or "ICON_ONLY"
+                if mode == "ICON_NAME" then return "Icon + Name"
+                elseif mode == "NAME_ONLY" then return "Name Only"
+                end
+                return "Icon Only"
+            end,
+            set = function(layoutName, value)
+                if value == "Icon + Name" then
+                    self_ref:GetSettings().displayMode = "ICON_NAME"
+                elseif value == "Name Only" then
+                    self_ref:GetSettings().displayMode = "NAME_ONLY"
+                else
+                    self_ref:GetSettings().displayMode = "ICON_ONLY"
+                end
+                if self_ref.editMode then
+                    self_ref:OnEditModeEnter()
+                end
+            end,
+        },
+        {
+            order = 103,
+            name = "Timer Position",
+            kind = lem.SettingType.Dropdown,
+            default = "Below Icon",
+            values = {
+                { text = "Inside Icon" },
+                { text = "Below Icon" },
+            },
+            get = function(layoutName)
+                local pos = self_ref:GetSettings().timerPosition or "BELOW"
+                if pos == "INSIDE" then return "Inside Icon" end
+                return "Below Icon"
+            end,
+            set = function(layoutName, value)
+                if value == "Inside Icon" then
+                    self_ref:GetSettings().timerPosition = "INSIDE"
+                else
+                    self_ref:GetSettings().timerPosition = "BELOW"
+                end
+                if self_ref.editMode then
+                    self_ref:OnEditModeEnter()
+                end
+            end,
+        },
+        {
+            order = 104,
+            name = "Border Color",
+            kind = lem.SettingType.Color,
+            default = { r = 0.2, g = 0.8, b = 0.3, a = 1 },
+            hasOpacity = false,
+            get = function(layoutName)
+                return self_ref:GetSettings().borderColor or { r = 0.2, g = 0.8, b = 0.3, a = 1 }
+            end,
+            set = function(layoutName, value)
+                self_ref:GetSettings().borderColor = { r = value.r, g = value.g, b = value.b, a = value.a or 1 }
+                self_ref:UpdateBorderColor()
+            end,
+        },
+        {
+            order = 105,
             name = "Show Only In Combat",
             kind = lem.SettingType.Checkbox,
             default = false,
@@ -536,23 +676,83 @@ function ec:OnEditModeEnter()
 
     local settings = self:GetSettings()
     local iconSize = settings.iconSize
+    local displayMode = settings.displayMode or "ICON_ONLY"
+    local timerPosition = settings.timerPosition or "BELOW"
     local spacing = 4
-    local totalWidth = #placeholders * iconSize + (#placeholders - 1) * spacing
-    self.frame:SetSize(totalWidth, iconSize + 15)
+
+    local iconWidth = iconSize
+    if displayMode == "ICON_NAME" then
+        iconWidth = iconSize + 50
+    elseif displayMode == "NAME_ONLY" then
+        iconWidth = 80
+    end
+    local totalWidth = #placeholders * iconWidth + (#placeholders - 1) * spacing
+    local totalHeight = displayMode == "NAME_ONLY" and 20 or (iconSize + 15)
+    self.frame:SetSize(totalWidth, totalHeight)
 
     for i, ph in ipairs(placeholders) do
         local icon = self:GetIcon(i)
-        icon:SetSize(iconSize, iconSize + 15)
-        icon.icon:SetSize(iconSize, iconSize)
+        local fakeTimer = (i == 1) and "8s" or "5s"
+
+        -- Reset both timers
+        icon.timerInside:Hide()
+        icon.timerInside:SetText("")
+        icon.timerBelow:Hide()
+        icon.timerBelow:SetText("")
+
+        if displayMode == "NAME_ONLY" then
+            icon:SetSize(iconWidth, 20)
+            icon.icon:Hide()
+        else
+            icon:SetSize(iconWidth, iconSize + 15)
+            icon.icon:SetSize(iconSize, iconSize)
+            icon.icon:Show()
+        end
+
         icon:ClearAllPoints()
-        icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconSize + spacing), 0)
+        icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconWidth + spacing), 0)
 
         local spellInfo = C_Spell.GetSpellInfo(ph.spellId)
         local spellIcon = spellInfo and spellInfo.iconID
         icon.icon.texture:SetTexture(spellIcon or ph.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = ph.spellId
         icon.cooldown:Clear()
-        icon.timer:SetText("8s")
+
+        -- Timer display
+        if displayMode == "NAME_ONLY" then
+            -- handled below with spell name
+        elseif timerPosition == "BELOW" then
+            icon.timerBelow:SetText(fakeTimer)
+            icon.timerBelow:SetTextColor(1, 1, 1, 1)
+            icon.timerBelow:Show()
+        else
+            icon.timerInside:SetText(fakeTimer)
+            icon.timerInside:SetTextColor(1, 1, 1, 1)
+            icon.timerInside:Show()
+        end
+
+        -- Spell name display
+        local spellName = spellInfo and spellInfo.name or ph.name
+        icon.spellName:ClearAllPoints()
+        if displayMode == "ICON_NAME" then
+            if timerPosition == "BELOW" then
+                icon.spellName:SetPoint("TOP", icon.timerBelow, "BOTTOM", 0, -1)
+            else
+                icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
+            end
+            icon.spellName:SetText(spellName)
+            icon.spellName:SetTextColor(1, 1, 1, 1)
+            icon.spellName:Show()
+        elseif displayMode == "NAME_ONLY" then
+            icon.spellName:SetPoint("CENTER", icon, "CENTER", 0, 0)
+            icon.spellName:SetText(spellName .. " " .. fakeTimer)
+            icon.spellName:SetTextColor(1, 1, 1, 1)
+            icon.spellName:Show()
+        else
+            icon.spellName:SetText("")
+            icon.spellName:Hide()
+        end
+
         icon:Show()
     end
 
@@ -617,6 +817,19 @@ function ec:SetIconSize(size)
     -- Icons will be resized on next Update() or edit mode refresh
     if self.editMode then
         self:OnEditModeEnter()
+    end
+end
+
+function ec:UpdateBorderColor()
+    local saved = self:GetSettings().borderColor or { r = 0.2, g = 0.8, b = 0.3, a = 1 }
+    local r, g, b, a = saved.r or 0.2, saved.g or 0.8, saved.b or 0.3, saved.a or 1
+    for _, icon in ipairs(self.icons) do
+        if icon.icon then
+            icon.icon.borderTop:SetColorTexture(r, g, b, a)
+            icon.icon.borderBottom:SetColorTexture(r, g, b, a)
+            icon.icon.borderLeft:SetColorTexture(r, g, b, a)
+            icon.icon.borderRight:SetColorTexture(r, g, b, a)
+        end
     end
 end
 

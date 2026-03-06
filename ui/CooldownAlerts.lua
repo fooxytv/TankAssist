@@ -128,9 +128,9 @@ function ca:CreateAlertIcon()
     local size = settings.iconSize
 
     local frame = CreateFrame("Frame", nil, self.frame)
-    frame:SetSize(size, size + 18)
+    frame:SetSize(size, size + 15)
 
-    -- Icon container
+    -- Icon container (matches ExternalCooldowns structure)
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
@@ -152,8 +152,9 @@ function ca:CreateAlertIcon()
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
 
-    -- Gold/orange border to distinguish from ExternalCooldowns
-    local borderColor = { 0.9, 0.7, 0.2, 1 }
+    -- Border color (configurable via Edit Mode settings)
+    local saved = self:GetSettings().borderColor or { r = 0.9, g = 0.7, b = 0.2, a = 1 }
+    local borderColor = { saved.r or 0.9, saved.g or 0.7, saved.b or 0.2, saved.a or 1 }
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderTop:SetPoint("TOPLEFT", 0, 0)
     frame.icon.borderTop:SetPoint("TOPRIGHT", 0, 0)
@@ -178,25 +179,21 @@ function ca:CreateAlertIcon()
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
 
-    -- Countdown timer text — inside icon (centered, large)
+    -- Timer text — inside icon (centered, large)
     frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
     frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.timerInside:SetTextColor(1, 1, 1, 1)
 
-    -- Countdown timer text — below icon (smaller, like ExternalCooldowns)
+    -- Timer text — below icon (matches ExternalCooldowns style)
     frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
     frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timerBelow:SetTextColor(1, 1, 1, 1)
 
-    -- Active timer reference (set during Update based on setting)
-    frame.timer = frame.timerInside
-
-    -- Spell name text below icon
+    -- Spell name text (anchored below timer when timer is below, or below icon when timer is inside)
     frame.spellName = frame:CreateFontString(nil, "OVERLAY")
     frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
-    frame.spellName:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.spellName:SetTextColor(1, 1, 1, 1)
     frame.spellName:SetWordWrap(false)
 
@@ -301,9 +298,14 @@ function ca:Update()
         state.wasOnCooldown = onCooldown
 
         if showIcon then
-            -- Synthesize start/duration for cooldown sweep from remaining
-            local duration = remaining > 0 and remaining or 0
-            local startTime = remaining > 0 and (now - 0.1) or 0
+            -- Get real cast time and duration from shadow tracker for accurate sweep
+            local startTime = 0
+            local duration = 0
+            local tracked = TankAssist.SecretValues.trackedCooldowns[spellId]
+            if tracked and remaining > 0 then
+                startTime = tracked.castTime
+                duration = tracked.duration
+            end
 
             table.insert(activeIcons, {
                 spellId = spellId,
@@ -345,7 +347,7 @@ function ca:Update()
     end
 
     local totalWidth = #activeIcons * iconWidth + math.max(0, #activeIcons - 1) * spacing
-    local totalHeight = iconSize + 18
+    local totalHeight = iconSize + 15
     if displayMode == "NAME_ONLY" then
         totalHeight = 20
     end
@@ -356,24 +358,18 @@ function ca:Update()
     for i, data in ipairs(activeIcons) do
         local icon = self:GetIcon(i)
 
-        -- Select active timer based on position setting
-        local activeTimer, inactiveTimer
-        if timerPosition == "BELOW" then
-            activeTimer = icon.timerBelow
-            inactiveTimer = icon.timerInside
-        else
-            activeTimer = icon.timerInside
-            inactiveTimer = icon.timerBelow
-        end
-        inactiveTimer:Hide()
-        inactiveTimer:SetText("")
+        -- Hide both timers, then show the active one as needed
+        icon.timerInside:Hide()
+        icon.timerInside:SetText("")
+        icon.timerBelow:Hide()
+        icon.timerBelow:SetText("")
 
         -- Update icon sizing
         if displayMode == "NAME_ONLY" then
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
         else
-            icon:SetSize(iconWidth, iconSize + 18)
+            icon:SetSize(iconWidth, iconSize + 15)
             icon.icon:SetSize(iconSize, iconSize)
             icon.icon:Show()
         end
@@ -388,13 +384,18 @@ function ca:Update()
         icon.icon.texture:SetTexture(spellIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = data.spellId
 
-        -- Spell name display
-        local spellName = spellInfo and spellInfo.name or ""
+        -- Anchor spell name based on timer position and display mode
+        icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
-            icon.spellName:SetText(spellName)
+            if timerPosition == "BELOW" then
+                icon.spellName:SetPoint("TOP", icon.timerBelow, "BOTTOM", 0, -1)
+            else
+                icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
+            end
+            icon.spellName:SetText(spellInfo and spellInfo.name or "")
+            icon.spellName:SetTextColor(1, 1, 1, 1)
             icon.spellName:Show()
         elseif displayMode == "NAME_ONLY" then
-            icon.spellName:ClearAllPoints()
             icon.spellName:SetPoint("CENTER", icon, "CENTER", 0, 0)
             icon.spellName:Show()
         else
@@ -402,12 +403,18 @@ function ca:Update()
             icon.spellName:Hide()
         end
 
+        local spellName = spellInfo and spellInfo.name or ""
+
         -- Ready flash or countdown
         if data.isReady then
             icon.cooldown:Clear()
-            activeTimer:Hide()
             icon.readyFlash:Show()
             icon.readyText:Show()
+            if timerPosition == "BELOW" then
+                icon.timerBelow:SetText("READY")
+                icon.timerBelow:SetTextColor(0.2, 1, 0.2, 1)
+                icon.timerBelow:Show()
+            end
             if displayMode == "NAME_ONLY" then
                 icon.spellName:SetText(spellName .. " READY")
                 icon.spellName:SetTextColor(0.2, 1, 0.2, 1)
@@ -418,20 +425,22 @@ function ca:Update()
             if data.onCooldown and data.startTime > 0 and data.duration > 0 then
                 icon.cooldown:SetCooldown(data.startTime, data.duration)
                 if data.remaining > 0 then
-                    activeTimer:SetText(format("%.1f", data.remaining))
-                    activeTimer:Show()
-                else
-                    activeTimer:Hide()
+                    local timerText = format("%.1f", data.remaining)
+                    if timerPosition == "BELOW" then
+                        icon.timerBelow:SetText(timerText)
+                        icon.timerBelow:SetTextColor(1, 1, 1, 1)
+                        icon.timerBelow:Show()
+                    else
+                        icon.timerInside:SetText(timerText)
+                        icon.timerInside:Show()
+                    end
                 end
             else
                 icon.cooldown:Clear()
-                activeTimer:Hide()
             end
             if displayMode == "NAME_ONLY" then
                 local timerStr = data.remaining > 0 and format("%.1f", data.remaining) or ""
                 icon.spellName:SetText(spellName .. " " .. timerStr)
-                icon.spellName:SetTextColor(1, 1, 1, 1)
-            elseif displayMode == "ICON_NAME" then
                 icon.spellName:SetTextColor(1, 1, 1, 1)
             end
         end
@@ -693,6 +702,20 @@ function ca:BuildLEMSettings()
         },
         {
             order = 207,
+            name = "Border Color",
+            kind = lem.SettingType.Color,
+            default = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
+            hasOpacity = false,
+            get = function(layoutName)
+                return self_ref:GetSettings().borderColor or { r = 0.9, g = 0.7, b = 0.2, a = 1 }
+            end,
+            set = function(layoutName, value)
+                self_ref:GetSettings().borderColor = { r = value.r, g = value.g, b = value.b, a = value.a or 1 }
+                self_ref:UpdateBorderColor()
+            end,
+        },
+        {
+            order = 208,
             name = "Sound Enabled (Coming Soon)",
             kind = lem.SettingType.Checkbox,
             default = false,
@@ -884,11 +907,13 @@ function ca:OnEditModeEnter()
         iconWidth = 80
     end
     local totalWidth = placeholderCount * iconWidth + (placeholderCount - 1) * spacing
-    local totalHeight = iconSize + 18
+    local totalHeight = iconSize + 15
     if displayMode == "NAME_ONLY" then
         totalHeight = 20
     end
     self.frame:SetSize(totalWidth, totalHeight)
+
+    local timerPosition = settings.timerPosition or "INSIDE"
 
     for i = 1, placeholderCount do
         local icon = self:GetIcon(i)
@@ -898,7 +923,7 @@ function ca:OnEditModeEnter()
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
         else
-            icon:SetSize(iconWidth, iconSize + 18)
+            icon:SetSize(iconWidth, iconSize + 15)
             icon.icon:SetSize(iconSize, iconSize)
             icon.icon:Show()
         end
@@ -914,30 +939,33 @@ function ca:OnEditModeEnter()
 
         -- Fake countdown for edit mode preview
         local fakeTimer = string.format("%.1f", 1.5 + i * 0.5)
-        local timerPosition = settings.timerPosition or "INSIDE"
+        icon.timerInside:Hide()
+        icon.timerInside:SetText("")
+        icon.timerBelow:Hide()
+        icon.timerBelow:SetText("")
         if timerPosition == "BELOW" then
             icon.timerBelow:SetText(fakeTimer)
+            icon.timerBelow:SetTextColor(1, 1, 1, 1)
             icon.timerBelow:Show()
-            icon.timerInside:Hide()
-            icon.timerInside:SetText("")
         else
             icon.timerInside:SetText(fakeTimer)
             icon.timerInside:Show()
-            icon.timerBelow:Hide()
-            icon.timerBelow:SetText("")
         end
         icon.readyFlash:Hide()
         icon.readyText:Hide()
 
         local spellName = spellInfo and spellInfo.name or "Spell"
+        icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
-            icon.spellName:ClearAllPoints()
-            icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
+            if timerPosition == "BELOW" then
+                icon.spellName:SetPoint("TOP", icon.timerBelow, "BOTTOM", 0, -1)
+            else
+                icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
+            end
             icon.spellName:SetText(spellName)
             icon.spellName:SetTextColor(1, 1, 1, 1)
             icon.spellName:Show()
         elseif displayMode == "NAME_ONLY" then
-            icon.spellName:ClearAllPoints()
             icon.spellName:SetPoint("CENTER", icon, "CENTER", 0, 0)
             icon.spellName:SetText(spellName .. " " .. fakeTimer)
             icon.spellName:SetTextColor(1, 1, 1, 1)
@@ -1009,6 +1037,19 @@ function ca:SetIconSize(size)
     self:GetSettings().iconSize = size
     if self.editMode then
         self:OnEditModeEnter()
+    end
+end
+
+function ca:UpdateBorderColor()
+    local saved = self:GetSettings().borderColor or { r = 0.9, g = 0.7, b = 0.2, a = 1 }
+    local r, g, b, a = saved.r or 0.9, saved.g or 0.7, saved.b or 0.2, saved.a or 1
+    for _, icon in ipairs(self.icons) do
+        if icon.icon then
+            icon.icon.borderTop:SetColorTexture(r, g, b, a)
+            icon.icon.borderBottom:SetColorTexture(r, g, b, a)
+            icon.icon.borderLeft:SetColorTexture(r, g, b, a)
+            icon.icon.borderRight:SetColorTexture(r, g, b, a)
+        end
     end
 end
 

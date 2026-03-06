@@ -362,6 +362,8 @@ function CastBar:StartCast(unit)
 
     self.casting = true
     self.channeling = false
+    self.interrupted = false
+    self.frame:SetAlpha(1)
     -- Default to interruptible (false); the UNIT_SPELLCAST_NOT_INTERRUPTIBLE
     -- event will correct this if needed. The secret API value is unreadable.
     self.notInterruptible = IsSecretTrue(notInterruptible) or false
@@ -390,6 +392,8 @@ function CastBar:StartChannel(unit)
 
     self.casting = false
     self.channeling = true
+    self.interrupted = false
+    self.frame:SetAlpha(1)
     self.notInterruptible = IsSecretTrue(notInterruptible) or false
 
     local channelDuration = UnitChannelDuration(self.unit)
@@ -430,8 +434,10 @@ end
 function CastBar:StopCast()
     self.casting = false
     self.channeling = false
+    self.interrupted = false
     self.activeDuration = nil
     self.frame:SetScript("OnUpdate", nil)
+    self.frame:SetAlpha(1)
     if not self.editMode then
         self.frame:Hide()
     end
@@ -439,6 +445,7 @@ end
 
 function CastBar:Update()
     if self.editMode then return end
+    if self.interrupted then return end
     if not self.casting and not self.channeling then return end
 
     local castName = UnitCastingInfo(self.unit)
@@ -564,10 +571,34 @@ function CastBar:OnInterrupted()
     self.castTime:SetText("")
     self.casting = false
     self.channeling = false
+    self.interrupted = true
+
+    -- Freeze the bar and stop the normal OnUpdate
+    self.frame:SetScript("OnUpdate", nil)
+    self.frame:SetAlpha(1)
+    self.frame:Show()
+
+    -- Fade out over the linger duration
+    local lingerDuration = 0.8
+    local fadeDuration = 0.4
     local self_ref = self
-    C_Timer.After(0.4, function()
-        if not self_ref.casting and not self_ref.channeling then
-            self_ref:StopCast()
+    local startTime = GetTime()
+
+    self.frame:SetScript("OnUpdate", function(frame)
+        local elapsed = GetTime() - startTime
+        if elapsed >= lingerDuration + fadeDuration then
+            frame:SetScript("OnUpdate", nil)
+            self_ref.interrupted = false
+            if not self_ref.casting and not self_ref.channeling then
+                self_ref:StopCast()
+                self_ref.frame:SetAlpha(1)
+            end
+            return
+        end
+        -- Start fading after the linger period
+        if elapsed > lingerDuration then
+            local fadeProgress = (elapsed - lingerDuration) / fadeDuration
+            frame:SetAlpha(1 - fadeProgress)
         end
     end)
 end
@@ -587,7 +618,7 @@ end
 function CastBar:BuildLEMSettings()
     local self_ref = self
 
-    return {
+    local settings = {
         -- General
         {
             order = 99,
@@ -603,6 +634,26 @@ function CastBar:BuildLEMSettings()
                 self_ref:SetEnabled(value)
             end,
         },
+    }
+
+    -- Player-only: option to hide Blizzard's default cast bar
+    if self.unit == "player" then
+        table.insert(settings, {
+            order = 99.5,
+            name = "Hide Blizzard Cast Bar",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return self_ref:GetSettings().hideBlizzardCastBar or false
+            end,
+            set = function(layoutName, value)
+                self_ref:GetSettings().hideBlizzardCastBar = value
+                self_ref:ApplyBlizzardCastBarVisibility()
+            end,
+        })
+    end
+
+    local remaining = {
         {
             order = 100,
             name = "Scale",
@@ -626,12 +677,12 @@ function CastBar:BuildLEMSettings()
             default = 200,
             minValue = 100,
             maxValue = 400,
-            valueStep = 10,
+            valueStep = 1,
             get = function(layoutName)
                 return self_ref:GetSettings().width or 200
             end,
             set = function(layoutName, value)
-                value = math.floor(value / 10 + 0.5) * 10
+                value = math.floor(value + 0.5)
                 self_ref:SetBarWidth(value)
             end,
         },
@@ -642,12 +693,12 @@ function CastBar:BuildLEMSettings()
             default = 20,
             minValue = 10,
             maxValue = 40,
-            valueStep = 2,
+            valueStep = 1,
             get = function(layoutName)
                 return self_ref:GetSettings().height or 20
             end,
             set = function(layoutName, value)
-                value = math.floor(value / 2 + 0.5) * 2
+                value = math.floor(value + 0.5)
                 self_ref:SetBarHeight(value)
             end,
         },
@@ -943,6 +994,12 @@ function CastBar:BuildLEMSettings()
             end,
         },
     }
+
+    for _, entry in ipairs(remaining) do
+        table.insert(settings, entry)
+    end
+
+    return settings
 end
 
 function CastBar:RegisterEditModeLibEQOL()
@@ -1144,6 +1201,27 @@ function CastBar:SetEnabled(enabled)
     self:UpdateDisabledVisual()
 end
 
+function CastBar:ApplyBlizzardCastBarVisibility()
+    if self.unit ~= "player" then return end
+    local hide = self:GetSettings().hideBlizzardCastBar or false
+    if PlayerCastingBarFrame then
+        if hide then
+            PlayerCastingBarFrame:UnregisterAllEvents()
+            PlayerCastingBarFrame:Hide()
+        else
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_START")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_DELAYED")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
+            PlayerCastingBarFrame:RegisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+        end
+    end
+end
+
 function CastBar:ShouldBeVisible()
     if not self:IsEnabled() then return false end
     return true
@@ -1216,6 +1294,7 @@ local function Initialize()
             editModeName = "Player Cast Bar",
         })
         playerBar:Create()
+        playerBar:ApplyBlizzardCastBarVisibility()
         TankAssist.Addon.playerCastBar = playerBar
     end
 end
