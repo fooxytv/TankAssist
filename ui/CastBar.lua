@@ -409,6 +409,46 @@ function CastBar:StartChannel(unit)
     end
 end
 
+function CastBar:StartEmpower(unit)
+    if unit ~= self.unit then return end
+
+    -- Empowered casts are channels internally — try UnitChannelInfo first
+    local name, _, texture, _, _, _, notInterruptible = UnitChannelInfo(self.unit)
+    local isChannel = true
+    if not name then
+        -- Fallback to UnitCastingInfo in case the API varies by context
+        name, _, texture, _, _, _, _, notInterruptible = UnitCastingInfo(self.unit)
+        isChannel = false
+    end
+    if not name then
+        self:StopCast()
+        return
+    end
+
+    self.casting = not isChannel
+    self.channeling = isChannel
+    self.interrupted = false
+    self.frame:SetAlpha(1)
+    self.notInterruptible = IsSecretTrue(notInterruptible) or false
+
+    local duration
+    if isChannel then
+        duration = UnitChannelDuration(self.unit)
+    else
+        duration = UnitCastingDuration(self.unit)
+    end
+    self:SetupCastDuration(duration)
+
+    self.spellName:SetText(name)
+    self:SetIcon(texture)
+    self:UpdateBarAppearance()
+    self:SetupOnUpdate()
+
+    if self:ShouldBeVisible() then
+        self.frame:Show()
+    end
+end
+
 function CastBar:SetupOnUpdate()
     local settings = self:GetSettings()
     local self_ref = self
@@ -511,6 +551,9 @@ function CastBar:RegisterEvents()
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
+        self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "player")
+        self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", "player")
+        self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player")
 
         self.eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
             if unit ~= "player" then return end
@@ -518,9 +561,14 @@ function CastBar:RegisterEvents()
                 self_ref:StartCast(unit)
             elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
                 self_ref:StartChannel(unit)
+            elseif event == "UNIT_SPELLCAST_EMPOWER_START" then
+                self_ref:StartEmpower(unit)
+            elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+                self_ref:StartEmpower(unit)
             elseif event == "UNIT_SPELLCAST_STOP"
                 or event == "UNIT_SPELLCAST_FAILED"
-                or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+                or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
                 self_ref:StopCast()
             elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
                 self_ref:OnInterrupted()
@@ -536,6 +584,9 @@ function CastBar:RegisterEvents()
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+        self.eventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START")
+        self.eventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
+        self.eventFrame:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
         self.eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 
         self.eventFrame:SetScript("OnEvent", function(_, event, unit, ...)
@@ -546,9 +597,14 @@ function CastBar:RegisterEvents()
                     self_ref:StartCast(unit)
                 elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
                     self_ref:StartChannel(unit)
+                elseif event == "UNIT_SPELLCAST_EMPOWER_START" then
+                    self_ref:StartEmpower(unit)
+                elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+                    self_ref:StartEmpower(unit)
                 elseif event == "UNIT_SPELLCAST_STOP"
                     or event == "UNIT_SPELLCAST_FAILED"
-                    or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+                    or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+                    or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
                     self_ref:StopCast()
                 elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
                     self_ref:OnInterrupted()
