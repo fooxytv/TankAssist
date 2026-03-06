@@ -30,7 +30,7 @@ export GH_TOKEN
 
 bump_type="${1:-patch}"
 pre_release_type="${2:-}"
-branch="${3:-main}"
+branch="${3:-develop}"
 
 echo "Bumping (or reading) version ($bump_type) [prerelease: $pre_release_type]..."
 raw_version="$(./ci/scripts/version.sh "$bump_type" "$pre_release_type")"
