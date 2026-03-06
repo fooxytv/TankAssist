@@ -1,0 +1,110 @@
+name: "Build and Publish - TankAssist"
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "CurseForge Release Type (alpha, beta, release)"
+        required: false
+        default: alpha
+      game_versions:
+        description: "Game Version(s)"
+        required: false
+        default: 12.0.0
+
+jobs:
+  publish-addon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up scripts
+        run: |
+          chmod +x ./ci/scripts/lint.sh
+          chmod +x ./ci/scripts/package.sh
+          chmod +x ./ci/scripts/version.sh
+
+      # - name: Lint
+      #   run: |
+      #     ./ci/scripts/lint.sh
+
+      - name: Sync version from tag to .toc files
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_VERSION#v}"
+
+          echo "Syncing version: $VERSION"
+
+          for toc_file in *.toc; do
+            if [ -f "$toc_file" ]; then
+              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
+              echo "Updated $toc_file with version: $VERSION"
+            fi
+          done
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          echo "Current tag: $CURRENT_TAG"
+          echo "Previous tag: $PREVIOUS_TAG"
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
+            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG".."$CURRENT_TAG" --no-merges)
+          else
+            echo "No previous tag found, generating changelog from all commits"
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          CHANGELOG="## $CURRENT_TAG"$'\n\n'"$COMMITS"
+
+          mkdir -p ci/dist
+          echo "$CHANGELOG" > ci/dist/changelog.md
+
+          {
+            echo 'CHANGELOG<<EOF'
+            echo "$CHANGELOG"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+          echo "Generated changelog:"
+          cat ci/dist/changelog.md
+
+      - name: Package
+        run: |
+          ./ci/scripts/package.sh
+
+      - name: Find artifact
+        id: find_artifact
+        run: |
+          echo "Searching for artifact..."
+          ZIP_FILE=$(ls ci/dist/*.zip | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No matching artifact found."
+            exit 1
+          fi
+
+          echo "Found artifact: $ZIP_FILE"
+          echo "ZIP_PATH=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Publish to CurseForge
+        uses: itsmeow/curseforge-upload@v3
+        with:
+          file_path: ${{ env.ZIP_PATH }}
+          project_id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          game_endpoint: "wow"
+          token: ${{ secrets.CURSEFORGE_TOKEN }}
+          release_type: ${{ github.event.inputs.release_type || 'release' }}
+          changelog: ${{ env.CHANGELOG }}
+          changelog_type: "markdown"
+          game_versions: ${{ github.event.inputs.game_versions }}

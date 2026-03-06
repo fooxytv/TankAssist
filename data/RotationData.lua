@@ -1,28 +1,14 @@
--- TankAssist Rotation Data
--- External rotation definitions that can be updated independently
--- Based on SimC APL patterns and community guides
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
+TankAssist.RotationData = {}
+local rotationData = TankAssist.RotationData
 
-TA.RotationData = {}
-local RD = TA.RotationData
+rotationData.version = "12.0.0"
+rotationData.lastUpdated = "2026-01-26"
+rotationData.dataSource = "SimC APL / Wowhead Guides"
 
--- =============================================================================
--- VERSION INFO
--- =============================================================================
-
-RD.version = "12.0.0"
-RD.lastUpdated = "2026-01-26"
-RD.dataSource = "SimC APL / Wowhead Guides"
-
--- =============================================================================
--- ROTATION PROFILES
--- These can be selected by users or auto-detected based on talents
--- =============================================================================
-
-RD.Profiles = {
-    -- Blood DK profiles
-    BLOOD_DK = {
+rotationData.Profiles = {
+    BloodDeathKnight = {
         DEFAULT = {
             name = "Standard",
             description = "Balanced survivability and damage",
@@ -63,8 +49,7 @@ RD.Profiles = {
         },
     },
     
-    -- Brewmaster profiles
-    BREWMASTER = {
+    Brewmaster = {
         DEFAULT = {
             name = "Standard",
             description = "Balanced brew usage",
@@ -82,8 +67,7 @@ RD.Profiles = {
         },
     },
     
-    -- Protection Warrior profiles
-    PROT_WARRIOR = {
+    ProtectionWarrior = {
         DEFAULT = {
             name = "Standard",
             description = "Balanced block and damage",
@@ -99,8 +83,7 @@ RD.Profiles = {
         },
     },
     
-    -- Protection Paladin profiles  
-    PROT_PALADIN = {
+    ProtectionPaladin = {
         DEFAULT = {
             name = "Standard",
             description = "Balanced holy power usage",
@@ -116,8 +99,7 @@ RD.Profiles = {
         },
     },
     
-    -- Vengeance DH profiles
-    VENGEANCE_DH = {
+    VengeanceDemonHunter = {
         DEFAULT = {
             name = "Standard",
             description = "Balanced fragment usage",
@@ -134,8 +116,7 @@ RD.Profiles = {
         },
     },
     
-    -- Guardian Druid profiles
-    GUARDIAN_DRUID = {
+    GuardianDruid = {
         DEFAULT = {
             name = "Standard", 
             description = "Balanced rage usage",
@@ -153,23 +134,10 @@ RD.Profiles = {
     },
 }
 
--- =============================================================================
--- CONDITION PARSERS
--- These parse the SimC-style conditions into executable logic
--- =============================================================================
-
--- Parse a simple condition string
-function RD:ParseCondition(conditionStr, specModule)
-    -- This is a simplified parser - a full implementation would need
-    -- to handle the full SimC condition syntax
-    
+function rotationData:ParseCondition(conditionStr, specModule)
     local conditions = {}
-    
-    -- Split by comma
     for condition in conditionStr:gmatch("[^,]+") do
-        condition = condition:match("^%s*(.-)%s*$") -- trim
-        
-        -- Parse health.pct comparisons
+        condition = condition:match("^%s*(.-)%s*$")
         local healthOp, healthVal = condition:match("health%.pct([<>=]+)(%d+)")
         if healthOp and healthVal then
             table.insert(conditions, function()
@@ -179,14 +147,10 @@ function RD:ParseCondition(conditionStr, specModule)
             end)
         end
         
-        -- Parse buff checks
         local buffName, buffOp, buffVal = condition:match("buff%.([%w_]+)%.(%w+)([<>=]*)(%d*)")
         if buffName then
-            -- Convert SimC buff name to spell ID (would need mapping)
-            -- For now, skip these
         end
         
-        -- Parse resource checks
         local resource, resOp, resVal = condition:match("(%w+)([<>=]+)(%d+)")
         if resource and resOp and resVal then
             local resourceMap = {
@@ -208,7 +172,6 @@ function RD:ParseCondition(conditionStr, specModule)
         end
     end
     
-    -- Return a function that evaluates all conditions
     return function()
         for _, check in ipairs(conditions) do
             local result = check()
@@ -219,8 +182,7 @@ function RD:ParseCondition(conditionStr, specModule)
     end
 end
 
--- Compare helper
-function RD:Compare(a, b, op)
+function rotationData:Compare(a, b, op)
     if op == "<" then return a < b
     elseif op == "<=" then return a <= b
     elseif op == ">" then return a > b
@@ -230,29 +192,21 @@ function RD:Compare(a, b, op)
     return nil
 end
 
--- =============================================================================
--- PROFILE MANAGEMENT
--- =============================================================================
-
--- Get available profiles for a spec
-function RD:GetProfiles(specId)
+function rotationData:GetProfiles(specId)
     local specMap = {
-        [250] = "BLOOD_DK",
-        [268] = "BREWMASTER",
-        [73] = "PROT_WARRIOR",
-        [66] = "PROT_PALADIN",
-        [581] = "VENGEANCE_DH",
-        [104] = "GUARDIAN_DRUID",
+        [250] = "BloodDeathKnight",
+        [268] = "Brewmaster",
+        [73] = "ProtectionWarrior",
+        [66] = "ProtectionPaladin",
+        [581] = "VengeanceDemonHunter",
+        [104] = "GuardianDruid",
     }
-    
     local specKey = specMap[specId]
     if not specKey then return nil end
-    
     return self.Profiles[specKey]
 end
 
--- Get the default profile for a spec
-function RD:GetDefaultProfile(specId)
+function rotationData:GetDefaultProfile(specId)
     local profiles = self:GetProfiles(specId)
     if profiles then
         return profiles.DEFAULT
@@ -260,15 +214,6 @@ function RD:GetDefaultProfile(specId)
     return nil
 end
 
--- =============================================================================
--- FUTURE: External Data Loading
--- =============================================================================
-
--- This could be extended to load rotation data from external sources
--- such as: SimC exports, Raidbots, Wowhead, etc.
-
-function RD:LoadExternalData(source, data)
-    -- Placeholder for external data loading
-    -- Would parse and validate incoming rotation data
-    TA.Utils:Debug("External data loading not yet implemented")
+function rotationData:LoadExternalData(source, data)
+    TankAssist.Utils:Debug("External data loading not yet implemented")
 end

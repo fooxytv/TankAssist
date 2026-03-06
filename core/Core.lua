@@ -1,36 +1,26 @@
--- TankAssist Core
--- Main addon initialization and event handling
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
-
--- Create main addon object using AceAddon if available, otherwise simple table
 if LibStub and LibStub("AceAddon-3.0", true) then
-    TA.Addon = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceEvent-3.0", "AceConsole-3.0")
+    TankAssist.Addon = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceEvent-3.0", "AceConsole-3.0")
 else
-    -- Simple fallback without Ace libraries
-    TA.Addon = CreateFrame("Frame")
-    TA.Addon.events = {}
-    
-    -- Store the native frame method before we override
-    local nativeRegisterEvent = TA.Addon.RegisterEvent
-    
-    function TA.Addon:RegisterEvent(event, callback)
+    TankAssist.Addon = CreateFrame("Frame")
+    TankAssist.Addon.events = {}
+
+    local nativeRegisterEvent = TankAssist.Addon.RegisterEvent
+    function TankAssist.Addon:RegisterEvent(event, callback)
         self.events[event] = callback or event
-        -- Use the native frame RegisterEvent, not our custom one
         nativeRegisterEvent(self, event)
     end
-    
-    function TA.Addon:UnregisterEvent(event)
+
+    function TankAssist.Addon:UnregisterEvent(event)
         self.events[event] = nil
-        -- Use native unregister
         local nativeUnregister = getmetatable(self).__index.UnregisterEvent
         if nativeUnregister then
             nativeUnregister(self, event)
         end
     end
-    
-    -- Set up the OnEvent handler once
-    TA.Addon:SetScript("OnEvent", function(self, event, ...)
+
+    TankAssist.Addon:SetScript("OnEvent", function(self, event, ...)
         local handler = self.events[event]
         if handler then
             if type(handler) == "function" then
@@ -41,34 +31,24 @@ else
         end
     end)
     
-    function TA.Addon:Print(...)
+    function TankAssist.Addon:Print(...)
         print("|cFF00CCFF[TankAssist]|r", ...)
     end
 end
 
-local Addon = TA.Addon
-
--- Initialize specModules early so spec modules can register during file load
-Addon.specModules = {}
-
--- =============================================================================
--- ADDON DEFAULTS
--- =============================================================================
+local addon = TankAssist.Addon
+addon.specModules = {}
 
 local defaults = {
     profile = {
         enabled = true,
         locked = false,
-        
-        -- Display options
         display = {
             scale = 1.0,
             alpha = 1.0,
             showOutOfCombat = false,
             showWithoutTarget = false,
-            hideInMythicPlus = false, -- Some may want this due to secret values
-            
-            -- Main display position
+            hideInMythicPlus = false,
             position = {
                 point = "CENTER",
                 relativePoint = "CENTER",
@@ -76,13 +56,15 @@ local defaults = {
                 y = -200,
             },
         },
-        
-        -- Assisted Combat display (2 buttons: main rotation + AoE)
         assistedCombat = {
             enabled = true,
             iconSize = 50,
             scale = 1.0,
+            inCombatAlpha = 1.0,
+            outOfCombatAlpha = 0.5,
             showKeybinds = true,
+            hideWhenMounted = false,
+            hideInPetBattles = true,
             position = {
                 point = "CENTER",
                 relativePoint = "CENTER",
@@ -90,11 +72,78 @@ local defaults = {
                 y = -200,
             },
         },
-        
-        -- Per-spec settings (will be populated by spec modules)
+        targetCastBar = {
+            enabled = true,
+            width = 200,
+            height = 20,
+            scale = 1.0,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 100 },
+            interruptibleColor = { 1.0, 0.7, 0.0 },
+            nonInterruptibleColor = { 0.6, 0.3, 0.3 },
+            channelColor = { 0.0, 0.6, 1.0 },
+            bgColor = { 0.15, 0.15, 0.15, 0.8 },
+            borderColor = { 0.3, 0.3, 0.3 },
+            showSpellName = true,
+            showCastTime = true,
+            fontSize = 11,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            barTexture = "Solid",
+            nameAlignment = "LEFT",
+            timerAlignment = "RIGHT",
+            textPosition = "ABOVE",
+            showIcon = true,
+            iconPosition = "LEFT",
+        },
+        playerCastBar = {
+            enabled = true,
+            hideBlizzardCastBar = false,
+            width = 200,
+            height = 20,
+            scale = 1.0,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -100 },
+            interruptibleColor = { 0.0, 0.6, 1.0 },
+            nonInterruptibleColor = { 0.0, 0.6, 1.0 },
+            channelColor = { 0.0, 0.8, 0.4 },
+            bgColor = { 0.15, 0.15, 0.15, 0.8 },
+            borderColor = { 0.3, 0.3, 0.3 },
+            showSpellName = true,
+            showCastTime = true,
+            fontSize = 11,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            barTexture = "Solid",
+            nameAlignment = "LEFT",
+            timerAlignment = "RIGHT",
+            textPosition = "ABOVE",
+            showIcon = true,
+            iconPosition = "LEFT",
+        },
+        externalCooldowns = {
+            enabled = true,
+            iconSize = 36,
+            scale = 1.0,
+            displayMode = "ICON_ONLY",
+            timerPosition = "BELOW",
+            borderColor = { r = 0.2, g = 0.8, b = 0.3, a = 1 },
+            showOnlyInCombat = false,
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -260 },
+        },
+        cooldownAlerts = {
+            enabled = true,
+            iconSize = 36,
+            scale = 1.0,
+            displayMode = "ICON_ONLY",
+            showOnlyInCombat = false,
+            countdownDuration = 3,
+            alertStyle = "BOTH",
+            timerPosition = "INSIDE",
+            borderColor = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
+            soundEnabled = false,
+            trackedSpells = {},
+            position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
+        },
         specs = {},
-        
-        -- Sound alerts
         sounds = {
             enabled = true,
             buffExpiring = "Interface\\AddOns\\TankAssist\\Sounds\\warning.ogg",
@@ -103,20 +152,13 @@ local defaults = {
     },
 }
 
--- =============================================================================
--- INITIALIZATION
--- =============================================================================
-
--- Helper to deep merge tables (saved data takes priority)
 local function DeepMerge(defaults, saved)
     if type(defaults) ~= "table" then
         return saved ~= nil and saved or defaults
     end
-
     saved = saved or {}
     local result = {}
 
-    -- Copy defaults first
     for k, v in pairs(defaults) do
         if type(v) == "table" then
             result[k] = DeepMerge(v, saved[k])
@@ -125,42 +167,31 @@ local function DeepMerge(defaults, saved)
         end
     end
 
-    -- Also copy any saved values that aren't in defaults
     for k, v in pairs(saved) do
         if result[k] == nil then
             result[k] = v
         end
     end
-
     return result
 end
 
-function Addon:OnInitialize()
-    -- Initialize saved variables
+function addon:OnInitialize()
     if LibStub and LibStub("AceDB-3.0", true) then
         self.db = LibStub("AceDB-3.0"):New("TankAssistDB", defaults, true)
     else
-        -- Simple saved variables fallback with proper merging
         if not TankAssistDB then
             TankAssistDB = {}
         end
 
-        -- Merge defaults with saved data (saved data takes priority)
         TankAssistDB = DeepMerge(defaults.profile, TankAssistDB)
         self.db = { profile = TankAssistDB }
     end
-
-    -- Register slash commands
     self:RegisterSlashCommands()
-
-    -- Initialize active spec tracking
     self.activeSpec = nil
-
     self:Print("Initialized. Type /ta or /tankassist for options.")
 end
 
-function Addon:OnEnable()
-    -- Register events
+function addon:OnEnable()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "OnSpecChanged")
     self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatStart")
@@ -168,12 +199,8 @@ function Addon:OnEnable()
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
     self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED", "OnSpellCast")
     self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsChanged")
-
-    -- Initial setup
     self:SetupUI()
     self:UpdateSpecModule()
-
-    -- Start update ticker (runs always, not just in combat)
     if not self.ticker then
         self.ticker = C_Timer.NewTicker(0.1, function()
             self:OnUpdate()
@@ -181,45 +208,33 @@ function Addon:OnEnable()
     end
 end
 
-
-
-
-
--- Track spell casts for cooldown tracking
-function Addon:OnSpellCast(event, unit, castGUID, spellId)
+function addon:OnSpellCast(event, unit, castGUID, spellId)
     if unit == "player" and spellId then
-        TA.SecretValues:OnSpellCast(spellId)
+        TankAssist.SecretValues:OnSpellCast(spellId)
     end
 end
 
--- Clear keybind cache when bindings change
-function Addon:OnBindingsChanged()
-    TA.Utils:ClearKeybindCache()
+function addon:OnBindingsChanged()
+    TankAssist.Utils:ClearKeybindCache()
 end
 
-function Addon:OnDisable()
+function addon:OnDisable()
     self:HideAllFrames()
 end
 
--- =============================================================================
--- EVENT HANDLERS
--- =============================================================================
-
-function Addon:OnPlayerEnteringWorld()
+function addon:OnPlayerEnteringWorld()
     self:UpdateSpecModule()
     self:UpdateVisibility()
 end
 
-function Addon:OnSpecChanged()
+function addon:OnSpecChanged()
     self:UpdateSpecModule()
     self:UpdateVisibility()
 end
 
-function Addon:OnCombatStart()
+function addon:OnCombatStart()
     self.inCombat = true
     self:UpdateVisibility()
-    
-    -- Start update ticker
     if not self.ticker then
         self.ticker = C_Timer.NewTicker(0.1, function()
             self:OnUpdate()
@@ -227,102 +242,90 @@ function Addon:OnCombatStart()
     end
 end
 
-function Addon:OnCombatEnd()
+function addon:OnCombatEnd()
     self.inCombat = false
     self:UpdateVisibility()
-
-    -- We keep the ticker running but at a slower rate out of combat
-    -- This allows pre-pull preparation
 end
 
-function Addon:OnTargetChanged()
+function addon:OnTargetChanged()
     self:UpdateVisibility()
 end
 
--- =============================================================================
--- MAIN UPDATE LOOP
--- =============================================================================
-
-function Addon:OnUpdate()
+function addon:OnUpdate()
     if not self.db.profile.enabled then return end
 
-    -- Update assisted combat display (works for all specs)
     if self.assistedCombatDisplay and self.db.profile.assistedCombat.enabled then
         self.assistedCombatDisplay:Update()
     end
 
-    -- Let the active spec module do any custom updates (tank specs only)
+    if self.targetCastBar and self.db.profile.targetCastBar.enabled then
+        self.targetCastBar:Update()
+    end
+
+    if self.playerCastBar and self.db.profile.playerCastBar.enabled then
+        self.playerCastBar:Update()
+    end
+
+    if self.externalCooldowns and self.db.profile.externalCooldowns.enabled then
+        self.externalCooldowns:Update()
+    end
+
+    if self.cooldownAlerts and self.db.profile.cooldownAlerts.enabled then
+        self.cooldownAlerts:Update()
+    end
+
     if self.activeSpecModule and self.activeSpecModule.OnUpdate then
         self.activeSpecModule:OnUpdate()
     end
 end
 
--- =============================================================================
--- SPEC MODULE MANAGEMENT
--- =============================================================================
-
-function Addon:RegisterSpecModule(specId, module)
+function addon:RegisterSpecModule(specId, module)
     self.specModules[specId] = module
-    TA.Utils:Debug("Registered spec module for", TA.Utils:GetSpecName(specId))
+    TankAssist.Utils:Debug("Registered spec module for", TankAssist.Utils:GetSpecName(specId))
 end
 
-function Addon:UpdateSpecModule()
-    local specId = TA.Utils:GetCurrentSpec()
-
+function addon:UpdateSpecModule()
+    local specId = TankAssist.Utils:GetCurrentSpec()
     if not specId then
         self.activeSpecModule = nil
         self.activeSpec = nil
         self.isTankSpec = false
         return
     end
-
     self.activeSpec = specId
-    self.isTankSpec = TA.Utils:IsTankSpec(specId)
-
-    -- For non-tank specs, use a minimal module (main button still works via Blizzard API)
+    self.isTankSpec = TankAssist.Utils:IsTankSpec(specId)
     if not self.isTankSpec then
         self.activeSpecModule = self:CreateNonTankModule()
-        TA.Utils:Debug("Non-tank spec - main rotation button enabled, secondary button hidden")
+        TankAssist.Utils:Debug("Non-tank spec - main rotation button enabled, secondary button hidden")
         return
     end
 
-    -- Get the spec module for tank specs
     local module = self.specModules[specId]
-
     if not module then
-        self:Print("No module found for " .. TA.Utils:GetSpecName(specId) .. ". Using generic tank mode.")
+        self:Print("No module found for " .. TankAssist.Utils:GetSpecName(specId) .. ". Using generic tank mode.")
         module = self.specModules["generic"] or self:CreateGenericModule()
     end
-
-    -- Deactivate old module
     if self.activeSpecModule and self.activeSpecModule.OnDeactivate then
         self.activeSpecModule:OnDeactivate()
     end
-
-    -- Activate new module
     self.activeSpecModule = module
 
     if module.OnActivate then
         module:OnActivate()
     end
-
-    -- Update UI with new spec data
     self:UpdateUIForSpec()
-
-    TA.Utils:Debug("Activated spec module for", TA.Utils:GetSpecName(specId))
+    TankAssist.Utils:Debug("Activated spec module for", TankAssist.Utils:GetSpecName(specId))
 end
 
-function Addon:CreateGenericModule()
-    -- Fallback generic module for unsupported tank specs
+function addon:CreateGenericModule()
     local generic = {
         name = "Generic Tank",
         buffsToTrack = {},
         cooldownsToTrack = {},
         isTank = true,
     }
-
     function generic:GetRecommendation()
-        return nil -- Rely on Blizzard's assisted combat
+        return nil
     end
 
     function generic:GetMaintenanceStatus()
@@ -333,30 +336,26 @@ function Addon:CreateGenericModule()
     return generic
 end
 
-function Addon:CreateNonTankModule()
-    -- Module for non-tank specs - shows offensive/defensive cooldowns
+function addon:CreateNonTankModule()
     local nonTank = {
         name = "Non-Tank",
         buffsToTrack = {},
         cooldownsToTrack = {},
         isTank = false,
-        secondarySpells = {}, -- Will be populated based on class
+        secondarySpells = {},
     }
 
-    -- Populate secondarySpells based on current class
     local _, classFile = UnitClass("player")
     nonTank.secondarySpells = self:GetClassCooldowns(classFile) or {}
-
     function nonTank:GetRecommendation()
-        return nil -- Rely on Blizzard's assisted combat
+        return nil
     end
 
     function nonTank:GetSecondarySpell()
-        -- Check each secondary spell in priority order
         for _, spellData in ipairs(self.secondarySpells) do
             local spellId = spellData.spellId
             if spellId and IsSpellKnown(spellId) then
-                local canCast = TA.SecretValues:CanCastSpell(spellId)
+                local canCast = TankAssist.SecretValues:CanCastSpell(spellId)
                 if canCast then
                     local conditionMet = not spellData.condition or spellData.condition(self)
                     if conditionMet then
@@ -369,7 +368,7 @@ function Addon:CreateNonTankModule()
     end
 
     function nonTank:GetHealthPercent()
-        return TA.SecretValues:GetHealthPercent("player")
+        return TankAssist.SecretValues:GetHealthPercent("player")
     end
 
     function nonTank:HealthBelow(threshold)
@@ -392,95 +391,11 @@ function Addon:CreateNonTankModule()
     return nonTank
 end
 
--- Get class-specific cooldowns for non-tank specs
-function Addon:GetClassCooldowns(classFile)
-    local cooldowns = {}
-
-    -- Common defensive cooldowns by class
-    local classCooldowns = {
-        WARRIOR = {
-            { spellId = 184364, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.40) end }, -- Enraged Regeneration
-            { spellId = 97462, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Rallying Cry
-            { spellId = 1719, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Recklessness
-            { spellId = 227847, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Bladestorm
-        },
-        PALADIN = {
-            { spellId = 642, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.20) end }, -- Divine Shield
-            { spellId = 633, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.30) end }, -- Lay on Hands
-            { spellId = 31884, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Avenging Wrath
-        },
-        HUNTER = {
-            { spellId = 186265, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.30) end }, -- Aspect of the Turtle
-            { spellId = 109304, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Exhilaration
-            { spellId = 288613, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Trueshot/Bestial Wrath/Coordinated Assault
-        },
-        ROGUE = {
-            { spellId = 185311, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.30) end }, -- Crimson Vial
-            { spellId = 31224, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.40) end }, -- Cloak of Shadows
-            { spellId = 1856, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.25) end }, -- Vanish
-            { spellId = 13750, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Adrenaline Rush
-        },
-        PRIEST = {
-            { spellId = 19236, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.35) end }, -- Desperate Prayer
-            { spellId = 586, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Fade
-            { spellId = 10060, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:InCombat() end }, -- Power Infusion
-        },
-        SHAMAN = {
-            { spellId = 108271, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.35) end }, -- Astral Shift
-            { spellId = 198103, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Earth Elemental
-            { spellId = 114051, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Ascendance
-        },
-        MAGE = {
-            { spellId = 45438, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.20) end }, -- Ice Block
-            { spellId = 55342, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.40) end }, -- Mirror Image
-            { spellId = 12472, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Icy Veins
-            { spellId = 190319, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Combustion
-            { spellId = 365350, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Arcane Surge
-        },
-        WARLOCK = {
-            { spellId = 104773, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.30) end }, -- Unending Resolve
-            { spellId = 108416, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Dark Pact
-            { spellId = 205180, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Summon Darkglare
-        },
-        DRUID = {
-            { spellId = 22812, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.40) end }, -- Barkskin
-            { spellId = 108238, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Renewal
-            { spellId = 194223, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Celestial Alignment
-            { spellId = 102560, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Incarnation
-        },
-        DEATHKNIGHT = {
-            { spellId = 48792, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.35) end }, -- Icebound Fortitude
-            { spellId = 48707, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Anti-Magic Shell
-            { spellId = 47568, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Empower Rune Weapon
-        },
-        MONK = {
-            { spellId = 122783, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Diffuse Magic
-            { spellId = 122278, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.40) end }, -- Dampen Harm
-            { spellId = 137639, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Storm, Earth, and Fire
-            { spellId = 152173, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Serenity
-        },
-        DEMONHUNTER = {
-            { spellId = 198589, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.35) end }, -- Blur
-            { spellId = 196555, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Netherwalk
-            { spellId = 191427, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Metamorphosis (Havoc)
-            { spellId = 258925, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Fel Barrage
-        },
-        EVOKER = {
-            { spellId = 363916, category = "DEFENSIVE", urgency = "URGENT", condition = function(self) return self:HealthBelow(0.30) end }, -- Obsidian Scales
-            { spellId = 374348, category = "DEFENSIVE", urgency = "HIGH", condition = function(self) return self:HealthBelow(0.50) end }, -- Renewing Blaze
-            { spellId = 375087, category = "OFFENSIVE", urgency = "NORMAL", condition = function(self) return self:HasTarget() and self:InCombat() end }, -- Dragonrage
-        },
-    }
-
-    return classCooldowns[classFile] or {}
+function addon:GetClassCooldowns(classFile)
+    return TankAssist.ClassCooldowns:GetForClass(classFile)
 end
 
--- =============================================================================
--- UI SETUP
--- =============================================================================
-
-function Addon:SetupUI()
-    -- Create main container frame
+function addon:SetupUI()
     self.mainFrame = CreateFrame("Frame", "TankAssistMainFrame", UIParent)
     self.mainFrame:SetSize(400, 200)
     self.mainFrame:SetPoint(
@@ -492,8 +407,6 @@ function Addon:SetupUI()
     )
     self.mainFrame:SetScale(self.db.profile.display.scale)
     self.mainFrame:SetAlpha(self.db.profile.display.alpha)
-    
-    -- Make draggable when unlocked
     self.mainFrame:SetMovable(true)
     self.mainFrame:EnableMouse(not self.db.profile.locked)
     self.mainFrame:RegisterForDrag("LeftButton")
@@ -510,40 +423,34 @@ function Addon:SetupUI()
         self.db.profile.display.position.x = x
         self.db.profile.display.position.y = y
     end)
-    
-    -- Initialize UI components (will be created by their respective modules)
-    -- These are placeholders that get populated when UI modules load
     self.assistedCombatDisplay = nil
+    self.targetCastBar = nil
+    self.playerCastBar = nil
     self.cooldownTracker = nil
     self.buffMaintenance = nil
+    self.externalCooldowns = nil
+    self.cooldownAlerts = nil
 end
 
-function Addon:UpdateUIForSpec()
+function addon:UpdateUIForSpec()
     if not self.activeSpecModule then return end
-    
-    -- Update buff maintenance with spec-specific buffs
+
     if self.buffMaintenance then
         self.buffMaintenance:SetBuffs(self.activeSpecModule.buffsToTrack or {})
     end
-    
-    -- Update cooldown tracker with spec-specific cooldowns
+
     if self.cooldownTracker then
         self.cooldownTracker:SetCooldowns(self.activeSpecModule.cooldownsToTrack or {})
     end
 end
 
--- =============================================================================
--- VISIBILITY CONTROL
--- =============================================================================
-
-function Addon:UpdateVisibility()
+function addon:UpdateVisibility()
     if not self.db.profile.enabled then
         self:HideAllFrames()
         return
     end
-    
+
     local shouldShow = self:ShouldShowUI()
-    
     if shouldShow then
         self:ShowAllFrames()
     else
@@ -551,68 +458,55 @@ function Addon:UpdateVisibility()
     end
 end
 
-function Addon:ShouldShowUI()
-    -- Show for all specs now (main button uses Blizzard's assisted combat)
-    -- Secondary button is hidden for non-tanks in AssistedCombatDisplay
-
-    -- Check M+ restriction
-    if self.db.profile.display.hideInMythicPlus and TA.SecretValues:InMythicPlus() then
+function addon:ShouldShowUI()
+    if self.db.profile.display.hideInMythicPlus and TankAssist.SecretValues:InMythicPlus() then
         return false
     end
 
-    -- Check combat setting
     if not self.db.profile.display.showOutOfCombat and not self.inCombat then
         return false
     end
 
-    -- Check target setting
-    if not self.db.profile.display.showWithoutTarget and not TA.SecretValues:HasTarget() then
+    if not self.db.profile.display.showWithoutTarget and not TankAssist.SecretValues:HasTarget() then
         return false
     end
 
     return true
 end
 
-function Addon:ShowAllFrames()
+function addon:ShowAllFrames()
     if self.mainFrame then
         self.mainFrame:Show()
     end
 end
 
-function Addon:HideAllFrames()
+function addon:HideAllFrames()
     if self.mainFrame then
         self.mainFrame:Hide()
     end
 end
 
--- =============================================================================
--- SLASH COMMANDS
--- =============================================================================
-
-function Addon:RegisterSlashCommands()
+function addon:RegisterSlashCommands()
     SLASH_TANKASSIST1 = "/tankassist"
     SLASH_TANKASSIST2 = "/ta"
-    
     SlashCmdList["TANKASSIST"] = function(msg)
         self:HandleSlashCommand(msg)
     end
 end
 
-function Addon:HandleSlashCommand(msg)
+function addon:HandleSlashCommand(msg)
     local args = {}
     for word in msg:gmatch("%S+") do
         table.insert(args, word:lower())
     end
     
     local cmd = args[1] or "help"
-    
     if cmd == "toggle" then
         self.db.profile.enabled = not self.db.profile.enabled
         self:Print("TankAssist " .. (self.db.profile.enabled and "enabled" or "disabled"))
         self:UpdateVisibility()
         
     elseif cmd == "edit" or cmd == "lock" or cmd == "unlock" then
-        -- Point users to WoW's Edit Mode
         self:Print("To reposition TankAssist, use WoW's Edit Mode:")
         print("  1. Press Escape")
         print("  2. Click 'Edit Mode'")
@@ -641,63 +535,41 @@ function Addon:HandleSlashCommand(msg)
                 self:Print("No active spec module to debug")
             end
         elseif subCmd == "stagger" then
-            -- Test stagger info (Brewmaster)
             self:Print("Stagger diagnostic:")
-
-            -- Check if UnitStagger exists
             print("  UnitStagger exists:", UnitStagger ~= nil)
-
-            -- Try UnitStagger directly
             if UnitStagger then
                 local rawStagger = UnitStagger("player")
                 print("  UnitStagger raw value:", rawStagger)
             end
-
-            -- Try power type
             if Enum and Enum.PowerType and Enum.PowerType.Stagger then
                 local powerStagger = UnitPower("player", Enum.PowerType.Stagger)
                 print("  UnitPower(Stagger) value:", powerStagger)
             else
                 print("  Enum.PowerType.Stagger: not found")
             end
-
-            -- Max health for reference
             print("  Max Health:", UnitHealthMax("player"))
-
-            -- Current spec
-            local specId = TA.Utils:GetCurrentSpec()
+            local specId = TankAssist.Utils:GetCurrentSpec()
             print("  Current Spec ID:", specId, "(Brewmaster is 268)")
-
-            -- Full stagger info
-            local stagger = TA.SecretValues:GetStaggerInfo()
+            local stagger = TankAssist.SecretValues:GetStaggerInfo()
             print("  Computed Level:", stagger.level)
             print("  Computed Percent:", string.format("%.1f%%", (stagger.percent or 0) * 100))
             print("  Computed Amount:", stagger.amount)
             print("  Is Secret:", stagger.isSecret)
         elseif subCmd == "health" then
-            -- Test health info
-            local hp = TA.SecretValues:GetHealthPercent("player")
+            local hp = TankAssist.SecretValues:GetHealthPercent("player")
             self:Print("Health percent:", hp and string.format("%.1f%%", hp * 100) or "SECRET")
-
         elseif subCmd == "rage" or subCmd == "resource" then
-            -- Test rage/resource info
             self:Print("Resource diagnostic:")
-
-            -- Raw API test
             print("  Raw UnitPower test:")
             print("    Enum.PowerType.Rage:", Enum.PowerType.Rage)
             local rawRage = UnitPower("player", Enum.PowerType.Rage)
             print("    UnitPower(player, Rage):", rawRage)
             print("    type:", type(rawRage))
             print("    isSecret:", TankAssist.SecretValues:IsSecret(rawRage))
-
-            -- Through GetResource
             print("  GetResource test:")
             local rage = TankAssist.SecretValues:GetResource("RAGE")
             print("    GetResource('RAGE'):", rage)
             print("    type:", type(rage))
-
-            -- Other resources
             print("  Other resources:")
             local energy = TankAssist.SecretValues:GetResource("ENERGY")
             print("    GetResource('ENERGY'):", energy)
@@ -705,10 +577,9 @@ function Addon:HandleSlashCommand(msg)
             print("    GetResource('HOLY_POWER'):", holyPower)
 
         elseif subCmd == "tracking" or subCmd == "cooldowns" then
-            -- Show tracked cooldowns
             self:Print("Tracked cooldowns (internal timer):")
             local hasTracked = false
-            for spellId, data in pairs(TA.SecretValues.trackedCooldowns) do
+            for spellId, data in pairs(TankAssist.SecretValues.trackedCooldowns) do
                 hasTracked = true
                 local spellInfo = C_Spell.GetSpellInfo(spellId)
                 local spellName = spellInfo and spellInfo.name or "Unknown"
@@ -722,18 +593,15 @@ function Addon:HandleSlashCommand(msg)
             if not hasTracked then
                 print("  No regular cooldowns tracked yet.")
             end
-
-            -- Show tracked charges
             print("")
             print("  Tracked charges (charge-based spells):")
             local hasCharges = false
-            for spellId, data in pairs(TA.SecretValues.trackedCharges) do
+            for spellId, data in pairs(TankAssist.SecretValues.trackedCharges) do
                 hasCharges = true
                 local spellInfo = C_Spell.GetSpellInfo(spellId)
                 local spellName = spellInfo and spellInfo.name or "Unknown"
-                local charges, maxCharges = TA.SecretValues:GetTrackedCharges(spellId)
+                local charges, maxCharges = TankAssist.SecretValues:GetTrackedCharges(spellId)
                 print(string.format("  %s: %d/%d charges", spellName, charges or 0, maxCharges or 0))
-                -- Show individual charge cooldowns
                 for i, castTime in ipairs(data.castTimes) do
                     local elapsed = GetTime() - castTime
                     local remaining = data.rechargeTime - elapsed
@@ -747,21 +615,19 @@ function Addon:HandleSlashCommand(msg)
             end
 
             print("")
-            print("  Known cooldowns configured:", self:CountTable(TA.SecretValues.KNOWN_COOLDOWNS))
-            print("  Known charge spells configured:", self:CountTable(TA.SecretValues.KNOWN_CHARGE_SPELLS))
+            print("  Known cooldowns configured:", self:CountTable(TankAssist.SecretValues.KnownCooldowns))
+            print("  Known charge spells configured:", self:CountTable(TankAssist.SecretValues.KnownChargeSpells))
 
         elseif subCmd == "combat" then
-            -- Test combat state
             self:Print("Combat state diagnostic:")
             print("  UnitAffectingCombat:", UnitAffectingCombat("player"))
             print("  Core.inCombat:", self.inCombat)
-            if TA.AssistedCombatDisplay then
-                print("  ACD.inCombat:", TA.AssistedCombatDisplay.inCombat)
-                print("  ACD.frame alpha:", TA.AssistedCombatDisplay.frame and TA.AssistedCombatDisplay.frame:GetAlpha())
+            if TankAssist.AssistedCombatDisplay then
+                print("  ACD.inCombat:", TankAssist.AssistedCombatDisplay.inCombat)
+                print("  ACD.frame alpha:", TankAssist.AssistedCombatDisplay.frame and TankAssist.AssistedCombatDisplay.frame:GetAlpha())
             end
 
         elseif subCmd == "settings" or subCmd == "saved" then
-            -- Show saved settings
             self:Print("Saved settings:")
             local ac = self.db.profile.assistedCombat
             print("  Scale:", ac.scale)
@@ -770,36 +636,28 @@ function Addon:HandleSlashCommand(msg)
             print("  TankAssistDB exists:", TankAssistDB ~= nil)
 
         elseif subCmd == "secondary" or subCmd == "aoe" then
-            -- Debug secondary/AoE spell selection
             self:Print("Secondary spell diagnostic:")
-
             local specModule = self.activeSpecModule
             if not specModule then
                 print("  No active spec module!")
                 return
             end
-
             print("  Spec:", specModule.specName or "Unknown")
             print("  IsPlayerSpell API exists:", IsPlayerSpell ~= nil)
 
-            -- Check AoE spells with all availability methods
             if specModule.aoeSpells then
                 print("  AoE spell candidates:")
                 for i, aoeData in ipairs(specModule.aoeSpells) do
                     local spellId = aoeData.spellId
                     local spellInfo = C_Spell.GetSpellInfo(spellId)
                     local spellName = spellInfo and spellInfo.name or "Unknown"
-
-                    -- Test all availability methods
                     local isKnown = IsSpellKnown(spellId)
                     local isPlayerSpell = IsPlayerSpell and IsPlayerSpell(spellId)
                     local cdInfo = C_Spell.GetSpellCooldown(spellId)
                     local hasCDInfo = cdInfo and cdInfo.startTime ~= nil
                     local usable, noMana = C_Spell.IsSpellUsable(spellId)
-
-                    local cdData = TA.SecretValues:GetCooldownInfo(spellId)
+                    local cdData = TankAssist.SecretValues:GetCooldownInfo(spellId)
                     local conditionMet = not aoeData.condition or aoeData.condition()
-
                     print(string.format("    %d. %s (ID:%d)", i, spellName, spellId))
                     print(string.format("       IsSpellKnown: %s", tostring(isKnown)))
                     print(string.format("       IsPlayerSpell: %s", tostring(isPlayerSpell)))
@@ -812,35 +670,31 @@ function Addon:HandleSlashCommand(msg)
                 print("  No aoeSpells defined")
             end
 
-            -- Check what GetBestAoESpell returns
             if specModule.GetBestAoESpell then
                 local bestAoE = specModule:GetBestAoESpell()
                 local spellInfo = bestAoE and C_Spell.GetSpellInfo(bestAoE)
                 print("  GetBestAoESpell result:", spellInfo and spellInfo.name or "nil", "(ID:", bestAoE or "nil", ")")
             end
 
-            -- Check what GetSecondarySpell returns
             if specModule.GetSecondarySpell then
                 local spell, spellType, priority = specModule:GetSecondarySpell()
                 local spellInfo = spell and C_Spell.GetSpellInfo(spell)
                 print("  GetSecondarySpell result:", spellInfo and spellInfo.name or "nil", "Type:", spellType, "Priority:", priority)
             end
 
-            -- Show CanCastSpell results (the unified check)
             print("  CanCastSpell results (unified cooldown + resource check):")
             if specModule.aoeSpells then
                 for i, aoeData in ipairs(specModule.aoeSpells) do
                     local spellId = aoeData.spellId
                     local spellInfo = C_Spell.GetSpellInfo(spellId)
                     local spellName = spellInfo and spellInfo.name or "Unknown"
-                    local canCast, reason = TA.SecretValues:CanCastSpell(spellId)
+                    local canCast, reason = TankAssist.SecretValues:CanCastSpell(spellId)
                     print(string.format("    %s: canCast=%s, reason=%s",
                         spellName, tostring(canCast), tostring(reason)))
                 end
             end
 
-            -- Also check Purifying Brew specifically (charge-based)
-            local pbId = TA.Constants.BREWMASTER and TA.Constants.BREWMASTER.SPELLS.PURIFYING_BREW
+            local pbId = TankAssist.Constants.Brewmaster and TankAssist.Constants.Brewmaster.Spells.PurifyingBrew
             if pbId then
                 print("  Purifying Brew charge check:")
                 local chargeInfo = C_Spell.GetSpellCharges(pbId)
@@ -852,16 +706,92 @@ function Addon:HandleSlashCommand(msg)
                 else
                     print("    No charge info available")
                 end
-                local canCast, reason = TA.SecretValues:CanCastSpell(pbId)
+                local canCast, reason = TankAssist.SecretValues:CanCastSpell(pbId)
                 print(string.format("    CanCastSpell: %s, reason: %s", tostring(canCast), tostring(reason)))
             end
         else
             local enabled = subCmd == "on" or subCmd == "true" or subCmd == "1"
-            TA.Utils:SetDebug(enabled)
-            TA.SecretValues:SetDebug(enabled)
+            TankAssist.Utils:SetDebug(enabled)
+            TankAssist.SecretValues:SetDebug(enabled)
             self:Print("Debug mode " .. (enabled and "enabled" or "disabled"))
         end
         
+    elseif cmd == "alert" then
+        local subCmd = args[2]
+        if subCmd == "list" then
+            local spells = self.db.profile.cooldownAlerts.trackedSpells
+            if #spells == 0 then
+                self:Print("No spells tracked. Use '/ta alert defaults' to load spec defaults.")
+            else
+                self:Print("Tracked cooldown alerts:")
+                for _, spellId in ipairs(spells) do
+                    local spellInfo = C_Spell.GetSpellInfo(spellId)
+                    local spellName = spellInfo and spellInfo.name or "Unknown"
+                    print(string.format("  %s (ID: %d)", spellName, spellId))
+                end
+            end
+        elseif subCmd == "add" then
+            local spellId = tonumber(args[3])
+            if not spellId then
+                self:Print("Usage: /ta alert add <spellId>")
+                return
+            end
+            if self.cooldownAlerts then
+                self.cooldownAlerts:AddTrackedSpell(spellId)
+            else
+                -- Manually add if UI not yet initialized
+                local spells = self.db.profile.cooldownAlerts.trackedSpells
+                for _, id in ipairs(spells) do
+                    if id == spellId then
+                        self:Print("Spell already tracked.")
+                        return
+                    end
+                end
+                table.insert(spells, spellId)
+                local spellInfo = C_Spell.GetSpellInfo(spellId)
+                self:Print("Now tracking: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+            end
+        elseif subCmd == "remove" then
+            local spellId = tonumber(args[3])
+            if not spellId then
+                self:Print("Usage: /ta alert remove <spellId>")
+                return
+            end
+            if self.cooldownAlerts then
+                self.cooldownAlerts:RemoveTrackedSpell(spellId)
+            else
+                local spells = self.db.profile.cooldownAlerts.trackedSpells
+                for i, id in ipairs(spells) do
+                    if id == spellId then
+                        table.remove(spells, i)
+                        local spellInfo = C_Spell.GetSpellInfo(spellId)
+                        self:Print("Removed: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+                        return
+                    end
+                end
+                self:Print("Spell not found in tracked list.")
+            end
+        elseif subCmd == "defaults" then
+            if self.cooldownAlerts then
+                self.cooldownAlerts:LoadSpecDefaults()
+            else
+                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
+            end
+        elseif subCmd == "clear" then
+            self.db.profile.cooldownAlerts.trackedSpells = {}
+            if self.cooldownAlerts then
+                self.cooldownAlerts.spellStates = {}
+            end
+            self:Print("Cleared all tracked cooldown alerts.")
+        else
+            self:Print("Alert commands:")
+            print("  /ta alert list - Show tracked spells")
+            print("  /ta alert add <spellId> - Track a spell")
+            print("  /ta alert remove <spellId> - Stop tracking a spell")
+            print("  /ta alert defaults - Load spec default spells")
+            print("  /ta alert clear - Clear all tracked spells")
+        end
+
     elseif cmd == "reset" then
         self.db.profile.display.position = {
             point = "CENTER",
@@ -876,21 +806,19 @@ function Addon:HandleSlashCommand(msg)
         self:Print("Position reset to default")
         
     elseif cmd == "test" then
-        self:RunTestMode()
-        
+        self:RunTestMode()  
     else
         self:PrintHelp()
     end
 end
 
--- Helper to count table entries
-function Addon:CountTable(t)
+function addon:CountTable(t)
     local count = 0
     for _ in pairs(t) do count = count + 1 end
     return count
 end
 
-function Addon:PrintHelp()
+function addon:PrintHelp()
     self:Print("Commands:")
     print("  /ta toggle - Enable/disable addon")
     print("  /ta reset - Reset frame position")
@@ -904,58 +832,42 @@ function Addon:PrintHelp()
     print("  /ta debug tracking - Show tracked cooldowns (internal timers)")
     print("  /ta debug combat - Show combat state")
     print("  /ta debug settings - Show saved settings")
+    print("  /ta alert - Cooldown alert commands (list/add/remove/defaults/clear)")
     print("  /ta test - Run test mode")
     print("")
     print("  To reposition: Use WoW's Edit Mode (Escape > Edit Mode)")
 end
 
-function Addon:RunTestMode()
+function addon:RunTestMode()
     self:Print("Running test mode...")
-    
-    -- Show current spec info
-    local specId = TA.Utils:GetCurrentSpec()
-    print("  Current spec:", TA.Utils:GetSpecName(specId))
-    print("  Is tank:", TA.Utils:IsTankSpec(specId))
-    
-    -- Test secret values
-    print("  Can access secrets:", TA.SecretValues:CanAccessSecrets())
-    print("  In M+:", TA.SecretValues:InMythicPlus())
-    
-    -- Test buff tracking
+    local specId = TankAssist.Utils:GetCurrentSpec()
+    print("  Current spec:", TankAssist.Utils:GetSpecName(specId))
+    print("  Is tank:", TankAssist.Utils:IsTankSpec(specId))
+    print("  Can access secrets:", TankAssist.SecretValues:CanAccessSecrets())
+    print("  In M+:", TankAssist.SecretValues:InMythicPlus())
     if self.activeSpecModule and self.activeSpecModule.buffsToTrack then
         print("  Tracked buffs:")
         for _, buffData in ipairs(self.activeSpecModule.buffsToTrack) do
-            local info = TA.SecretValues:GetBuffInfo("player", buffData.spellId)
+            local info = TankAssist.SecretValues:GetBuffInfo("player", buffData.spellId)
             print("    -", buffData.name, "exists:", info.exists, "secret:", info.isSecret)
         end
     end
 end
 
--- =============================================================================
--- INITIALIZATION TRIGGER
--- =============================================================================
-
--- Register for events to initialize at the right time
-local loadFrame = CreateFrame("Frame")
-loadFrame:RegisterEvent("ADDON_LOADED")
-loadFrame:RegisterEvent("PLAYER_LOGIN")
-loadFrame:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        -- Saved variables are now loaded - initialize the addon
-        if Addon.OnInitialize then
-            Addon:OnInitialize()
+if not (LibStub and LibStub("AceAddon-3.0", true)) then
+    local loadFrame = CreateFrame("Frame")
+    loadFrame:RegisterEvent("ADDON_LOADED")
+    loadFrame:RegisterEvent("PLAYER_LOGIN")
+    loadFrame:SetScript("OnEvent", function(self, event, arg1)
+        if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
+            if addon.OnInitialize then
+                addon:OnInitialize()
+            end
+        elseif event == "PLAYER_LOGIN" then
+            if addon.OnEnable then
+                addon:OnEnable()
+            end
+            self:UnregisterEvent("PLAYER_LOGIN")
         end
-    elseif event == "PLAYER_LOGIN" then
-        -- Player is in game, enable addon
-        if Addon.OnEnable then
-            Addon:OnEnable()
-        end
-        self:UnregisterEvent("PLAYER_LOGIN")
-    end
-end)
-
--- =============================================================================
--- GLOBAL REFERENCE
--- Expose addon for slash commands and macros
--- =============================================================================
-TankAssist = TA
+    end)
+end

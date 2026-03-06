@@ -51,9 +51,8 @@ retail_deploy() {
         echo "Error: wow_addons_dir_retail is not set in .env file."
         exit 1
     fi
-    echo "Copying $zip_file to \"$wow_addons_dir_retail/$addon_name\"..."
-    mkdir -p "$wow_addons_dir_retail/$addon_name"
-    unzip -o "$zip_file" -d "$wow_addons_dir_retail/$addon_name"
+    echo "Deploying $zip_file to \"$wow_addons_dir_retail\"..."
+    unzip -o "$zip_file" -d "$wow_addons_dir_retail"
     echo "Done."
 }
 
@@ -62,9 +61,8 @@ ptr_deploy() {
         echo "Error: wow_addons_dir_ptr is not set in .env file."
         exit 1
     fi
-    echo "Copying $zip_file to \"$wow_addons_dir_ptr/$addon_name\"..."
-    mkdir -p "$wow_addons_dir_ptr/$addon_name"
-    unzip -o "$zip_file" -d "$wow_addons_dir_ptr/$addon_name"
+    echo "Deploying $zip_file to \"$wow_addons_dir_ptr\"..."
+    unzip -o "$zip_file" -d "$wow_addons_dir_ptr"
     echo "Done."
 }
 

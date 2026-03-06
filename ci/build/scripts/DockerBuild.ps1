@@ -82,9 +82,33 @@ foreach ($drive in $drives.Keys) {
 $cleanProjectDir = Clean-Path $projectDir
 
 Write-Host "Mounting drives: $($drives.Keys -join ', ')"
-Write-Host "Docker command: docker run --rm -ti $($volumeArgs -join ' ') -w ${cleanProjectDir} $imageName bash"
 
-docker run --rm -ti @volumeArgs -w $cleanProjectDir $imageName bash
+# Pass Claude Code credentials
+$envArgs = @()
+$claudeVolumeArgs = @()
+
+# Option 1: API key from environment
+$anthropicKey = [System.Environment]::GetEnvironmentVariable("ANTHROPIC_API_KEY")
+if ($anthropicKey) {
+    $envArgs += @("-e", "ANTHROPIC_API_KEY=$anthropicKey")
+    Write-Host "Claude Code API key detected."
+}
+# Option 2: Mount existing Claude config (from OAuth login)
+else {
+    $claudeConfigPath = Join-Path $env:USERPROFILE ".claude"
+    if (Test-Path $claudeConfigPath) {
+        $claudeConfigUnix = $claudeConfigPath -replace '\\', '/'
+        $driveLetter = $claudeConfigUnix.Substring(0, 1).ToLower()
+        $pathWithoutDrive = $claudeConfigUnix.Substring(2)
+        $claudeConfigDocker = "/${driveLetter}${pathWithoutDrive}"
+        $claudeVolumeArgs += @("-v", "${claudeConfigDocker}:/root/.claude")
+        Write-Host "Mounting Claude config from ~/.claude"
+    }
+}
+
+Write-Host "Docker command: docker run --rm -ti $($volumeArgs -join ' ') $($envArgs -join ' ') $($claudeVolumeArgs -join ' ') -w ${cleanProjectDir} $imageName bash"
+
+docker run --rm -ti @volumeArgs @envArgs @claudeVolumeArgs -w $cleanProjectDir $imageName bash
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Failed to start Docker container."

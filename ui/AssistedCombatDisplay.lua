@@ -1,35 +1,25 @@
--- TankAssist Assisted Combat Display
--- Simple 2-button display: Main Rotation + AoE/Utility
--- Integrates with WoW's Edit Mode for repositioning via LibEQOL
+local ADDON_NAME, TankAssist = ...
 
-local ADDON_NAME, TA = ...
-
--- Get LibEQOL Edit Mode library (bundled with addon, with error handling)
-local LEM
+local lem
 local lemLoadSuccess, lemResult = pcall(function()
     return LibStub("LibEQOLEditMode-1.0")
 end)
 if lemLoadSuccess then
-    LEM = lemResult
+    lem = lemResult
 else
-    -- LibEQOL failed to load - will use basic Edit Mode fallback
     print("|cFFFF6600[TankAssist]|r LibEQOL not available, using basic Edit Mode support")
 end
 
-TA.AssistedCombatDisplay = {}
-local ACD = TA.AssistedCombatDisplay
+TankAssist.AssistedCombatDisplay = {}
+local acd = TankAssist.AssistedCombatDisplay
 
--- =============================================================================
--- BLIZZARD ASSISTED COMBAT API WRAPPER
--- =============================================================================
+local assistedCombatAPI = {}
 
-local AssistedCombatAPI = {}
-
-function AssistedCombatAPI:IsAvailable()
+function assistedCombatAPI:IsAvailable()
     return C_AssistedCombat and C_AssistedCombat.GetNextCastSpell ~= nil
 end
 
-function AssistedCombatAPI:GetRecommendedSpell()
+function assistedCombatAPI:GetRecommendedSpell()
     if C_AssistedCombat and C_AssistedCombat.GetNextCastSpell then
         local spellId = C_AssistedCombat.GetNextCastSpell(false)
         if spellId then
@@ -37,7 +27,6 @@ function AssistedCombatAPI:GetRecommendedSpell()
         end
     end
 
-    -- Fallback: Check spell overlay
     local rotationSpells = self:GetRotationSpells()
     if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed then
         for _, spellId in ipairs(rotationSpells) do
@@ -50,19 +39,15 @@ function AssistedCombatAPI:GetRecommendedSpell()
     return nil
 end
 
-function AssistedCombatAPI:GetRotationSpells()
+function assistedCombatAPI:GetRotationSpells()
     if C_AssistedCombat and C_AssistedCombat.GetRotationSpells then
         return C_AssistedCombat.GetRotationSpells() or {}
     end
     return {}
 end
 
--- =============================================================================
--- EDIT MODE INTEGRATION (via LibEQOL if available, otherwise basic support)
--- =============================================================================
-
 local function IsLibEQOLAvailable()
-    return LEM ~= nil
+    return lem ~= nil
 end
 
 local function IsEditModeAvailable()
@@ -73,30 +58,23 @@ local function IsInEditMode()
     return EditModeManagerFrame and EditModeManagerFrame.editModeActive
 end
 
--- =============================================================================
--- DISPLAY FRAME
--- =============================================================================
-
-function ACD:Create()
-    local settings = TA.Addon.db.profile.assistedCombat
-
-    -- Main container frame - tight fit around icons
+function acd:Create()
+    local settings = TankAssist.Addon.db.profile.assistedCombat
     self.frame = CreateFrame("Frame", "TankAssistRotationFrame", UIParent, "BackdropTemplate")
     self.frame:SetSize(settings.iconSize * 2 + 4, settings.iconSize + 2)
-
-    -- Set Edit Mode display name (used by LibEQOL for the selection label)
     self.frame.editModeName = "TankAssist"
-    self.frame:SetPoint(
-        settings.position.point or "CENTER",
-        UIParent,
-        settings.position.relativePoint or "CENTER",
-        settings.position.x or 0,
-        settings.position.y or -200
-    )
+
+    local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+    local pos = settings.position or {}
+    if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
+        self.frame:SetPoint(pos.point, UIParent, validAnchors[pos.relativePoint] and pos.relativePoint or pos.point, pos.x, pos.y)
+    else
+        settings.position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
+        self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+    end
     self.frame:SetScale(settings.scale or 1.0)
     self.frame:SetClampedToScreen(true)
 
-    -- Minimal background - very subtle
     self.frame:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = nil,
@@ -107,83 +85,68 @@ function ACD:Create()
     })
     self.frame:SetBackdropColor(0, 0, 0, 0.2)
 
-    -- Create the two icons - tight spacing
     self.mainIcon = self:CreateIcon(self.frame, settings.iconSize)
     self.mainIcon:SetPoint("LEFT", self.frame, "LEFT", 1, 0)
 
     self.aoeIcon = self:CreateIcon(self.frame, settings.iconSize)
     self.aoeIcon:SetPoint("LEFT", self.mainIcon, "RIGHT", 2, 0)
 
-    self.apiAvailable = AssistedCombatAPI:IsAvailable()
+    self.apiAvailable = assistedCombatAPI:IsAvailable()
     self.editMode = false
     self.inCombat = false
 
-    -- Register with WoW's Edit Mode if available
     self:RegisterEditMode()
-
-    -- Register for combat events
     self:RegisterCombatEvents()
+
+    if not self:IsEnabled() and not self:IsInEditMode() then
+        self.frame:Hide()
+    end
 
     return self.frame
 end
 
-function ACD:CreateIcon(parent, size)
+function acd:CreateIcon(parent, size)
     local frame = CreateFrame("Button", nil, parent)
     frame:SetSize(size, size)
-
-    -- Dark gray background (slightly lighter than pure black)
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
     frame.bg:SetColorTexture(0.12, 0.12, 0.12, 1)
-
-    -- Icon texture with rounded corners via texcoord
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetPoint("TOPLEFT", 2, -2)
     frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    -- Thin border using 4 pixel lines (1px thick)
     local borderColor = {0.3, 0.3, 0.3, 1}
     frame.borderTop = frame:CreateTexture(nil, "OVERLAY")
     frame.borderTop:SetPoint("TOPLEFT", 0, 0)
     frame.borderTop:SetPoint("TOPRIGHT", 0, 0)
     frame.borderTop:SetHeight(1)
     frame.borderTop:SetColorTexture(unpack(borderColor))
-
     frame.borderBottom = frame:CreateTexture(nil, "OVERLAY")
     frame.borderBottom:SetPoint("BOTTOMLEFT", 0, 0)
     frame.borderBottom:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.borderBottom:SetHeight(1)
     frame.borderBottom:SetColorTexture(unpack(borderColor))
-
     frame.borderLeft = frame:CreateTexture(nil, "OVERLAY")
     frame.borderLeft:SetPoint("TOPLEFT", 0, 0)
     frame.borderLeft:SetPoint("BOTTOMLEFT", 0, 0)
     frame.borderLeft:SetWidth(1)
     frame.borderLeft:SetColorTexture(unpack(borderColor))
-
     frame.borderRight = frame:CreateTexture(nil, "OVERLAY")
     frame.borderRight:SetPoint("TOPRIGHT", 0, 0)
     frame.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.borderRight:SetWidth(1)
     frame.borderRight:SetColorTexture(unpack(borderColor))
-
-    -- Store border reference for color changes
     frame.border = {
         top = frame.borderTop,
         bottom = frame.borderBottom,
         left = frame.borderLeft,
         right = frame.borderRight,
     }
-
-    -- Cooldown overlay (spell cooldown)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.cooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(false)
-
-    -- GCD overlay
     frame.gcdCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.gcdCooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.gcdCooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
@@ -192,27 +155,19 @@ function ACD:CreateIcon(parent, size)
     frame.gcdCooldown:SetSwipeColor(1, 1, 1, 0.5)
     frame.gcdCooldown:SetHideCountdownNumbers(true)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
-
-    -- Keybind text
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
     frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 12 or 10, "OUTLINE")
     frame.keybind:SetPoint("TOPLEFT", 4, -4)
     frame.keybind:SetTextColor(1, 1, 1, 1)
-
-    -- Charges text
     frame.count = frame:CreateFontString(nil, "OVERLAY")
     frame.count:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 14 or 11, "OUTLINE")
     frame.count:SetPoint("BOTTOMRIGHT", -4, 4)
     frame.count:SetTextColor(1, 1, 1, 1)
-
-    -- Unusable overlay
     frame.unusable = frame:CreateTexture(nil, "OVERLAY", nil, 1)
     frame.unusable:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.unusable:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
     frame.unusable:SetColorTexture(0.1, 0.1, 0.1, 0.7)
     frame.unusable:Hide()
-
-    -- Tooltip - only show when Shift is held
     frame:SetScript("OnEnter", function(self)
         if self.spellId and IsShiftKeyDown() then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -223,29 +178,40 @@ function ACD:CreateIcon(parent, size)
     frame:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
-
     frame.spellId = nil
     return frame
 end
 
--- =============================================================================
--- LIBEQUOL SETTINGS (shown when frame is selected in Edit Mode)
--- =============================================================================
-
-function ACD:BuildLEMSettings()
+function acd:BuildLEMSettings()
     local self_ref = self
 
     return {
         {
+            order = 99,
+            name = "Enabled",
+            kind = lem.SettingType.Checkbox,
+            default = true,
+            get = function(layoutName)
+                local enabled = TankAssist.Addon.db.profile.assistedCombat.enabled
+                if enabled == nil then
+                    return true
+                end
+                return enabled
+            end,
+            set = function(layoutName, value)
+                self_ref:SetEnabled(value)
+            end,
+        },
+        {
             order = 100,
             name = "Scale",
-            kind = LEM.SettingType.Slider,
+            kind = lem.SettingType.Slider,
             default = 1.0,
             minValue = 0.5,
             maxValue = 2.0,
             valueStep = 0.1,
             get = function(layoutName)
-                return TA.Addon.db.profile.assistedCombat.scale or 1.0
+                return TankAssist.Addon.db.profile.assistedCombat.scale or 1.0
             end,
             set = function(layoutName, value)
                 value = math.floor(value * 10 + 0.5) / 10
@@ -255,13 +221,13 @@ function ACD:BuildLEMSettings()
         {
             order = 101,
             name = "Icon Size",
-            kind = LEM.SettingType.Slider,
+            kind = lem.SettingType.Slider,
             default = 50,
             minValue = 30,
             maxValue = 80,
             valueStep = 5,
             get = function(layoutName)
-                return TA.Addon.db.profile.assistedCombat.iconSize or 50
+                return TankAssist.Addon.db.profile.assistedCombat.iconSize or 50
             end,
             set = function(layoutName, value)
                 value = math.floor(value / 5 + 0.5) * 5
@@ -271,28 +237,85 @@ function ACD:BuildLEMSettings()
         {
             order = 102,
             name = "Show Keybinds",
-            kind = LEM.SettingType.Checkbox,
+            kind = lem.SettingType.Checkbox,
             default = true,
             get = function(layoutName)
-                return TA.Addon.db.profile.assistedCombat.showKeybinds
+                return TankAssist.Addon.db.profile.assistedCombat.showKeybinds
             end,
             set = function(layoutName, value)
-                TA.Addon.db.profile.assistedCombat.showKeybinds = value
+                TankAssist.Addon.db.profile.assistedCombat.showKeybinds = value
+            end,
+        },
+        {
+            order = 103,
+            name = "Hide When Mounted",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.hideWhenMounted or false
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.hideWhenMounted = value
+                self_ref:UpdateVisibility()
+            end,
+        },
+        {
+            order = 105,
+            name = "In Combat Opacity",
+            kind = lem.SettingType.Slider,
+            default = 1.0,
+            minValue = 0.1,
+            maxValue = 1.0,
+            valueStep = 0.1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.inCombatAlpha or 1.0
+            end,
+            set = function(layoutName, value)
+                value = math.floor(value * 10 + 0.5) / 10
+                TankAssist.Addon.db.profile.assistedCombat.inCombatAlpha = value
+                self_ref:UpdateCombatVisuals()
+            end,
+        },
+        {
+            order = 106,
+            name = "Out of Combat Opacity",
+            kind = lem.SettingType.Slider,
+            default = 0.5,
+            minValue = 0.1,
+            maxValue = 1.0,
+            valueStep = 0.1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.outOfCombatAlpha or 0.5
+            end,
+            set = function(layoutName, value)
+                value = math.floor(value * 10 + 0.5) / 10
+                TankAssist.Addon.db.profile.assistedCombat.outOfCombatAlpha = value
+                self_ref:UpdateCombatVisuals()
+            end,
+        },
+        {
+            order = 107,
+            name = "Hide In Pet Battles",
+            kind = lem.SettingType.Checkbox,
+            default = true,
+            get = function(layoutName)
+                local val = TankAssist.Addon.db.profile.assistedCombat.hideInPetBattles
+                if val == nil then return true end
+                return val
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.hideInPetBattles = value
+                self_ref:UpdateVisibility()
             end,
         },
     }
 end
 
--- =============================================================================
--- EDIT MODE REGISTRATION (via LibEQOL if available, otherwise basic support)
--- =============================================================================
-
-function ACD:RegisterEditMode()
+function acd:RegisterEditMode()
     if not self.frame then
         return
     end
 
-    -- Use LibEQOL if available (provides better integration)
     if IsLibEQOLAvailable() then
         self:RegisterEditModeLibEQOL()
     elseif IsEditModeAvailable() then
@@ -300,11 +323,9 @@ function ACD:RegisterEditMode()
     end
 end
 
--- LibEQOL-based Edit Mode (full integration with Blizzard Edit Mode UI)
-function ACD:RegisterEditModeLibEQOL()
+function acd:RegisterEditModeLibEQOL()
     local self_ref = self
 
-    -- Default position for reset functionality
     local defaults = {
         point = "CENTER",
         relativePoint = "CENTER",
@@ -312,31 +333,53 @@ function ACD:RegisterEditModeLibEQOL()
         y = -200,
     }
 
-    -- Callback when position changes in Edit Mode
-    local function OnPositionChanged(point, relativePoint, x, y)
-        TA.Addon.db.profile.assistedCombat.position = {
+    local function OnPositionChanged(...)
+        local point, relativePoint, x, y
+        for i = 1, select("#", ...) do
+            local v = select(i, ...)
+            if type(v) == "string" and not point then
+                -- skip non-anchor strings (layout names like "UiScale-Classic")
+                local anchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+                if anchors[v] then
+                    point = v
+                end
+            elseif type(v) == "string" and point and not relativePoint then
+                local anchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+                if anchors[v] then
+                    relativePoint = v
+                end
+            elseif type(v) == "number" and not x then
+                x = v
+            elseif type(v) == "number" and x and not y then
+                y = v
+            end
+        end
+        if not point then return end
+        TankAssist.Addon.db.profile.assistedCombat.position = {
             point = point,
-            relativePoint = relativePoint,
-            x = x,
-            y = y,
+            relativePoint = relativePoint or point,
+            x = x or 0,
+            y = y or 0,
         }
-        TA.Utils:Debug("Position saved via LibEQOL:", point, x, y)
+        TankAssist.Utils:Debug("Position saved via LibEQOL:", point, x, y)
     end
 
-    -- Register frame with LibEQOL Edit Mode
-    LEM:AddFrame(self.frame, OnPositionChanged, defaults)
+    lem:AddFrame(self.frame, OnPositionChanged, defaults)
+    lem:AddFrameSettings(self.frame, self:BuildLEMSettings())
+    lem:SetFrameResetVisible(self.frame, true)
 
-    -- Add settings panel for the frame in Edit Mode
-    LEM:AddFrameSettings(self.frame, self:BuildLEMSettings())
+    lem:RegisterCallback("enter", function()
+        self_ref:OnEditModeEnter()
+    end)
 
-    -- Enable reset to default position button
-    LEM:SetFrameResetVisible(self.frame, true)
+    lem:RegisterCallback("exit", function()
+        self_ref:OnEditModeExit()
+    end)
 
-    TA.Utils:Debug("TankAssist registered with LibEQOL Edit Mode")
+    TankAssist.Utils:Debug("TankAssist registered with LibEQOL Edit Mode")
 end
 
--- Basic Edit Mode support (fallback when LibEQOL is not available)
-function ACD:RegisterEditModeBasic()
+function acd:RegisterEditModeBasic()
     local self_ref = self
 
     EventRegistry:RegisterCallback("EditMode.Enter", function()
@@ -347,7 +390,6 @@ function ACD:RegisterEditModeBasic()
         self_ref:OnEditModeExit()
     end, self)
 
-    -- Hook into Edit Mode save to persist position
     if EditModeManagerFrame then
         hooksecurefunc(EditModeManagerFrame, "SaveLayouts", function()
             self_ref:SavePosition()
@@ -357,130 +399,114 @@ function ACD:RegisterEditModeBasic()
         end)
     end
 
-    -- Create basic selection overlay for dragging
     self:CreateBasicSelectionOverlay()
 
     if IsInEditMode() then
         self:OnEditModeEnter()
     end
 
-    TA.Utils:Debug("TankAssist registered with basic Edit Mode support")
+    TankAssist.Utils:Debug("TankAssist registered with basic Edit Mode support")
 end
 
--- Basic selection overlay (used when LibEQOL is not available)
-function ACD:CreateBasicSelectionOverlay()
+function acd:CreateBasicSelectionOverlay()
     local selection = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
     selection:SetAllPoints()
     selection:SetFrameStrata("HIGH")
     selection:SetFrameLevel(100)
-
     selection:SetBackdrop({
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 16,
     })
     selection:SetBackdropBorderColor(0, 0.6, 1, 1)
-
     selection.highlight = selection:CreateTexture(nil, "OVERLAY")
     selection.highlight:SetAllPoints()
     selection.highlight:SetColorTexture(0, 0.6, 1, 0.15)
     selection.highlight:Hide()
-
     selection.label = selection:CreateFontString(nil, "OVERLAY")
     selection.label:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     selection.label:SetPoint("CENTER")
     selection.label:SetText("TankAssist")
     selection.label:SetTextColor(1, 1, 1, 1)
-
     selection:EnableMouse(true)
     selection:RegisterForDrag("LeftButton")
     selection:SetMovable(true)
-
     selection:SetScript("OnEnter", function(sel)
         if self.editMode then
             sel.highlight:Show()
         end
     end)
-
     selection:SetScript("OnLeave", function(sel)
         sel.highlight:Hide()
     end)
-
     selection:SetScript("OnDragStart", function(sel)
         if self.editMode then
             self.frame:StartMoving()
         end
     end)
-
     selection:SetScript("OnDragStop", function(sel)
         self.frame:StopMovingOrSizing()
         self:SavePosition()
     end)
-
     selection:Hide()
     self.selection = selection
 end
 
--- Save current position to saved variables (called externally)
-function ACD:SavePosition()
+function acd:SavePosition()
     if not self.frame then return end
-
     local point, _, relativePoint, x, y = self.frame:GetPoint()
-    TA.Addon.db.profile.assistedCombat.position = {
+    TankAssist.Addon.db.profile.assistedCombat.position = {
         point = point,
         relativePoint = relativePoint,
         x = x,
         y = y,
     }
-    TA.Addon.db.profile.assistedCombat.scale = self.frame:GetScale()
-
-    TA.Utils:Debug("Position saved:", point, x, y)
+    TankAssist.Addon.db.profile.assistedCombat.scale = self.frame:GetScale()
+    TankAssist.Utils:Debug("Position saved:", point, x, y)
 end
 
--- Restore position from saved variables
-function ACD:RestorePosition()
+function acd:RestorePosition()
     if not self.frame then return end
-
-    local settings = TA.Addon.db.profile.assistedCombat
+    local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
+    local settings = TankAssist.Addon.db.profile.assistedCombat
+    local pos = settings.position or {}
     self.frame:ClearAllPoints()
-    self.frame:SetPoint(
-        settings.position.point or "CENTER",
-        UIParent,
-        settings.position.relativePoint or "CENTER",
-        settings.position.x or 0,
-        settings.position.y or -200
-    )
+    if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
+        self.frame:SetPoint(pos.point, UIParent, validAnchors[pos.relativePoint] and pos.relativePoint or pos.point, pos.x, pos.y)
+    else
+        settings.position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -200 }
+        self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+    end
     self.frame:SetScale(settings.scale or 1.0)
 end
 
-function ACD:OnEditModeEnter()
+function acd:OnEditModeEnter()
     if not self.frame then return end
     self.editMode = true
     self.frame:SetMovable(true)
-
-    -- Show basic selection overlay if using fallback mode
+    self.frame:Show()
+    self:UpdateDisabledVisual()
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Show()
     end
 end
 
-function ACD:OnEditModeExit()
+function acd:OnEditModeExit()
     if not self.frame then return end
     self.editMode = false
-
-    -- Hide basic selection overlay if using fallback mode
+    self:UpdateVisibility()
+    self:UpdateCombatVisuals()
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Hide()
     end
 end
 
--- =============================================================================
--- COMBAT EVENTS
--- =============================================================================
-
-function ACD:RegisterCombatEvents()
+function acd:RegisterCombatEvents()
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    eventFrame:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+    eventFrame:RegisterEvent("PET_BATTLE_OPENING_START")
+    eventFrame:RegisterEvent("PET_BATTLE_CLOSE")
     eventFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             self.inCombat = true
@@ -488,52 +514,43 @@ function ACD:RegisterCombatEvents()
         elseif event == "PLAYER_REGEN_ENABLED" then
             self.inCombat = false
             self:UpdateCombatVisuals()
+        elseif event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
+            self:UpdateVisibility()
+        elseif event == "PET_BATTLE_OPENING_START" then
+            self:UpdateVisibility()
+        elseif event == "PET_BATTLE_CLOSE" then
+            self:UpdateVisibility()
         end
     end)
-
-    -- Initial state check
     self.inCombat = UnitAffectingCombat("player")
-
-    -- Delay initial visual update to ensure frame is ready
     C_Timer.After(0.1, function()
         self:UpdateCombatVisuals()
+        self:UpdateVisibility()
     end)
 end
 
-function ACD:UpdateCombatVisuals()
+function acd:UpdateCombatVisuals()
     if not self.frame then return end
-
+    local settings = TankAssist.Addon.db.profile.assistedCombat
     if self.inCombat then
-        -- IN COMBAT: Fully visible
-        self.frame:SetAlpha(1.0)
-        self.mainIcon:SetAlpha(1.0)
-        self.aoeIcon:SetAlpha(1.0)
-        self.frame:SetBackdropColor(0, 0, 0, 0.4)
+        local alpha = settings.inCombatAlpha or 1.0
+        self.frame:SetAlpha(alpha)
+        self.frame:SetBackdropColor(0, 0, 0, alpha * 0.4)
     else
-        -- OUT OF COMBAT: Very faded, barely visible
-        self.frame:SetAlpha(0.2)
-        self.mainIcon:SetAlpha(0.3)
-        self.aoeIcon:SetAlpha(0.3)
-        self.frame:SetBackdropColor(0, 0, 0, 0.1)
+        local alpha = settings.outOfCombatAlpha or 0.5
+        self.frame:SetAlpha(alpha)
+        self.frame:SetBackdropColor(0, 0, 0, alpha * 0.4)
     end
 end
 
--- =============================================================================
--- UPDATE LOGIC
--- =============================================================================
-
-function ACD:Update()
+function acd:Update()
     if not self.frame or not self.frame:IsShown() then return end
-
-    local mainSpell = AssistedCombatAPI:GetRecommendedSpell()
-    local specModule = TA.Addon.activeSpecModule
-    local isTankSpec = TA.Addon.isTankSpec
-
-    -- Main button: Blizzard's assisted combat recommendation (works for all specs)
+    local mainSpell = assistedCombatAPI:GetRecommendedSpell()
+    local specModule = TankAssist.Addon.activeSpecModule
+    local isTankSpec = TankAssist.Addon.isTankSpec
     if mainSpell then
         self:UpdateIcon(self.mainIcon, mainSpell, "main")
     else
-        -- Fallback to spec module recommendations if available
         local recs = {}
         if specModule and specModule.GetRecommendations then
             recs = specModule:GetRecommendations() or {}
@@ -544,8 +561,6 @@ function ACD:Update()
             self:ClearIcon(self.mainIcon)
         end
     end
-
-    -- Secondary button: Tank utilities/AoE for tanks, offensive cooldowns for non-tanks
     local secondarySpell, spellType, priority = nil, "aoe", "NORMAL"
     if specModule then
         if specModule.GetSecondarySpell then
@@ -556,44 +571,40 @@ function ACD:Update()
             secondarySpell = specModule.aoeSpell
         end
     end
-
     if secondarySpell then
         self:UpdateIcon(self.aoeIcon, secondarySpell, spellType, priority)
         self.aoeIcon:Show()
     else
         self:ClearIcon(self.aoeIcon)
-        -- Hide secondary button completely if no spell available
         if not isTankSpec then
             self.aoeIcon:Hide()
         end
     end
 end
 
-function ACD:UpdateIcon(icon, spellId, spellType, priority)
+function acd:UpdateIcon(icon, spellId, spellType, priority)
+    if not icon then return end
     if not spellId then
         self:ClearIcon(icon)
         return
     end
-
     icon.spellId = spellId
-
     local spellInfo = C_Spell.GetSpellInfo(spellId)
     if not spellInfo then
         self:ClearIcon(icon)
         return
     end
-
     icon.icon:SetTexture(spellInfo.iconID)
     icon:Show()
 
-    if TA.Addon.db.profile.assistedCombat.showKeybinds then
-        local keybind = TA.Utils:GetSpellKeybind(spellId)
-        icon.keybind:SetText(TA.Utils:FormatKeybind(keybind) or "")
+    if TankAssist.Addon.db.profile.assistedCombat.showKeybinds then
+        local keybind = TankAssist.Utils:GetSpellKeybind(spellId)
+        icon.keybind:SetText(TankAssist.Utils:FormatKeybind(keybind) or "")
     else
         icon.keybind:SetText("")
     end
 
-    local cdInfo = TA.SecretValues:GetCooldownInfo(spellId)
+    local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
     if cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5 then
         local cdStart = GetTime() - cdInfo.remaining
         icon.cooldown:SetCooldown(cdStart, cdInfo.remaining + (GetTime() - cdStart))
@@ -614,11 +625,10 @@ function ACD:UpdateIcon(icon, spellId, spellType, priority)
         icon.count:SetText("")
     end
 
-    local usable = TA.SecretValues:IsSpellUsable(spellId)
+    local usable = TankAssist.SecretValues:IsSpellUsable(spellId)
     local isUnusable = usable == false or (cdInfo.onCooldown and (not cdInfo.charges or cdInfo.charges == 0))
 
     if isUnusable then
-        -- Show unusable overlay but make it less opaque in combat
         icon.unusable:Show()
         if self.inCombat then
             icon.unusable:SetColorTexture(0.1, 0.1, 0.1, 0.5)
@@ -629,42 +639,35 @@ function ACD:UpdateIcon(icon, spellId, spellType, priority)
         icon.unusable:Hide()
     end
 
-    -- Visual feedback for spell types via border color
     icon.isUtility = (spellType == "utility")
     icon.isOffensive = (spellType == "offensive")
     if icon.border then
-        local r, g, b, a = 0.3, 0.3, 0.3, 1 -- Default dark gray
+        local r, g, b, a = 0.3, 0.3, 0.3, 1
         if spellType == "utility" then
             if priority == "URGENT" then
-                -- Red border for urgent defensive
                 r, g, b = 0.9, 0.1, 0.1
             else
-                -- Gold border for high priority defensive
                 r, g, b = 0.9, 0.7, 0.1
             end
         elseif spellType == "offensive" then
-            -- Purple/magenta border for offensive cooldowns
             r, g, b = 0.7, 0.3, 0.9
         end
-        -- Update all 4 border textures
         if icon.border.top then
             icon.border.top:SetColorTexture(r, g, b, a)
             icon.border.bottom:SetColorTexture(r, g, b, a)
             icon.border.left:SetColorTexture(r, g, b, a)
             icon.border.right:SetColorTexture(r, g, b, a)
         elseif icon.border.SetVertexColor then
-            -- Legacy support for single texture border
             icon.border:SetVertexColor(r, g, b, a)
         end
     end
 
-    -- Always full brightness on icons - frame alpha controls visibility
     icon.icon:SetDesaturated(false)
     icon.icon:SetVertexColor(1, 1, 1, 1)
     icon:SetAlpha(1.0)
 end
 
-function ACD:ClearIcon(icon)
+function acd:ClearIcon(icon)
     icon.spellId = nil
     icon.icon:SetTexture(nil)
     icon.keybind:SetText("")
@@ -685,34 +688,92 @@ function ACD:ClearIcon(icon)
     end
 end
 
--- =============================================================================
--- PUBLIC INTERFACE
--- =============================================================================
-
-function ACD:Show()
-    if self.frame then
+function acd:Show()
+    if self.frame and self:ShouldBeVisible() then
         self.frame:Show()
     end
 end
 
-function ACD:Hide()
-    if self.frame then
+function acd:Hide()
+    if self.frame and not self:IsInEditMode() then
         self.frame:Hide()
     end
 end
 
-function ACD:SetScale(scale)
-    if self.frame then
-        self.frame:SetScale(scale)
-        TA.Addon.db.profile.assistedCombat.scale = scale
-        -- Don't auto-save here - let Edit Mode Save button handle it
+function acd:IsEnabled()
+    local enabled = TankAssist.Addon.db.profile.assistedCombat.enabled
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function acd:SetEnabled(enabled)
+    TankAssist.Addon.db.profile.assistedCombat.enabled = enabled
+    if enabled or self:IsInEditMode() then
+        self.frame:Show()
+    else
+        self.frame:Hide()
+    end
+    self:UpdateDisabledVisual()
+end
+
+function acd:UpdateDisabledVisual()
+    if not self.frame then return end
+
+    if self:IsEnabled() then
+        self:UpdateCombatVisuals()
+    else
+        self.frame:SetAlpha(0.4)
     end
 end
 
-function ACD:SetIconSize(size)
+function acd:ShouldBeVisible()
+    if not self:IsEnabled() and not self:IsInEditMode() then
+        return false
+    end
+
+    local settings = TankAssist.Addon.db.profile.assistedCombat
+
+    if settings.hideWhenMounted and IsMounted() then
+        return false
+    end
+
+    if settings.hideInPetBattles and C_PetBattles and C_PetBattles.IsInBattle() then
+        return false
+    end
+
+    return true
+end
+
+function acd:UpdateVisibility()
     if not self.frame then return end
 
-    TA.Addon.db.profile.assistedCombat.iconSize = size
+    if self:IsInEditMode() then
+        self.frame:Show()
+        self:UpdateDisabledVisual()
+        return
+    end
+
+    if self:ShouldBeVisible() then
+        self.frame:Show()
+        self:UpdateDisabledVisual()
+    else
+        self.frame:Hide()
+    end
+end
+
+function acd:SetScale(scale)
+    if self.frame then
+        self.frame:SetScale(scale)
+        TankAssist.Addon.db.profile.assistedCombat.scale = scale
+    end
+end
+
+function acd:SetIconSize(size)
+    if not self.frame then return end
+
+    TankAssist.Addon.db.profile.assistedCombat.iconSize = size
 
     self.mainIcon:SetSize(size, size)
     self.aoeIcon:SetSize(size, size)
@@ -723,11 +784,11 @@ function ACD:SetIconSize(size)
     self.aoeIcon.keybind:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "OUTLINE")
 end
 
-function ACD:ResetPosition()
+function acd:ResetPosition()
     if self.frame then
         self.frame:ClearAllPoints()
         self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-        TA.Addon.db.profile.assistedCombat.position = {
+        TankAssist.Addon.db.profile.assistedCombat.position = {
             point = "CENTER",
             relativePoint = "CENTER",
             x = 0,
@@ -736,43 +797,35 @@ function ACD:ResetPosition()
     end
 end
 
-function ACD:IsInEditMode()
-    return self.editMode
+function acd:IsInEditMode()
+    return self.editMode or (EditModeManagerFrame and EditModeManagerFrame.editModeActive)
 end
 
--- Legacy functions - LibEQOL handles Edit Mode integration now
-function ACD:EnterEditMode()
-    TA.Addon:Print("Use WoW's Edit Mode (Escape > Edit Mode) to reposition TankAssist")
+function acd:EnterEditMode()
+    TankAssist.Addon:Print("Use WoW's Edit Mode (Escape > Edit Mode) to reposition TankAssist")
 end
 
-function ACD:ExitEditMode()
-    -- No-op, handled by LibEQOL
+function acd:ExitEditMode()
 end
 
-function ACD:ToggleEditMode()
-    TA.Addon:Print("Use WoW's Edit Mode (Escape > Edit Mode) to reposition TankAssist")
+function acd:ToggleEditMode()
+    TankAssist.Addon:Print("Use WoW's Edit Mode (Escape > Edit Mode) to reposition TankAssist")
 end
 
-function ACD:Lock()
-    -- No-op, handled by LibEQOL
+function acd:Lock()
 end
 
-function ACD:Unlock()
+function acd:Unlock()
     self:EnterEditMode()
 end
 
-function ACD:UpdateLockState()
-    -- No-op, handled by LibEQOL
+function acd:UpdateLockState()
 end
 
--- =============================================================================
--- INITIALIZATION
--- =============================================================================
-
 local function Initialize()
-    if TA.Addon then
-        TA.Addon.assistedCombatDisplay = ACD
-        ACD:Create()
+    if TankAssist.Addon then
+        acd:Create()
+        TankAssist.Addon.assistedCombatDisplay = acd
     end
 end
 

@@ -1,6 +1,6 @@
 FROM ubuntu:latest
 
-# Install necessary packages including dos2unix
+# Install necessary packages including dos2unix and Node.js
 RUN apt-get update && apt-get install -y \
     rsync \
     zip \
@@ -9,7 +9,16 @@ RUN apt-get update && apt-get install -y \
     bash \
     luarocks \
     dos2unix \
+    ca-certificates \
+    gnupg \
     && luarocks install luacheck
+
+# Install Node.js (required for Claude Code CLI)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /app
 
