@@ -202,14 +202,14 @@ end
 
 function utils:FormatKeybind(key)
     if not key then return "" end
+    key = key:gsub("SHIFT%-MOUSEWHEELUP", "S-WU")
+    key = key:gsub("SHIFT%-MOUSEWHEELDOWN", "S-WD")
+    key = key:gsub("MOUSEWHEELUP", "WU")
+    key = key:gsub("MOUSEWHEELDOWN", "WD")
     key = key:gsub("SHIFT%-", "S-")
     key = key:gsub("CTRL%-", "C-")
     key = key:gsub("ALT%-", "A-")
     key = key:gsub("BUTTON", "M")
-    key = key:gsub("MOUSEWHEELUP", "WU")
-    key = key:gsub("MOUSEWHEELDOWN", "WD")
-    key = key:gsub("SHIFT%-MOUSEWHEELUP", "S-WU")
-    key = key:gsub("SHIFT%-MOUSEWHEELDOWN", "S-WD")
     return key
 end
 

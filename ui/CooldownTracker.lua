@@ -215,7 +215,6 @@ function ct:UpdateCooldownIcon(icon)
     end
 
     if cdInfo.onCooldown and cdInfo.remaining > 0 then
-        local start = GetTime() - (cdInfo.remaining > 0 and 0 or 0)
         local duration = cdInfo.remaining + 0.1
         icon.cooldown:SetCooldown(GetTime() - duration + cdInfo.remaining, duration)
 
@@ -259,7 +258,7 @@ end
 
 local function Initialize()
     if TankAssist.Addon.mainFrame then
-        TankAssist.Addon.cooldownTracker = CT
+        TankAssist.Addon.cooldownTracker = ct
         ct:Create(TankAssist.Addon.mainFrame)
     end
 end

@@ -317,6 +317,15 @@ function TankAssist.SpecBase:BuildCooldownsToTrack()
             })
         end
     end
+    table.sort(result, function(a, b)
+        if a.category ~= b.category then
+            return a.category < b.category
+        end
+        if a.name ~= b.name then
+            return a.name < b.name
+        end
+        return a.spellId < b.spellId
+    end)
     return result
 end
 

@@ -218,8 +218,7 @@ function tad:UpdateIcon(icon, actionData)
 
     local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
     if cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5 then
-        local cdStart = GetTime() - cdInfo.remaining
-        icon.cooldown:SetCooldown(cdStart, cdInfo.remaining + (GetTime() - cdStart))
+        icon.cooldown:SetCooldown(GetTime(), cdInfo.remaining)
         icon.unusable:Show()
         icon.glow:Hide()
     else
@@ -295,7 +294,7 @@ end
 
 local function Initialize()
     if TankAssist.Addon.mainFrame then
-        TankAssist.Addon.tankActionsDisplay = TAD
+        TankAssist.Addon.tankActionsDisplay = tad
         tad:Create(TankAssist.Addon.mainFrame)
     end
 end

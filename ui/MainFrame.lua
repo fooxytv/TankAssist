@@ -43,6 +43,8 @@ function mf:CreateUnlockOverlay(parent)
     hooksecurefunc(TankAssist.Addon, "HandleSlashCommand", function()
         C_Timer.After(0.1, UpdateLockVisual)
     end)
+
+    UpdateLockVisual()
 end
 
 function mf:CreateSpecIndicator(parent)

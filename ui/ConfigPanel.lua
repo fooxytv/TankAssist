@@ -218,7 +218,7 @@ function cp:Toggle()
 end
 
 local function Initialize()
-    TankAssist.Addon.configPanel = CP
+    TankAssist.Addon.configPanel = cp
 end
 
 local initFrame = CreateFrame("Frame")

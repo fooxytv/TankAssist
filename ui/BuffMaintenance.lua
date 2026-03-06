@@ -283,7 +283,7 @@ end
 
 local function Initialize()
     if TankAssist.Addon.mainFrame then
-        TankAssist.Addon.buffMaintenance = BM
+        TankAssist.Addon.buffMaintenance = bm
         bm:Create(TankAssist.Addon.mainFrame)
     end
 end

@@ -11,8 +11,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.1-alpha.56bf278] - 2026-03-06
 
+### Added
+- **Player & Target Cast Bars** — fully customisable replacements for Blizzard cast bars
+  - Configurable width, height, scale, colours (cast/channel/non-interruptible/background/border)
+  - Text options: spell name, cast timer, font face/size, alignment, position (above/inside/below)
+  - Spell icon display with left/right positioning
+  - Bar texture selection (Solid, Blizzard, Smooth, Flat)
+  - Target cast bar shows interrupted state with linger + fade-out
+  - Option to hide Blizzard's default player cast bar
+- **External Cooldown Tracking** — monitors healer/ally defensives on the player
+  - Tracks Pain Suppression, Guardian Spirit, Ironbark, Life Cocoon, Blessing of Sacrifice/Protection/Spellwarding, Rallying Cry
+  - Real-time duration display with cooldown sweep animation
+  - Handles secret values gracefully (shows "?" when duration is hidden)
+- **Cooldown Alerts** — tracks player spell cooldowns with countdown and ready flash
+  - Per-spec defaults for all 6 tank specs via `/ta alert defaults`
+  - Three alert styles: Ready Only, Countdown Only, Countdown + Ready
+  - Shadow tracking via UNIT_SPELLCAST_SUCCEEDED to work around Assisted Combat secret values
+- **Display Mode setting** for External Cooldowns and Cooldown Alerts (Icon Only, Icon + Name, Name Only)
+- **Timer Position setting** for External Cooldowns and Cooldown Alerts (Inside Icon, Below Icon)
+- **Border Color setting** (colour picker) for External Cooldowns and Cooldown Alerts
+- Full Edit Mode integration via LibEQOL for all new UI components
+- Slash commands for managing tracked cooldown alerts (`/ta alert list|add|remove|defaults|clear`)
+- GitHub Actions workflow for packaging and CurseForge upload on tags
+
 ### Changed
-- Bump version to 0.2.0-alpha.7f62013
+- Refactored namespace from `TA` to `TankAssist` across all modules
+- Reorganised spec modules into class subdirectories (e.g. `specs/Warrior/Protection.lua`)
+- Cast bar width/height sliders now use step size of 1 for precise control
+- Improved build pipeline: rsync staging, `.gitattributes` exclusion, robust zip packaging
+- Stabilised cooldown tracker display order with deterministic sorting
+
+### Fixed
+- Stale variable references in ConfigPanel, TankActionsDisplay, and CooldownTracker init
+- Cooldown sweep duration calculation in TankActionsDisplay
+- Mousewheel keybind formatting order in Utils
+- Unlock overlay initial visibility state in MainFrame
+- Removed dead variable assignment in CooldownTracker
 
 
 
