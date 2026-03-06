@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6-alpha.2790150] - 2026-03-06
+
+### Fixed
+- Removed accidentally committed claude-plugins-official submodule reference
+
 ## [0.2.5-alpha.4435388] - 2026-03-06
 
 ### Changed

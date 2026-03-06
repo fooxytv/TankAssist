@@ -107,7 +107,7 @@ else
 fi
 
 echo "Committing version bump and changelog..."
-git add .
+git add *.toc CHANGELOG.md .github/ ci/ core/ ui/ specs/ data/ libs/
 git commit -m "Bump version to $new_version" || {
     echo "No changes to commit (or commit failed)."
 }
