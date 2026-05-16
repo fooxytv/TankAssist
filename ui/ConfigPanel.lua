@@ -61,12 +61,9 @@ local BACKDROP_SMALL = {
 function cp:Create()
     if self.panel then return self.panel end
 
-    local panel = CreateFrame("Frame", "TankAssistConfigPanel", UIParent, "BackdropTemplate")
+    local panel = CreateFrame("Frame", "TankAssistConfigPanel", UIParent, "ButtonFrameTemplate")
     panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
     panel:SetPoint("CENTER")
-    panel:SetBackdrop(BACKDROP_MAIN)
-    panel:SetBackdropColor(unpack(C.bg))
-    panel:SetBackdropBorderColor(unpack(C.border))
     panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
@@ -76,30 +73,26 @@ function cp:Create()
     panel:SetClampedToScreen(true)
     panel:Hide()
 
-    -- Title
-    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -12)
-    title:SetText("TankAssist")
-    title:SetTextColor(unpack(C.accent))
+    -- Portrait frame title and player portrait
+    panel:SetTitle("TankAssist")
+    panel:SetPortraitToUnit("player")
 
+    -- Inset is provided by ButtonFrameTemplate — use it as our content parent
+    local inset = panel.Inset or CreateFrame("Frame", nil, panel, "InsetFrameTemplate")
+    if not panel.Inset then
+        inset:SetPoint("TOPLEFT", 4, -60)
+        inset:SetPoint("BOTTOMRIGHT", -6, 6)
+    end
+
+    -- Version text in the bottom-right footer strip of the inset
     local addonVersion = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or ""
-    local version = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    version:SetPoint("LEFT", title, "RIGHT", 8, -1)
-    version:SetText(addonVersion)
+    local version = inset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    version:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -10, 6)
+    version:SetText("v" .. addonVersion)
     version:SetTextColor(unpack(C.textMuted))
 
-    -- Close button (Blizzard template)
-    local closeBtn = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", -2, -2)
-
-    -- Title separator
-    local titleLine = panel:CreateTexture(nil, "ARTWORK")
-    titleLine:SetPoint("TOPLEFT", 10, -36)
-    titleLine:SetPoint("TOPRIGHT", -10, -36)
-    titleLine:SetHeight(1)
-    titleLine:SetColorTexture(0.3, 0.3, 0.35, 0.6)
-
     self.panel = panel
+    self.inset = inset
     self.categories = {}
     self.categoryFrames = {}
     self.activeCategory = nil
@@ -111,6 +104,7 @@ function cp:Create()
     self:RegisterCategory("general", "General", function(f) self:BuildGeneralPage(f) end)
     self:RegisterCategory("cooldownAlerts", "Cooldown Alerts", function(f) self:BuildCooldownAlertsPage(f) end)
     self:RegisterCategory("externalCDs", "External CDs", function(f) self:BuildExternalCDsPage(f) end)
+    self:RegisterCategory("sounds", "Sounds & Alerts", function(f) self:BuildSoundsPage(f) end)
     self:RegisterCategory("castBars", "Cast Bars", function(f) self:BuildCastBarsPage(f) end)
 
     self:SelectCategory("general")
@@ -126,9 +120,9 @@ end
 -- ============================================================================
 
 function cp:CreateSidebar()
-    local sidebar = CreateFrame("Frame", nil, self.panel, "BackdropTemplate")
-    sidebar:SetPoint("TOPLEFT", 8, -40)
-    sidebar:SetPoint("BOTTOMLEFT", 8, 8)
+    local sidebar = CreateFrame("Frame", nil, self.inset, "BackdropTemplate")
+    sidebar:SetPoint("TOPLEFT", 6, -6)
+    sidebar:SetPoint("BOTTOMLEFT", 6, 22)
     sidebar:SetWidth(SIDEBAR_WIDTH)
     sidebar:SetBackdrop(BACKDROP_INNER)
     sidebar:SetBackdropColor(unpack(C.sidebarBg))
@@ -190,9 +184,9 @@ end
 -- ============================================================================
 
 function cp:CreateContentArea()
-    local content = CreateFrame("Frame", nil, self.panel, "BackdropTemplate")
+    local content = CreateFrame("Frame", nil, self.inset, "BackdropTemplate")
     content:SetPoint("TOPLEFT", self.sidebar, "TOPRIGHT", 6, 0)
-    content:SetPoint("BOTTOMRIGHT", self.panel, "BOTTOMRIGHT", -8, 8)
+    content:SetPoint("BOTTOMRIGHT", self.inset, "BOTTOMRIGHT", -6, 22)
     content:SetBackdrop(BACKDROP_INNER)
     content:SetBackdropColor(unpack(C.contentBg))
     content:SetBackdropBorderColor(0.2, 0.2, 0.25, 0.5)
@@ -376,6 +370,55 @@ function cp:MakeDropdown(parent, label, yOffset, options, getter, setter)
     end
 
     return yOffset - 28
+end
+
+function cp:MakeSoundDropdown(parent, label, yOffset, getter, setter)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetPoint("TOPLEFT", 0, yOffset)
+    row:SetSize(CONTENT_WIDTH, 28)
+
+    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    text:SetPoint("LEFT", 2, 0)
+    text:SetText(label)
+    text:SetTextColor(unpack(C.textNormal))
+
+    local dropdown = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+    dropdown:SetPoint("LEFT", text, "RIGHT", 10, 0)
+    dropdown:SetSize(200, 22)
+
+    dropdown:SetupMenu(function(_, rootDescription)
+        rootDescription:SetScrollMode(220)
+        if not TankAssist.Sounds then
+            rootDescription:CreateRadio("None", function() return true end, function() end)
+            return
+        end
+        local options = TankAssist.Sounds:GetSoundOptions()
+        for _, opt in ipairs(options) do
+            local value, optLabel = opt.value, opt.label
+            rootDescription:CreateRadio(
+                optLabel,
+                function() return getter() == value end,
+                function()
+                    setter(value)
+                    dropdown:OverrideText(optLabel)
+                end
+            )
+        end
+    end)
+
+    dropdown:OverrideText(getter() or "None")
+
+    local previewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    previewBtn:SetPoint("LEFT", dropdown, "RIGHT", 8, 0)
+    previewBtn:SetSize(60, 22)
+    previewBtn:SetText("Preview")
+    previewBtn:SetScript("OnClick", function()
+        if TankAssist.Sounds then
+            TankAssist.Sounds:PlayByName(getter())
+        end
+    end)
+
+    return yOffset - 32
 end
 
 -- ============================================================================
@@ -586,14 +629,14 @@ function cp:RefreshAlertSpellList()
     hSpell:SetTextColor(unpack(C.textMuted))
 
     local hCD = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hCD:SetPoint("LEFT", 230, 2)
+    hCD:SetPoint("LEFT", 240, 2)
     hCD:SetText("CD")
     hCD:SetTextColor(unpack(C.textMuted))
 
-    local hStatus = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hStatus:SetPoint("LEFT", 300, 2)
-    hStatus:SetText("STATUS")
-    hStatus:SetTextColor(unpack(C.textMuted))
+    local hSound = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hSound:SetPoint("LEFT", 310, 2)
+    hSound:SetText("SOUND")
+    hSound:SetTextColor(unpack(C.textMuted))
 
     table.insert(self.alertSpellRows, headerRow)
 
@@ -637,7 +680,7 @@ function cp:RefreshAlertSpellList()
         -- Spell name + ID
         local name = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-        name:SetWidth(185)
+        name:SetWidth(195)
         name:SetJustifyH("LEFT")
         name:SetWordWrap(false)
         local spellName = spellInfo and spellInfo.name or "Unknown"
@@ -646,7 +689,7 @@ function cp:RefreshAlertSpellList()
         -- CD duration (editable)
         local knownCD = sv.KnownCooldowns[spellId]
         local cdBtn = CreateFrame("Button", nil, row, "BackdropTemplate")
-        cdBtn:SetPoint("LEFT", 230, 0)
+        cdBtn:SetPoint("LEFT", 240, 0)
         cdBtn:SetSize(55, 22)
         cdBtn:SetBackdrop(BACKDROP_SMALL)
         cdBtn:SetBackdropColor(0.10, 0.10, 0.14, 1)
@@ -708,19 +751,74 @@ function cp:RefreshAlertSpellList()
             cdText:Show()
         end)
 
-        -- Status
+        -- Availability colour on the spell name (replaces the old status text)
         local isKnown = IsSpellKnown(spellId) or (IsPlayerSpell and IsPlayerSpell(spellId))
-        local status = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        status:SetPoint("LEFT", 300, 0)
         if isKnown then
-            status:SetText("Available")
-            status:SetTextColor(unpack(C.success))
             name:SetTextColor(unpack(C.textNormal))
         else
-            status:SetText("Not available")
-            status:SetTextColor(unpack(C.textMuted))
             name:SetTextColor(unpack(C.textDim))
         end
+
+        -- Per-spell sound dropdown
+        local cdProfile = TankAssist.Addon.db.profile.cooldownAlerts
+        cdProfile.spellSounds = cdProfile.spellSounds or {}
+        local spellIdStr = tostring(spellId)
+
+        local function getSpellSound()
+            return cdProfile.spellSounds[spellIdStr] or "Default"
+        end
+        local function setSpellSound(value)
+            if value == "Default" then
+                cdProfile.spellSounds[spellIdStr] = nil
+            else
+                cdProfile.spellSounds[spellIdStr] = value
+            end
+        end
+
+        local soundDropdown = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+        soundDropdown:SetPoint("LEFT", 310, 0)
+        soundDropdown:SetSize(150, 22)
+
+        soundDropdown:SetupMenu(function(_, root)
+            root:SetScrollMode(220)
+            root:CreateRadio(
+                "Default",
+                function() return getSpellSound() == "Default" end,
+                function()
+                    setSpellSound("Default")
+                    soundDropdown:OverrideText("Default")
+                end
+            )
+            if TankAssist.Sounds then
+                for _, opt in ipairs(TankAssist.Sounds:GetSoundOptions()) do
+                    local v, l = opt.value, opt.label
+                    root:CreateRadio(
+                        l,
+                        function() return getSpellSound() == v end,
+                        function()
+                            setSpellSound(v)
+                            soundDropdown:OverrideText(l)
+                        end
+                    )
+                end
+            end
+        end)
+        soundDropdown:OverrideText(getSpellSound())
+
+        local previewBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        previewBtn:SetPoint("LEFT", soundDropdown, "RIGHT", 4, 0)
+        previewBtn:SetSize(26, 22)
+        previewBtn:SetText("|TInterface\\Common\\VoiceChat-Speaker:0:0:0:0:64:64:0:64:0:64|t")
+        previewBtn:SetScript("OnClick", function()
+            if not TankAssist.Sounds then return end
+            local v = getSpellSound()
+            if v == "Default" then
+                local s = TankAssist.Sounds:GetSettings()
+                TankAssist.Sounds:PlayByName(s and s.cooldownReady or "None")
+            else
+                TankAssist.Sounds:PlayByName(v)
+            end
+        end)
 
         -- Remove button
         local removeBtn = CreateFrame("Button", nil, row)
@@ -824,6 +922,53 @@ function cp:BuildExternalCDsPage(frame)
     note:SetJustifyH("LEFT")
     note:SetText("Pain Suppression, Guardian Spirit, Ironbark, Life Cocoon, Blessing of Sacrifice, Blessing of Protection, Blessing of Spellwarding, Rallying Cry")
     note:SetTextColor(unpack(C.textDim))
+end
+
+-- ============================================================================
+-- Sounds & Alerts Page
+-- ============================================================================
+
+function cp:BuildSoundsPage(frame)
+    local y = 0
+    local db = TankAssist.Addon.db.profile
+
+    y = self:MakeSectionHeader(frame, "Sounds", y)
+
+    y = self:MakeCheckbox(frame, "Enable sounds", y,
+        function() return db.sounds.enabled end,
+        function(v) db.sounds.enabled = v end
+    )
+
+    y = self:MakeDropdown(frame, "Sound channel", y,
+        {
+            { label = "Master", value = "Master" },
+            { label = "SFX", value = "SFX" },
+            { label = "Music", value = "Music" },
+            { label = "Dialog", value = "Dialog" },
+            { label = "Ambience", value = "Ambience" },
+        },
+        function() return db.sounds.channel or "Master" end,
+        function(v) db.sounds.channel = v end
+    )
+
+    y = self:MakeSectionHeader(frame, "Events", y - 10)
+
+    y = self:MakeSoundDropdown(frame, "Cooldown ready", y,
+        function() return db.sounds.cooldownReady or "None" end,
+        function(v) db.sounds.cooldownReady = v end
+    )
+
+    y = self:MakeSoundDropdown(frame, "External applied", y,
+        function() return db.sounds.externalApplied or "None" end,
+        function(v) db.sounds.externalApplied = v end
+    )
+
+    local note = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    note:SetPoint("TOPLEFT", 0, y - 10)
+    note:SetWidth(CONTENT_WIDTH - 10)
+    note:SetJustifyH("LEFT")
+    note:SetText("Sounds are loaded via LibSharedMedia. Addons like WeakAuras and BigWigs add their sounds to this list automatically.")
+    note:SetTextColor(unpack(C.textMuted))
 end
 
 -- ============================================================================

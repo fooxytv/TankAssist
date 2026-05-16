@@ -19,10 +19,6 @@ local function IsInEditMode()
     return EditModeManagerFrame and EditModeManagerFrame.editModeActive
 end
 
--- Try to read a secret boolean from the WoW API. Because secret values block
--- all comparisons and string conversion, we attempt the check inside pcall.
--- If the value is tainted we cannot determine true vs false, so return nil
--- to signal "unknown".
 local function IsSecretTrue(val)
     if val == nil then return false end
     local ok, result = pcall(function() return val == true end)
@@ -71,120 +67,85 @@ function CastBar:Create()
         insets = { left = 0, right = 0, top = 0, bottom = 0 },
     })
 
-    -- Status bar
     self.statusBar = CreateFrame("StatusBar", nil, self.frame)
     self.statusBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
     self.statusBar:SetMinMaxValues(0, 1)
     self.statusBar:SetValue(0)
-
     self.statusBar.bg = self.statusBar:CreateTexture(nil, "BACKGROUND")
     self.statusBar.bg:SetAllPoints()
-
-    -- Spell name (left) — parented to statusBar so text draws above the bar fill
     self.spellName = self.statusBar:CreateFontString(nil, "OVERLAY")
     self.spellName:SetJustifyH("LEFT")
     self.spellName:SetTextColor(1, 1, 1, 1)
-
-    -- Cast time remaining (right)
     self.castTime = self.statusBar:CreateFontString(nil, "OVERLAY")
     self.castTime:SetJustifyH("RIGHT")
     self.castTime:SetTextColor(1, 1, 1, 1)
-
-    -- Border textures
     self.borderTop = self.frame:CreateTexture(nil, "OVERLAY")
     self.borderTop:SetPoint("TOPLEFT", 0, 0)
     self.borderTop:SetPoint("TOPRIGHT", 0, 0)
     self.borderTop:SetHeight(1)
-
     self.borderBottom = self.frame:CreateTexture(nil, "OVERLAY")
     self.borderBottom:SetPoint("BOTTOMLEFT", 0, 0)
     self.borderBottom:SetPoint("BOTTOMRIGHT", 0, 0)
     self.borderBottom:SetHeight(1)
-
     self.borderLeft = self.frame:CreateTexture(nil, "OVERLAY")
     self.borderLeft:SetPoint("TOPLEFT", 0, 0)
     self.borderLeft:SetPoint("BOTTOMLEFT", 0, 0)
     self.borderLeft:SetWidth(1)
-
     self.borderRight = self.frame:CreateTexture(nil, "OVERLAY")
     self.borderRight:SetPoint("TOPRIGHT", 0, 0)
     self.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     self.borderRight:SetWidth(1)
-
-    -- Spell icon
     self.icon = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
     self.icon.texture = self.icon:CreateTexture(nil, "ARTWORK")
     self.icon.texture:SetAllPoints()
     self.icon.texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-
     self.iconBorders = {}
     self.iconBorders.top = self.icon:CreateTexture(nil, "OVERLAY")
     self.iconBorders.top:SetPoint("TOPLEFT", 0, 0)
     self.iconBorders.top:SetPoint("TOPRIGHT", 0, 0)
     self.iconBorders.top:SetHeight(1)
-
     self.iconBorders.bottom = self.icon:CreateTexture(nil, "OVERLAY")
     self.iconBorders.bottom:SetPoint("BOTTOMLEFT", 0, 0)
     self.iconBorders.bottom:SetPoint("BOTTOMRIGHT", 0, 0)
     self.iconBorders.bottom:SetHeight(1)
-
     self.iconBorders.left = self.icon:CreateTexture(nil, "OVERLAY")
     self.iconBorders.left:SetPoint("TOPLEFT", 0, 0)
     self.iconBorders.left:SetPoint("BOTTOMLEFT", 0, 0)
     self.iconBorders.left:SetWidth(1)
-
     self.iconBorders.right = self.icon:CreateTexture(nil, "OVERLAY")
     self.iconBorders.right:SetPoint("TOPRIGHT", 0, 0)
     self.iconBorders.right:SetPoint("BOTTOMRIGHT", 0, 0)
     self.iconBorders.right:SetWidth(1)
-
     self.casting = false
     self.channeling = false
     self.editMode = false
     self.notInterruptible = false
-
     self:ApplySettings()
     self:RegisterEditMode()
     self:RegisterEvents()
-
     self.frame:Hide()
-
     return self.frame
 end
 
 function CastBar:ApplySettings()
     local settings = self:GetSettings()
-
-    -- Dimensions
     self.frame:SetSize(settings.width, settings.height + (settings.textPosition == "ABOVE" and 16 or 0))
     self.frame:SetScale(settings.scale or 1.0)
-
-    -- Background
     local bg = settings.bgColor or { 0.15, 0.15, 0.15, 0.8 }
     self.frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 0.8)
     self.statusBar.bg:SetColorTexture(bg[1], bg[2], bg[3], bg[4] or 0.8)
-
-    -- Status bar position
     self.statusBar:ClearAllPoints()
     self.statusBar:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 1, 1)
     self.statusBar:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -1, 1)
     self.statusBar:SetHeight(settings.height - 2)
-
-    -- Bar color
     self.statusBar:SetStatusBarColor(unpack(settings.interruptibleColor))
-
-    -- Border
     local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
     self:SetBorderColor(bc[1], bc[2], bc[3], 1)
-
-    -- Font
     local fontSize = settings.fontSize or 11
     local fontPath = self:ResolveFontPath(settings.fontFace)
     local fontFlag = self:ResolveFontFlag(settings.fontFlag)
     self.spellName:SetFont(fontPath, fontSize, fontFlag)
     self.castTime:SetFont(fontPath, fontSize, fontFlag)
-
-    -- Text visibility
     if settings.showSpellName == false then
         self.spellName:Hide()
     else
@@ -195,19 +156,11 @@ function CastBar:ApplySettings()
     else
         self.castTime:Show()
     end
-
-    -- Bar texture
     local barTexturePath = self:ResolveBarTexture(settings.barTexture)
     self.statusBar:SetStatusBarTexture(barTexturePath)
-
-    -- Text alignment
     self.spellName:SetJustifyH(settings.nameAlignment or "LEFT")
     self.castTime:SetJustifyH(settings.timerAlignment or "RIGHT")
-
-    -- Text position
     self:ApplyTextPosition()
-
-    -- Icon layout
     self:ApplyIconLayout()
 end
 
@@ -235,7 +188,6 @@ end
 function CastBar:ApplyTextPosition()
     local settings = self:GetSettings()
     local textPos = settings.textPosition or "ABOVE"
-
     self.spellName:ClearAllPoints()
     self.castTime:ClearAllPoints()
 
@@ -257,7 +209,6 @@ function CastBar:ApplyIconLayout()
     if showIcon == nil then showIcon = true end
     local iconPos = settings.iconPosition or "LEFT"
     local iconSize = settings.height
-
     self.statusBar:ClearAllPoints()
 
     if not showIcon then
@@ -412,11 +363,9 @@ end
 function CastBar:StartEmpower(unit)
     if unit ~= self.unit then return end
 
-    -- Empowered casts are channels internally — try UnitChannelInfo first
     local name, _, texture, _, _, _, notInterruptible = UnitChannelInfo(self.unit)
     local isChannel = true
     if not name then
-        -- Fallback to UnitCastingInfo in case the API varies by context
         name, _, texture, _, _, _, _, notInterruptible = UnitCastingInfo(self.unit)
         isChannel = false
     end
@@ -544,7 +493,6 @@ function CastBar:RegisterEvents()
     self.eventFrame = CreateFrame("Frame")
 
     if self.unit == "player" then
-        -- Use RegisterUnitEvent for efficiency — only fires for "player"
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
         self.eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
@@ -575,7 +523,6 @@ function CastBar:RegisterEvents()
             end
         end)
     else
-        -- Target bar: generic events filtered by unit, plus target change
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_START")
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_STOP")
         self.eventFrame:RegisterEvent("UNIT_SPELLCAST_FAILED")
@@ -628,13 +575,9 @@ function CastBar:OnInterrupted()
     self.casting = false
     self.channeling = false
     self.interrupted = true
-
-    -- Freeze the bar and stop the normal OnUpdate
     self.frame:SetScript("OnUpdate", nil)
     self.frame:SetAlpha(1)
     self.frame:Show()
-
-    -- Fade out over the linger duration
     local lingerDuration = 0.8
     local fadeDuration = 0.4
     local self_ref = self
@@ -651,15 +594,12 @@ function CastBar:OnInterrupted()
             end
             return
         end
-        -- Start fading after the linger period
         if elapsed > lingerDuration then
             local fadeProgress = (elapsed - lingerDuration) / fadeDuration
             frame:SetAlpha(1 - fadeProgress)
         end
     end)
 end
-
--- Edit Mode Integration
 
 function CastBar:RegisterEditMode()
     if not self.frame then return end
@@ -675,7 +615,6 @@ function CastBar:BuildLEMSettings()
     local self_ref = self
 
     local settings = {
-        -- General
         {
             order = 99,
             name = "Enabled",
@@ -692,7 +631,6 @@ function CastBar:BuildLEMSettings()
         },
     }
 
-    -- Player-only: option to hide Blizzard's default cast bar
     if self.unit == "player" then
         table.insert(settings, {
             order = 99.5,
@@ -758,7 +696,6 @@ function CastBar:BuildLEMSettings()
                 self_ref:SetBarHeight(value)
             end,
         },
-        -- Colors divider
         {
             order = 200,
             name = "Colors",
@@ -1010,7 +947,6 @@ function CastBar:BuildLEMSettings()
                 self_ref:ApplySettings()
             end,
         },
-        -- Icon divider
         {
             order = 400,
             name = "Icon",
@@ -1241,8 +1177,6 @@ function CastBar:OnEditModeExit()
     end
 end
 
--- Visibility
-
 function CastBar:IsEnabled()
     local enabled = self:GetSettings().enabled
     if enabled == nil then return true end
@@ -1305,8 +1239,6 @@ function CastBar:UpdateDisabledVisual()
     end
 end
 
--- Size setters
-
 function CastBar:SetBarScale(scale)
     if self.frame then
         self.frame:SetScale(scale)
@@ -1329,8 +1261,6 @@ end
 function CastBar:IsInEditMode()
     return self.editMode or (EditModeManagerFrame and EditModeManagerFrame.editModeActive)
 end
-
--- Initialization
 
 local function Initialize()
     if TankAssist.Addon then

@@ -23,8 +23,6 @@ local function IsInEditMode()
     return EditModeManagerFrame and EditModeManagerFrame.editModeActive
 end
 
--- External defensive cooldowns from healers/allies
--- fallbackIcon: guaranteed texture path in case C_Spell.GetSpellInfo returns nil for cross-class spells
 ec.EXTERNALS = {
     { spellId = 33206,  name = "Pain Suppression",        source = "Discipline Priest",   fallbackIcon = "Interface\\Icons\\Spell_Holy_PainSupression" },
     { spellId = 47788,  name = "Guardian Spirit",          source = "Holy Priest",          fallbackIcon = "Interface\\Icons\\Spell_Holy_GuardianSpirit" },
@@ -36,7 +34,6 @@ ec.EXTERNALS = {
     { spellId = 97462,  name = "Rallying Cry",             source = "Warrior",              fallbackIcon = "Interface\\Icons\\Ability_Warrior_RallyingCry" },
 }
 
--- Detect an external buff on the player (not restricted to self-cast)
 function ec:GetExternalBuffInfo(spellId)
     local result = {
         exists = false,
@@ -90,11 +87,9 @@ end
 
 function ec:Create()
     local settings = self:GetSettings()
-
     self.frame = CreateFrame("Frame", "TankAssistExternalCooldowns", UIParent)
     self.frame:SetSize(1, 1) -- Resized dynamically based on active icons
     self.frame.editModeName = "External Cooldowns"
-
     local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
     local pos = settings.position or {}
     if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
@@ -105,50 +100,35 @@ function ec:Create()
     end
     self.frame:SetScale(settings.scale or 1.0)
     self.frame:SetClampedToScreen(true)
-
     self.icons = {}
     self.activeCount = 0
     self.editMode = false
     self.inCombat = UnitAffectingCombat("player") or false
-
     self:RegisterEditMode()
     self:RegisterEvents()
-
     self.frame:Hide()
-
     return self.frame
 end
 
 function ec:CreateExternalIcon()
     local settings = self:GetSettings()
     local size = settings.iconSize
-
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetSize(size, size + 15)
-
-    -- Icon container
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
-
-    -- Background
     frame.icon.bg = frame.icon:CreateTexture(nil, "BACKGROUND")
     frame.icon.bg:SetAllPoints()
     frame.icon.bg:SetColorTexture(0, 0, 0, 0.6)
-
-    -- Spell texture
     frame.icon.texture = frame.icon:CreateTexture(nil, "ARTWORK")
     frame.icon.texture:SetPoint("TOPLEFT", 2, -2)
     frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    -- Cooldown sweep
     frame.cooldown = CreateFrame("Cooldown", nil, frame.icon, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon.texture)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
-
-    -- Border color (configurable via Edit Mode settings)
     local saved = self:GetSettings().borderColor or { r = 0.2, g = 0.8, b = 0.3, a = 1 }
     local borderColor = { saved.r or 0.2, saved.g or 0.8, saved.b or 0.3, saved.a or 1 }
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
@@ -156,47 +136,34 @@ function ec:CreateExternalIcon()
     frame.icon.borderTop:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderTop:SetHeight(1)
     frame.icon.borderTop:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderBottom = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderBottom:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderBottom:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderBottom:SetHeight(1)
     frame.icon.borderBottom:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderLeft = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderLeft:SetPoint("TOPLEFT", 0, 0)
     frame.icon.borderLeft:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderLeft:SetWidth(1)
     frame.icon.borderLeft:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderRight = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderRight:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
-
-    -- Timer text — inside icon (centered, large)
     frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
     frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.timerInside:SetTextColor(1, 1, 1, 1)
-
-    -- Timer text — below icon (original style)
     frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
     frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timerBelow:SetTextColor(1, 1, 1, 1)
-
-    -- Keep .timer as alias for backward compat
     frame.timer = frame.timerBelow
-
-    -- Spell name text (for ICON_NAME display mode)
     frame.spellName = frame:CreateFontString(nil, "OVERLAY")
     frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     frame.spellName:SetTextColor(1, 1, 1, 1)
     frame.spellName:SetWordWrap(false)
-
-    -- Tooltip on hover
     frame.icon:EnableMouse(true)
     frame.icon:SetScript("OnEnter", function(self)
         if frame.spellId then
@@ -222,19 +189,24 @@ end
 
 function ec:Update()
     if self.editMode then return end
-
     local settings = self:GetSettings()
     if settings.showOnlyInCombat and not self.inCombat then
         self.frame:Hide()
         return
     end
-
     local activeExternals = {}
     local now = GetTime()
+
+    self.previouslyActive = self.previouslyActive or {}
+    local seenThisFrame = {}
 
     for _, ext in ipairs(self.EXTERNALS) do
         local info = self:GetExternalBuffInfo(ext.spellId)
         if info.exists then
+            seenThisFrame[ext.spellId] = true
+            if not self.previouslyActive[ext.spellId] and TankAssist.Sounds then
+                TankAssist.Sounds:Play("externalApplied")
+            end
             table.insert(activeExternals, {
                 spellId = ext.spellId,
                 name = ext.name,
@@ -246,6 +218,8 @@ function ec:Update()
             })
         end
     end
+
+    self.previouslyActive = seenThisFrame
 
     if #activeExternals == 0 then
         self.frame:Hide()
@@ -270,14 +244,10 @@ function ec:Update()
 
     for i, ext in ipairs(activeExternals) do
         local icon = self:GetIcon(i)
-
-        -- Hide both timers, then show the active one as needed
         icon.timerInside:Hide()
         icon.timerInside:SetText("")
         icon.timerBelow:Hide()
         icon.timerBelow:SetText("")
-
-        -- Update icon size
         if displayMode == "NAME_ONLY" then
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
@@ -286,18 +256,12 @@ function ec:Update()
             icon.icon:SetSize(iconSize, iconSize)
             icon.icon:Show()
         end
-
-        -- Position
         icon:ClearAllPoints()
         icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconWidth + spacing), 0)
-
-        -- Spell texture (with fallback for cross-class spells)
         local spellInfo = C_Spell.GetSpellInfo(ext.spellId)
         local spellIcon = spellInfo and spellInfo.iconID
         icon.icon.texture:SetTexture(spellIcon or ext.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = ext.spellId
-
-        -- Spell name display
         icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
             if timerPosition == "BELOW" then
@@ -314,8 +278,6 @@ function ec:Update()
             icon.spellName:SetText("")
             icon.spellName:Hide()
         end
-
-        -- Cooldown sweep and timer
         if not ext.isSecret and ext.duration > 0 and ext.expirationTime > 0 then
             local startTime = ext.expirationTime - ext.duration
             icon.cooldown:SetCooldown(startTime, ext.duration)
@@ -364,8 +326,6 @@ function ec:Update()
     self.activeCount = #activeExternals
     self.frame:Show()
 end
-
--- Edit Mode
 
 function ec:RegisterEditMode()
     if not self.frame then return end
@@ -667,19 +627,15 @@ function ec:OnEditModeEnter()
     if not self.frame then return end
     self.editMode = true
     self.frame:SetMovable(true)
-
-    -- Show 2 placeholder icons: Pain Suppression + Ironbark
     local placeholders = {
         self.EXTERNALS[1], -- Pain Suppression
         self.EXTERNALS[3], -- Ironbark
     }
-
     local settings = self:GetSettings()
     local iconSize = settings.iconSize
     local displayMode = settings.displayMode or "ICON_ONLY"
     local timerPosition = settings.timerPosition or "BELOW"
     local spacing = 4
-
     local iconWidth = iconSize
     if displayMode == "ICON_NAME" then
         iconWidth = iconSize + 50
@@ -717,10 +673,7 @@ function ec:OnEditModeEnter()
         icon.icon.texture:SetTexture(spellIcon or ph.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = ph.spellId
         icon.cooldown:Clear()
-
-        -- Timer display
         if displayMode == "NAME_ONLY" then
-            -- handled below with spell name
         elseif timerPosition == "BELOW" then
             icon.timerBelow:SetText(fakeTimer)
             icon.timerBelow:SetTextColor(1, 1, 1, 1)
@@ -731,7 +684,6 @@ function ec:OnEditModeEnter()
             icon.timerInside:Show()
         end
 
-        -- Spell name display
         local spellName = spellInfo and spellInfo.name or ph.name
         icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
@@ -756,7 +708,6 @@ function ec:OnEditModeEnter()
         icon:Show()
     end
 
-    -- Hide extra icons
     for i = #placeholders + 1, #self.icons do
         self.icons[i]:Hide()
     end
@@ -774,11 +725,8 @@ function ec:OnEditModeExit()
     if self.selection and not IsLibEQOLAvailable() then
         self.selection:Hide()
     end
-    -- Hide frame; Update() will show it again if externals are active
     self.frame:Hide()
 end
-
--- Visibility / Settings
 
 function ec:IsEnabled()
     local enabled = self:GetSettings().enabled
@@ -814,7 +762,6 @@ end
 function ec:SetIconSize(size)
     if not self.frame then return end
     self:GetSettings().iconSize = size
-    -- Icons will be resized on next Update() or edit mode refresh
     if self.editMode then
         self:OnEditModeEnter()
     end
@@ -837,8 +784,6 @@ function ec:IsInEditMode()
     return self.editMode or (EditModeManagerFrame and EditModeManagerFrame.editModeActive)
 end
 
--- Events
-
 function ec:RegisterEvents()
     local self_ref = self
     self.eventFrame = CreateFrame("Frame")
@@ -849,7 +794,6 @@ function ec:RegisterEvents()
 
     self.eventFrame:SetScript("OnEvent", function(_, event, unit)
         if event == "UNIT_AURA" and unit == "player" then
-            -- Immediate update on aura change (the 0.1s ticker also calls Update)
             if self_ref:IsEnabled() and not self_ref.editMode then
                 self_ref:Update()
             end
@@ -857,15 +801,12 @@ function ec:RegisterEvents()
             self_ref.inCombat = true
         elseif event == "PLAYER_REGEN_ENABLED" then
             self_ref.inCombat = false
-            -- Re-evaluate visibility for showOnlyInCombat
             if self_ref:GetSettings().showOnlyInCombat and not self_ref.editMode then
                 self_ref.frame:Hide()
             end
         end
     end)
 end
-
--- Initialization
 
 local function Initialize()
     if TankAssist.Addon then

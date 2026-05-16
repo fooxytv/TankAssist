@@ -48,9 +48,9 @@ fi
 if command -v claude &> /dev/null; then
     echo "Generating changelog with Claude Code..."
 
-    diff_output=$(git diff "$last_tag"..HEAD --stat)
-    commit_log=$(git log "$last_tag"..HEAD --pretty=format:"- %s" --no-merges)
-    changed_files=$(git diff "$last_tag"..HEAD --name-only)
+    commit_log=$(git log "$last_tag"..HEAD --pretty=format:"- %h %s" --no-merges)
+    # Get the actual diff (truncated to avoid exceeding token limits)
+    code_diff=$(git diff "$last_tag"..HEAD -- '*.lua' '*.toc' '*.yaml' '*.sh' | head -500)
 
     changelog_prompt="Generate a changelog entry for version $new_version of a WoW tank addon called TankAssist.
 
@@ -59,13 +59,15 @@ Previous tag: $last_tag
 Commits since last release:
 $commit_log
 
-Files changed:
-$changed_files
+Code diff (may be truncated):
+$code_diff
 
-Diff stats:
-$diff_output
+Rules:
+- Describe the ACTUAL features, changes, and fixes based on the code diff — not just the commit messages
+- Ignore version bump commits
+- If the diff shows new functions, events, UI elements etc, describe what they do for the user
+- Output ONLY the changelog in this exact format (no extra text):
 
-Output ONLY the changelog section in this exact format (no extra text):
 ## [$new_version] - $(date +%Y-%m-%d)
 
 ### Added
@@ -77,7 +79,7 @@ Output ONLY the changelog section in this exact format (no extra text):
 ### Fixed
 - (list bug fixes, or remove section if none)
 
-Be concise. Group related changes. Skip empty sections."
+Be concise. Group related changes. Skip empty sections entirely."
 
     changelog_entry=$(echo "$changelog_prompt" | claude --print 2>/dev/null || echo "")
 
@@ -131,12 +133,17 @@ if [[ -z "$zip_file" ]]; then
     echo "Warning: No zip file found in ci/dist/, skipping GitHub release asset upload."
 fi
 
-# Build release notes from changelog entry
+# Build release notes from changelog entry or fall back to commit log
 release_notes=""
 if [[ -n "${changelog_entry:-}" ]]; then
     release_notes="$changelog_entry"
 else
-    release_notes="Release $new_version"
+    commit_log_fallback=$(git log "$last_tag"..HEAD --pretty=format:"- %s" --no-merges | grep -v "Bump version")
+    if [[ -n "$commit_log_fallback" ]]; then
+        release_notes="## [$new_version] - $(date +%Y-%m-%d)"$'\n\n'"$commit_log_fallback"
+    else
+        release_notes="TankAssist $new_version"
+    fi
 fi
 
 # Create GitHub release with the tag
@@ -145,7 +152,7 @@ if command -v gh &> /dev/null; then
 
     gh_args=(
         "$new_tag"
-        --title "Release $new_version"
+        --title "TankAssist $new_version"
         --notes "$release_notes"
     )
 

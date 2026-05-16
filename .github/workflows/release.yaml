@@ -111,7 +111,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
+          name: TankAssist ${{ steps.version.outputs.version }}
           body: ${{ env.CHANGELOG }}
           files: ${{ steps.artifact.outputs.zip }}
           prerelease: false

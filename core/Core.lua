@@ -143,13 +143,15 @@ local defaults = {
             trackedSpells = {},
             trackedSpellsBySpec = {},
             customCooldowns = {},
+            spellSounds = {},
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
         },
         specs = {},
         sounds = {
             enabled = true,
-            buffExpiring = "Interface\\AddOns\\TankAssist\\Sounds\\warning.ogg",
-            cooldownReady = "Interface\\AddOns\\TankAssist\\Sounds\\ready.ogg",
+            channel = "Master",
+            cooldownReady = "None",
+            externalApplied = "None",
         },
     },
 }
@@ -575,7 +577,6 @@ function addon:HandleSlashCommand(msg)
             print("    GetResource('HOLY_POWER'):", holyPower)
 
         elseif subCmd == "tracking" or subCmd == "cooldowns" then
-            -- If "on" or "off" follows, toggle live tracking debug
             local toggleArg = args[3]
             if toggleArg == "on" then
                 TankAssist.SecretValues:SetDebugTracking(true)
