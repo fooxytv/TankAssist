@@ -31,8 +31,7 @@ local DISPLAY_MODES = {
 
 local READY_FLASH_DURATION = 2.0
 
--- State tracking
-ca.spellStates = {}  -- [spellId] = { wasOnCooldown, readyFlashTime }
+ca.spellStates = {}
 ca.lastSoundTime = 0
 
 function ca:GetSettings()
@@ -94,15 +93,10 @@ function ca:Create()
     self.activeCount = 0
     self.editMode = false
     self.inCombat = UnitAffectingCombat("player") or false
-
-    -- Init spell states for tracked spells
     self:InitSpellStates()
-
     self:RegisterEditMode()
     self:RegisterEvents()
-
     self.frame:Hide()
-
     return self.frame
 end
 
@@ -110,8 +104,6 @@ function ca:InitSpellStates()
     self.spellStates = {}
     self.unavailableSpells = {}
     local settings = self:GetSettings()
-
-    -- Apply any user-customized cooldown durations from saved settings
     local customCDs = settings.customCooldowns
     if customCDs then
         for spellIdStr, duration in pairs(customCDs) do
@@ -121,15 +113,12 @@ function ca:InitSpellStates()
             end
         end
     end
-
-    -- Cache spell info (icons, names) so we never call C_Spell APIs in combat
     self.spellCache = {}
 
     local trackedSpells = self:GetTrackedSpells()
     for _, spellId in ipairs(trackedSpells) do
         self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
         self:EnsureSpellRegistered(spellId)
-        -- Cache spell name and icon for all tracked spells
         self:CacheSpellInfo(spellId)
     end
 end
@@ -142,7 +131,6 @@ function ca:CacheSpellInfo(spellId)
             icon = info.iconID,
         }
     elseif not self.spellCache[spellId] then
-        -- Placeholder — will be refreshed later by lazy re-cache
         self.spellCache[spellId] = {
             name = "Unknown",
             icon = 134400,
@@ -151,13 +139,10 @@ function ca:CacheSpellInfo(spellId)
     end
 end
 
--- Register a spell's cooldown duration in SecretValues.KnownCooldowns
--- so that GetTrackedCooldown can track it via cast events
+
 function ca:EnsureSpellRegistered(spellId)
     local sv = TankAssist.SecretValues
     if sv.KnownCooldowns[spellId] then return end
-
-    -- Try to read the CD duration from the API (works reliably out of combat / at init)
     local cdInfo = C_Spell.GetSpellCooldown(spellId)
     if cdInfo and cdInfo.duration then
         local ok, isReal = pcall(function()
@@ -169,9 +154,7 @@ function ca:EnsureSpellRegistered(spellId)
         end
     end
 
-    -- Fallback: look up from CooldownAlertDefaults and use well-known durations
     local knownDurations = {
-        -- Interrupts (15s baseline)
         [6552]   = 15,  -- Pummel
         [96231]  = 15,  -- Rebuke
         [47528]  = 15,  -- Mind Freeze
@@ -203,30 +186,20 @@ function ca:CreateAlertIcon()
 
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetSize(size, size + 15)
-
-    -- Icon container (matches ExternalCooldowns structure)
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
-
-    -- Background
     frame.icon.bg = frame.icon:CreateTexture(nil, "BACKGROUND")
     frame.icon.bg:SetAllPoints()
     frame.icon.bg:SetColorTexture(0, 0, 0, 0.6)
-
-    -- Spell texture
     frame.icon.texture = frame.icon:CreateTexture(nil, "ARTWORK")
     frame.icon.texture:SetPoint("TOPLEFT", 2, -2)
     frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    -- Cooldown sweep
     frame.cooldown = CreateFrame("Cooldown", nil, frame.icon, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon.texture)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
-
-    -- Border color (configurable via Edit Mode settings)
     local saved = self:GetSettings().borderColor or { r = 0.9, g = 0.7, b = 0.2, a = 1 }
     local borderColor = { saved.r or 0.9, saved.g or 0.7, saved.b or 0.2, saved.a or 1 }
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
@@ -234,58 +207,43 @@ function ca:CreateAlertIcon()
     frame.icon.borderTop:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderTop:SetHeight(1)
     frame.icon.borderTop:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderBottom = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderBottom:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderBottom:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderBottom:SetHeight(1)
     frame.icon.borderBottom:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderLeft = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderLeft:SetPoint("TOPLEFT", 0, 0)
     frame.icon.borderLeft:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderLeft:SetWidth(1)
     frame.icon.borderLeft:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderRight = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderRight:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
-
-    -- Timer text — inside icon (centered, large)
     frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
     frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.timerInside:SetTextColor(1, 1, 1, 1)
-
-    -- Timer text — below icon (matches ExternalCooldowns style)
     frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
     frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timerBelow:SetTextColor(1, 1, 1, 1)
-
-    -- Spell name text (anchored below timer when timer is below, or below icon when timer is inside)
     frame.spellName = frame:CreateFontString(nil, "OVERLAY")
     frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     frame.spellName:SetTextColor(1, 1, 1, 1)
     frame.spellName:SetWordWrap(false)
-
-    -- Ready flash overlay
     frame.readyFlash = frame.icon:CreateTexture(nil, "OVERLAY", nil, 7)
     frame.readyFlash:SetAllPoints(frame.icon.texture)
     frame.readyFlash:SetColorTexture(0.2, 1, 0.2, 0.5)
     frame.readyFlash:Hide()
-
-    -- Ready text
     frame.readyText = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.readyText:SetFont("Fonts\\FRIZQT__.TTF", 12, "THICKOUTLINE")
     frame.readyText:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.readyText:SetTextColor(0.2, 1, 0.2, 1)
     frame.readyText:SetText("READY")
     frame.readyText:Hide()
-
-    -- Tooltip on hover
     frame.icon:EnableMouse(true)
     frame.icon:SetScript("OnEnter", function(self)
         if frame.spellId then
@@ -333,17 +291,12 @@ function ca:Update()
     local sv = TankAssist.SecretValues
 
     for _, spellId in ipairs(trackedSpells) do
-        -- Skip spells flagged as unavailable (checked at init)
         if self.unavailableSpells and self.unavailableSpells[spellId] then
-            -- skip
         else
-            -- Init state if missing (no API calls here)
             if not self.spellStates[spellId] then
                 self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
             end
             local state = self.spellStates[spellId]
-
-            -- Pure math — uses our own tracked castTime + duration
             local tracked = sv.trackedCooldowns[spellId]
             local remaining = 0
             local onCooldown = false
@@ -360,17 +313,17 @@ function ca:Update()
             local showIcon = false
             local isReady = false
 
-            -- CD→ready transition
             if state.wasOnCooldown and not onCooldown then
                 state.readyFlashTime = now
+                if TankAssist.Sounds then
+                    TankAssist.Sounds:PlayForSpell(spellId, "cooldownReady")
+                end
             end
 
-            -- Show countdown during last N seconds
             if alertStyle ~= "READY_ONLY" and onCooldown and remaining <= countdownDuration then
                 showIcon = true
             end
 
-            -- Show READY flash for 2 seconds after coming off CD
             if alertStyle ~= "COUNTDOWN_ONLY" then
                 if state.readyFlashTime > 0 and (now - state.readyFlashTime) < READY_FLASH_DURATION then
                     showIcon = true
@@ -403,7 +356,6 @@ function ca:Update()
         return
     end
 
-    -- Use tighter spacing when all icons are ready flashes
     local allReady = true
     for _, data in ipairs(activeIcons) do
         if not data.isReady then
@@ -420,7 +372,6 @@ function ca:Update()
         iconWidth = 80
     end
 
-    -- Overlap icons slightly when 3+ ready flashes at once
     if allReady and #activeIcons >= 3 and displayMode ~= "NAME_ONLY" then
         spacing = -(iconSize * 0.2)
     end
@@ -436,14 +387,10 @@ function ca:Update()
 
     for i, data in ipairs(activeIcons) do
         local icon = self:GetIcon(i)
-
-        -- Hide both timers, then show the active one as needed
         icon.timerInside:Hide()
         icon.timerInside:SetText("")
         icon.timerBelow:Hide()
         icon.timerBelow:SetText("")
-
-        -- Update icon sizing
         if displayMode == "NAME_ONLY" then
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
@@ -453,11 +400,9 @@ function ca:Update()
             icon.icon:Show()
         end
 
-        -- Position
         icon:ClearAllPoints()
         icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconWidth + spacing), 0)
 
-        -- Spell texture (from cache — lazy re-cache out of combat if needed)
         local cached = self.spellCache and self.spellCache[data.spellId]
         if (not cached or cached.needsRefresh) and not self.inCombat then
             self:CacheSpellInfo(data.spellId)
@@ -467,8 +412,6 @@ function ca:Update()
         local spellName = cached and cached.name or ""
         icon.icon.texture:SetTexture(spellIcon)
         icon.spellId = data.spellId
-
-        -- Anchor spell name based on timer position and display mode
         icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
             if timerPosition == "BELOW" then
@@ -487,7 +430,6 @@ function ca:Update()
             icon.spellName:Hide()
         end
 
-        -- Ready flash or countdown
         if data.isReady then
             icon.cooldown:Clear()
             icon.readyFlash:Show()
@@ -539,8 +481,6 @@ function ca:Update()
     self.frame:Show()
 end
 
--- Spell management
-
 function ca:AddTrackedSpell(spellId)
     local trackedSpells = self:GetTrackedSpells()
     for _, id in ipairs(trackedSpells) do
@@ -585,7 +525,6 @@ function ca:LoadSpecDefaults()
         return
     end
 
-    -- Clear existing spells and load fresh defaults for this spec
     local settings = self:GetSettings()
     if not settings.trackedSpellsBySpec then
         settings.trackedSpellsBySpec = {}
@@ -610,8 +549,6 @@ function ca:LoadSpecDefaults()
         print(string.format("  %s (ID: %d)", spellName, spellId))
     end
 end
-
--- Edit Mode
 
 function ca:RegisterEditMode()
     if not self.frame then return end
@@ -974,9 +911,7 @@ function ca:OnEditModeEnter()
     local displayMode = settings.displayMode or "ICON_ONLY"
     local spacing = 4
     local placeholderCount = 3
-
-    -- Placeholder spell IDs for display
-    local placeholderSpells = { 871, 12975, 6552 } -- Shield Wall, Last Stand, Pummel
+    local placeholderSpells = { 871, 12975, 6552 }
     local specId = TankAssist.Utils:GetCurrentSpec()
     if specId and TankAssist.Constants.CooldownAlertDefaults[specId] then
         placeholderSpells = TankAssist.Constants.CooldownAlertDefaults[specId]
@@ -1019,8 +954,6 @@ function ca:OnEditModeEnter()
         icon.icon.texture:SetTexture(spellIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = spellId
         icon.cooldown:Clear()
-
-        -- Fake countdown for edit mode preview
         local fakeTimer = string.format("%.1f", 1.5 + i * 0.5)
         icon.timerInside:Hide()
         icon.timerInside:SetText("")
@@ -1061,7 +994,6 @@ function ca:OnEditModeEnter()
         icon:Show()
     end
 
-    -- Hide extra icons
     for i = placeholderCount + 1, #self.icons do
         self.icons[i]:Hide()
     end
@@ -1081,8 +1013,6 @@ function ca:OnEditModeExit()
     end
     self.frame:Hide()
 end
-
--- Visibility / Settings
 
 function ca:IsEnabled()
     local enabled = self:GetSettings().enabled
@@ -1143,9 +1073,6 @@ end
 -- Events
 
 function ca:OnTrackedSpellCast(spellId)
-    -- Called on UNIT_SPELLCAST_SUCCEEDED for player casts
-    -- Checks if this is a tracked spell and starts our own countdown timer
-    -- No WoW API calls — just records GetTime() + known duration
     local sv = TankAssist.SecretValues
     local trackedSpells = self:GetTrackedSpells()
 
@@ -1187,8 +1114,6 @@ function ca:RegisterEvents()
     end)
 
 end
-
--- Initialization
 
 local function Initialize()
     if TankAssist.Addon then

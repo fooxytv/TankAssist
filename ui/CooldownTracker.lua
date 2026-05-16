@@ -43,55 +43,44 @@ end
 function ct:CreateCooldownIcon(index)
     local settings = TankAssist.Addon.db.profile.cooldowns
     local size = settings.iconSize
-
     local frame = CreateFrame("Frame", nil, self.iconsContainer)
     frame:SetSize(size, size + 15)
-
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
-
     frame.icon.bg = frame.icon:CreateTexture(nil, "BACKGROUND")
     frame.icon.bg:SetAllPoints()
     frame.icon.bg:SetColorTexture(0, 0, 0, 0.6)
-
     frame.icon.texture = frame.icon:CreateTexture(nil, "ARTWORK")
     frame.icon.texture:SetPoint("TOPLEFT", 2, -2)
     frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
     frame.cooldown = CreateFrame("Cooldown", nil, frame.icon, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon.texture)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
-
     frame.icon.border = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.border:SetPoint("TOPLEFT", -1, 1)
     frame.icon.border:SetPoint("BOTTOMRIGHT", 1, -1)
     frame.icon.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     frame.icon.border:SetBlendMode("ADD")
-
     frame.charges = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.charges:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     frame.charges:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", -2, 2)
     frame.charges:SetTextColor(1, 1, 1, 1)
-
     frame.keybind = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
     frame.keybind:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 2, -2)
     frame.keybind:SetTextColor(1, 1, 0.8, 1)
-
     frame.timer = frame:CreateFontString(nil, "OVERLAY")
     frame.timer:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.timer:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timer:SetTextColor(1, 1, 1, 1)
-
     frame.readyFlash = frame.icon:CreateTexture(nil, "OVERLAY", nil, 7)
     frame.readyFlash:SetAllPoints()
     frame.readyFlash:SetTexture("Interface\\Cooldown\\star4")
     frame.readyFlash:SetBlendMode("ADD")
     frame.readyFlash:SetAlpha(0)
-
     frame.icon:SetScript("OnEnter", function(self)
         if frame.cdData and frame.cdData.spellId then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -104,7 +93,6 @@ function ct:CreateCooldownIcon(index)
     end)
     frame:EnableMouse(true)
     frame.icon:EnableMouse(true)
-
     frame.readyAnim = frame.readyFlash:CreateAnimationGroup()
     local fadeIn = frame.readyAnim:CreateAnimation("Alpha")
     fadeIn:SetFromAlpha(0)
@@ -116,17 +104,14 @@ function ct:CreateCooldownIcon(index)
     fadeOut:SetToAlpha(0)
     fadeOut:SetDuration(0.5)
     fadeOut:SetOrder(2)
-
     return frame
 end
 
 function ct:SetCooldowns(cooldowns)
     self.trackedCooldowns = cooldowns or {}
-
     local settings = TankAssist.Addon.db.profile.cooldowns
     local iconSize = settings.iconSize
     local spacing = 6
-
     local grouped = {
         MAJOR = {},
         DEFENSIVE = {},
