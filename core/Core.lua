@@ -39,6 +39,14 @@ end
 local addon = TankAssist.Addon
 addon.specModules = {}
 
+-- Chat color helpers (kept subtle). Format: prefix .. text .. C_END.
+local C_CMD = "|cFF00CCFF" -- cyan: command/keyword (matches addon prefix)
+local C_ON  = "|cFF40D040" -- green: on/enabled/success
+local C_OFF = "|cFFE85050" -- red: off/disabled
+local C_DIM = "|cFF888888" -- gray: dim descriptive text
+local C_HI  = "|cFFFFD100" -- yellow: highlighted value
+local C_END = "|r"
+
 local defaults = {
     profile = {
         enabled = true,
@@ -145,6 +153,14 @@ local defaults = {
             customCooldowns = {},
             spellSounds = {},
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
+        },
+        consumableCheck = {
+            enabled = true,
+            iconSize = 40,
+            scale = 1.0,
+            alsoOutsideInstances = false,
+            borderColor = { r = 0.5, g = 0.5, b = 0.55, a = 1 },
+            position = { point = "TOP", relativePoint = "TOP", x = 0, y = -180 },
         },
         specs = {},
         sounds = {
@@ -434,6 +450,7 @@ function addon:SetupUI()
     self.buffMaintenance = nil
     self.externalCooldowns = nil
     self.cooldownAlerts = nil
+    self.consumableCheck = nil
 end
 
 function addon:UpdateUIForSpec()
@@ -504,22 +521,18 @@ function addon:HandleSlashCommand(msg)
         table.insert(args, word:lower())
     end
     
-    local cmd = args[1] or "help"
-    if cmd == "toggle" then
-        self.db.profile.enabled = not self.db.profile.enabled
-        self:Print("TankAssist " .. (self.db.profile.enabled and "enabled" or "disabled"))
-        self:UpdateVisibility()
-        
-    elseif cmd == "edit" or cmd == "lock" or cmd == "unlock" then
-        self:Print("To reposition TankAssist, use WoW's Edit Mode:")
-        print("  1. Press Escape")
-        print("  2. Click 'Edit Mode'")
-        print("  3. Drag the TankAssist frame")
-        print("  4. Click 'Save Changes' when done")
-        
-    elseif cmd == "config" or cmd == "options" then
+    local cmd = args[1]
+    if not cmd or cmd == "" or cmd == "config" or cmd == "options" then
         TankAssist.ConfigPanel:Toggle()
-        
+
+    elseif cmd == "toggle" then
+        self.db.profile.enabled = not self.db.profile.enabled
+        local state = self.db.profile.enabled
+            and (C_ON .. "enabled" .. C_END)
+            or  (C_OFF .. "disabled" .. C_END)
+        self:Print("TankAssist " .. state)
+        self:UpdateVisibility()
+
     elseif cmd == "debug" then
         local subCmd = args[2]
         if subCmd == "utility" or subCmd == "utilities" then
@@ -527,12 +540,13 @@ function addon:HandleSlashCommand(msg)
             if self.activeSpecModule then
                 local enabled = not self.activeSpecModule.debugUtilities
                 self.activeSpecModule.debugUtilities = enabled
-                self:Print("Utility debug " .. (enabled and "enabled" or "disabled"))
+                local state = enabled and (C_ON .. "enabled" .. C_END) or (C_OFF .. "disabled" .. C_END)
+                self:Print("Utility debug " .. state)
                 if enabled then
-                    print("  Watch chat for utility condition checks")
+                    print("  " .. C_DIM .. "Watch chat for utility condition checks" .. C_END)
                 end
             else
-                self:Print("No active spec module to debug")
+                self:Print(C_OFF .. "No active spec module to debug" .. C_END)
             end
         elseif subCmd == "stagger" then
             self:Print("Stagger diagnostic:")
@@ -721,84 +735,19 @@ function addon:HandleSlashCommand(msg)
             local enabled = subCmd == "on" or subCmd == "true" or subCmd == "1"
             TankAssist.Utils:SetDebug(enabled)
             TankAssist.SecretValues:SetDebug(enabled)
-            self:Print("Debug mode " .. (enabled and "enabled" or "disabled"))
+            local state = enabled and (C_ON .. "enabled" .. C_END) or (C_OFF .. "disabled" .. C_END)
+            self:Print("Debug mode " .. state)
         end
-        
-    elseif cmd == "alert" then
-        local subCmd = args[2]
-        if subCmd == "list" then
-            local spells = self.cooldownAlerts and self.cooldownAlerts:GetTrackedSpells() or {}
-            if #spells == 0 then
-                self:Print("No spells tracked for this spec. Use '/ta alert defaults' to load spec defaults.")
-            else
-                self:Print("Tracked cooldown alerts (current spec):")
-                for _, spellId in ipairs(spells) do
-                    local spellInfo = C_Spell.GetSpellInfo(spellId)
-                    local spellName = spellInfo and spellInfo.name or "Unknown"
-                    print(string.format("  %s (ID: %d)", spellName, spellId))
-                end
-            end
-        elseif subCmd == "add" then
-            local spellId = tonumber(args[3])
-            if not spellId then
-                self:Print("Usage: /ta alert add <spellId>")
-                return
-            end
-            if self.cooldownAlerts then
-                self.cooldownAlerts:AddTrackedSpell(spellId)
-            else
-                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
-            end
-        elseif subCmd == "remove" then
-            local spellId = tonumber(args[3])
-            if not spellId then
-                self:Print("Usage: /ta alert remove <spellId>")
-                return
-            end
-            if self.cooldownAlerts then
-                self.cooldownAlerts:RemoveTrackedSpell(spellId)
-            else
-                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
-            end
-        elseif subCmd == "defaults" then
-            if self.cooldownAlerts then
-                self.cooldownAlerts:LoadSpecDefaults()
-            else
-                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
-            end
-        elseif subCmd == "clear" then
-            if self.cooldownAlerts then
-                local spells = self.cooldownAlerts:GetTrackedSpells()
-                wipe(spells)
-                self.cooldownAlerts.spellStates = {}
-            end
-            self:Print("Cleared all tracked cooldown alerts for this spec.")
-        else
-            self:Print("Alert commands:")
-            print("  /ta alert list - Show tracked spells")
-            print("  /ta alert add <spellId> - Track a spell")
-            print("  /ta alert remove <spellId> - Stop tracking a spell")
-            print("  /ta alert defaults - Load spec default spells")
-            print("  /ta alert clear - Clear all tracked spells")
-        end
-
-    elseif cmd == "reset" then
-        self.db.profile.display.position = {
-            point = "CENTER",
-            relativePoint = "CENTER",
-            x = 0,
-            y = -200,
-        }
-        if self.mainFrame then
-            self.mainFrame:ClearAllPoints()
-            self.mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
-        end
-        self:Print("Position reset to default")
         
     elseif cmd == "test" then
-        self:RunTestMode()  
-    else
+        self:RunTestMode()
+
+    elseif cmd == "help" then
         self:PrintHelp()
+
+    else
+        -- Unknown command: open the config panel rather than dumping help text.
+        TankAssist.ConfigPanel:Toggle()
     end
 end
 
@@ -809,23 +758,19 @@ function addon:CountTable(t)
 end
 
 function addon:PrintHelp()
+    local function line(cmd, desc)
+        print("  " .. C_CMD .. cmd .. C_END .. string.rep(" ", math.max(1, 14 - #cmd)) .. C_DIM .. desc .. C_END)
+    end
     self:Print("Commands:")
-    print("  /ta toggle - Enable/disable addon")
-    print("  /ta reset - Reset frame position")
-    print("  /ta config - Open configuration panel")
-    print("  /ta debug on/off - Toggle debug mode")
-    print("  /ta debug utility - Toggle tank utility debug")
-    print("  /ta debug stagger - Show stagger info (Brewmaster)")
-    print("  /ta debug health - Show health percent")
-    print("  /ta debug rage - Show rage/resource info (Guardian)")
-    print("  /ta debug secondary - Show secondary button spell selection")
-    print("  /ta debug tracking - Show tracked cooldowns (internal timers)")
-    print("  /ta debug combat - Show combat state")
-    print("  /ta debug settings - Show saved settings")
-    print("  /ta alert - Cooldown alert commands (list/add/remove/defaults/clear)")
-    print("  /ta test - Run test mode")
+    line("/ta",          "Open the configuration panel")
+    line("/ta toggle",   "Enable / disable the addon")
+    line("/ta test",     "Run test mode")
+    line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
+    print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")
-    print("  To reposition: Use WoW's Edit Mode (Escape > Edit Mode)")
+    print("  " .. C_DIM .. "Reposition frames via Edit Mode (" .. C_END
+        .. C_HI .. "Escape > Edit Mode" .. C_END
+        .. C_DIM .. ")." .. C_END)
 end
 
 function addon:RunTestMode()
