@@ -2,7 +2,7 @@
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.2.6-alpha.2790150
+## Version: 0.3.0-alpha.6ae3945
 ## SavedVariables: TankAssistDB
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
@@ -38,6 +38,7 @@ ui\AssistedCombatDisplay.lua
 ui\CastBar.lua
 ui\ExternalCooldowns.lua
 ui\CooldownAlerts.lua
+ui\ConsumableCheck.lua
 ui\ConfigPanel.lua
 
 # Tank Spec Modules
@@ -52,3 +53,4 @@ specs\Druid\Guardian.lua
 # Data (external definitions)
 data\ClassCooldowns.lua
 data\RotationData.lua
+data\Consumables.lua

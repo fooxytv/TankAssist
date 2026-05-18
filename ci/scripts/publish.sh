@@ -49,8 +49,11 @@ if command -v claude &> /dev/null; then
     echo "Generating changelog with Claude Code..."
 
     commit_log=$(git log "$last_tag"..HEAD --pretty=format:"- %h %s" --no-merges)
-    # Get the actual diff (truncated to avoid exceeding token limits)
-    code_diff=$(git diff "$last_tag"..HEAD -- '*.lua' '*.toc' '*.yaml' '*.sh' | head -500)
+    # Get the actual diff (truncated to avoid exceeding token limits).
+    # The `|| true` swallows SIGPIPE (exit 141) from `git diff` when `head`
+    # closes its stdin after 500 lines — otherwise pipefail+errexit kill the
+    # whole script silently on large releases.
+    code_diff=$(git diff "$last_tag"..HEAD -- '*.lua' '*.toc' '*.yaml' '*.sh' | head -500 || true)
 
     changelog_prompt="Generate a changelog entry for version $new_version of a WoW tank addon called TankAssist.
 

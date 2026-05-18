@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-alpha.6ae3945] - 2026-05-18
+
+### Added
+- Configurable sound alerts for cooldown-ready and external cooldown applied events, with per-spell sound overrides
+- LibSharedMedia-3.0 integration providing a selectable sound library, including six built-in TankAssist sound presets (Ready Ding, Raid Siren, Alarm, Boss Whisper, Soft Click, Quest Done)
+- Sound channel selection (Master, SFX, Music, Dialog, Ambience) for alert playback
+
+### Changed
+- Replaced hardcoded `.ogg` file paths for buff/cooldown sounds with named sounds resolved through LibSharedMedia
+- GitHub release titles now use "TankAssist <version>" instead of "Release <version>"
+- Release notes fall back to a filtered commit log when no AI-generated changelog is available
+
 ## [0.2.6-alpha.2790150] - 2026-03-06
 
 ### Fixed

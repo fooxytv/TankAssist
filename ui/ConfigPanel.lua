@@ -104,6 +104,7 @@ function cp:Create()
     self:RegisterCategory("general", "General", function(f) self:BuildGeneralPage(f) end)
     self:RegisterCategory("cooldownAlerts", "Cooldown Alerts", function(f) self:BuildCooldownAlertsPage(f) end)
     self:RegisterCategory("externalCDs", "External CDs", function(f) self:BuildExternalCDsPage(f) end)
+    self:RegisterCategory("consumables", "Consumables", function(f) self:BuildConsumablesPage(f) end)
     self:RegisterCategory("sounds", "Sounds & Alerts", function(f) self:BuildSoundsPage(f) end)
     self:RegisterCategory("castBars", "Cast Bars", function(f) self:BuildCastBarsPage(f) end)
 
@@ -477,6 +478,75 @@ function cp:BuildGeneralPage(frame)
         function() return db.assistedCombat.showKeybinds end,
         function(v) db.assistedCombat.showKeybinds = v end
     )
+end
+
+-- ============================================================================
+-- Consumables Page
+-- ============================================================================
+
+function cp:BuildConsumablesPage(frame)
+    local db = TankAssist.Addon.db.profile
+    local y = 0
+
+    y = self:MakeSectionHeader(frame, "Consumable Check", y)
+
+    y = self:MakeCheckbox(frame, "Enable consumable check", y,
+        function() return db.consumableCheck.enabled end,
+        function(v)
+            db.consumableCheck.enabled = v
+            if TankAssist.Addon.consumableCheck then
+                TankAssist.Addon.consumableCheck:SetEnabled(v)
+            end
+        end
+    )
+
+    y = self:MakeCheckbox(frame, "Also check outside instances", y,
+        function() return db.consumableCheck.alsoOutsideInstances end,
+        function(v) db.consumableCheck.alsoOutsideInstances = v end
+    )
+
+    y = self:MakeSlider(frame, "Scale", y - 5, 0.5, 2.0, 0.1,
+        function() return db.consumableCheck.scale or 1.0 end,
+        function(v)
+            db.consumableCheck.scale = v
+            if TankAssist.Addon.consumableCheck and TankAssist.Addon.consumableCheck.frame then
+                TankAssist.Addon.consumableCheck.frame:SetScale(v)
+            end
+        end
+    )
+
+    y = self:MakeSlider(frame, "Icon Size", y - 5, 24, 64, 4,
+        function() return db.consumableCheck.iconSize or 40 end,
+        function(v)
+            v = math.floor(v / 4 + 0.5) * 4
+            db.consumableCheck.iconSize = v
+            if TankAssist.Addon.consumableCheck and TankAssist.Addon.consumableCheck.Layout then
+                TankAssist.Addon.consumableCheck:Layout()
+            end
+        end,
+        function(v) return string.format("%d", v) end
+    )
+
+    y = self:MakeSectionHeader(frame, "Manual Check", y - 10)
+
+    local btnRow = CreateFrame("Frame", nil, frame)
+    btnRow:SetPoint("TOPLEFT", 0, y)
+    btnRow:SetSize(CONTENT_WIDTH, 28)
+
+    local checkBtn = CreateFrame("Button", nil, btnRow, "UIPanelButtonTemplate")
+    checkBtn:SetPoint("LEFT", 0, 0)
+    checkBtn:SetSize(120, 24)
+    checkBtn:SetText("Check Now")
+    checkBtn:SetScript("OnClick", function()
+        if TankAssist.Addon.consumableCheck then
+            TankAssist.Addon.consumableCheck:ManualCheck()
+        end
+    end)
+
+    local hint = btnRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hint:SetPoint("LEFT", checkBtn, "RIGHT", 10, 0)
+    hint:SetText("Re-scans your buffs and shows the panel.")
+    hint:SetTextColor(unpack(C.textDim))
 end
 
 -- ============================================================================
