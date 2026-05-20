@@ -22,8 +22,9 @@ if [[ -z "${GH_TOKEN:-}" ]]; then
     exit 1
 fi
 
-# Configure git to use the token for HTTPS pushes
-git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
+# Configure git to use the token for HTTPS pushes (repo-local, so the token
+# isn't persisted into global config and leaked to other repos on the machine)
+git config --local credential.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
 
 # gh CLI also uses GH_TOKEN automatically
 export GH_TOKEN
