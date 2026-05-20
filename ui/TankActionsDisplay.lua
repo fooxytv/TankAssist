@@ -28,7 +28,6 @@ tad.CATEGORIES = {
 
 function tad:Create(parent)
     local settings = TankAssist.Addon.db.profile.tankActions
-
     self.frame = CreateFrame("Frame", "TankAssistTankActions", UIParent, "BackdropTemplate")
     self.frame:SetSize(settings.iconSize * 4 + 30, settings.iconSize + 20)
     self.frame:SetPoint(
@@ -47,7 +46,6 @@ function tad:Create(parent)
     })
     self.frame:SetBackdropColor(0, 0, 0, 0.6)
     self.frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
-
     self.frame:SetMovable(true)
     self.frame:EnableMouse(true)
     self.frame:RegisterForDrag("LeftButton")
@@ -69,14 +67,11 @@ function tad:Create(parent)
     self.title:SetPoint("TOP", self.frame, "TOP", 0, -4)
     self.title:SetText("Tank Actions")
     self.title:SetTextColor(0.8, 0.8, 0.8)
-
     self.iconsContainer = CreateFrame("Frame", nil, self.frame)
     self.iconsContainer:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 10, -18)
     self.iconsContainer:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -10, 6)
-
     self.icons = {}
     self:CreateCategoryIcons()
-
     return self.frame
 end
 
@@ -85,7 +80,6 @@ function tad:CreateCategoryIcons()
     local iconSize = settings.iconSize
     local spacing = 6
     local categories = { "MITIGATION", "SHIELD", "DEFENSIVE", "HEAL" }
-
     for i, category in ipairs(categories) do
         local icon = self:CreateIcon(self.iconsContainer, iconSize, category)
         icon:SetPoint("LEFT", self.iconsContainer, "LEFT", (i - 1) * (iconSize + spacing), 0)
@@ -97,21 +91,17 @@ end
 function tad:CreateIcon(parent, size, category)
     local frame = CreateFrame("Button", nil, parent)
     frame:SetSize(size, size)
-
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
     frame.bg:SetColorTexture(0, 0, 0, 0.5)
-
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetPoint("TOPLEFT", 2, -2)
     frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(false)
-
     frame.gcdCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.gcdCooldown:SetAllPoints(frame.icon)
     frame.gcdCooldown:SetDrawEdge(true)
@@ -119,31 +109,25 @@ function tad:CreateIcon(parent, size, category)
     frame.gcdCooldown:SetSwipeColor(1, 1, 1, 0.4)
     frame.gcdCooldown:SetHideCountdownNumbers(true)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
-
     frame.border = frame:CreateTexture(nil, "OVERLAY")
     frame.border:SetPoint("TOPLEFT", -1, 1)
     frame.border:SetPoint("BOTTOMRIGHT", 1, -1)
     frame.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     frame.border:SetBlendMode("ADD")
-
     local catColor = self.CATEGORIES[category] and self.CATEGORIES[category].color or { 1, 1, 1 }
     frame.border:SetVertexColor(catColor[1], catColor[2], catColor[3], 0.8)
-
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
     frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 40 and 11 or 9, "OUTLINE")
     frame.keybind:SetPoint("TOPLEFT", 2, -2)
     frame.keybind:SetTextColor(1, 1, 1, 1)
-
     frame.count = frame:CreateFontString(nil, "OVERLAY")
     frame.count:SetFont("Fonts\\FRIZQT__.TTF", size > 40 and 12 or 10, "OUTLINE")
     frame.count:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.count:SetTextColor(1, 1, 1, 1)
-
     frame.unusable = frame:CreateTexture(nil, "OVERLAY", nil, 1)
     frame.unusable:SetAllPoints(frame.icon)
     frame.unusable:SetColorTexture(0.1, 0.1, 0.1, 0.7)
     frame.unusable:Hide()
-
     frame.glow = frame:CreateTexture(nil, "OVERLAY", nil, 2)
     frame.glow:SetPoint("TOPLEFT", -4, 4)
     frame.glow:SetPoint("BOTTOMRIGHT", 4, -4)
@@ -151,7 +135,6 @@ function tad:CreateIcon(parent, size, category)
     frame.glow:SetBlendMode("ADD")
     frame.glow:SetVertexColor(1, 1, 0, 0.8)
     frame.glow:Hide()
-
     frame:SetScript("OnEnter", function(self)
         if self.spellId then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")

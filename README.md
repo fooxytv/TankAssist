@@ -1,13 +1,16 @@
 # TankAssist
 
-A tank assistant addon for World of Warcraft 12.0 (Midnight) designed to work within Blizzard's Assisted Combat API restrictions.
+A focused tank assistant addon for World of Warcraft 12.0 (Midnight). Designed around Blizzard's Assisted Combat / One-Button Rotation system, with a small set of supporting tools to cover the things a tank actually wants at a glance — cast bars, externals on the player, cooldown reminders, raid-ready consumable checks, and clean per-event audio cues.
+
+The intent is to feel like a streamlined two-button rotation helper (in the spirit of Ovale / Hekili) without simulating rotations, while bringing the rest of the tanking UI into one minimal, native-feeling package.
 
 ## Features
 
 ### Assisted Combat Display
-- Displays Blizzard's built-in rotation recommendations in a customisable UI
-- Shows keybinds for recommended abilities
-- Works anywhere the Assisted Combat system works
+- Surfaces Blizzard's built-in rotation recommendation as a **Primary** ability button
+- A **Secondary** ability button highlights situational offensive/defensive cooldowns using lightweight addon-side tracking
+- Shows keybinds for the recommended abilities
+- Works wherever the Assisted Combat system works — no custom rotation engine
 
 ### Player & Target Cast Bars
 - Fully customisable replacements for Blizzard's default cast bars
@@ -36,6 +39,20 @@ A tank assistant addon for World of Warcraft 12.0 (Midnight) designed to work wi
 - Colour-coded by category (Major/Defensive/Offensive)
 - Tracks tank-specific maintenance buffs (Bone Shield, Shuffle, Ironfur, etc.)
 - Alerts when buffs need refreshing
+
+### Consumable Check
+- Checks for Food, Flask/Phial, Weapon Oil, and Augment Rune on instance entry (party / raid / scenario)
+- Category-level detection (any food gives "Well Fed", any flask buff counts, etc.) so it survives patch-to-patch item changes
+- Missing categories pulse with a yellow glow; detected categories show a green tick overlay
+- One-click minimize collapses the panel to a small mini-icon with a missing-count badge — handy when you've decided not to consume in this run
+- Auto-hides after everything is detected; re-expands on each new instance
+- Per-spec recommendations surfaced in the tooltip (Brewmaster populated; other tanks easy to add)
+
+### Sound Alerts
+- Optional audio cue when a tracked cooldown becomes ready, or when an external is applied to the player
+- Sounds are registered via LibSharedMedia-3.0, so any LSM-aware addon's sounds (BigWigs, DBM, etc.) are selectable
+- Six bundled Blizzard SOUNDKIT entries shipped under TankAssist names (Ready Ding, Raid Siren, Alarm, Boss Whisper, Soft Click, Quest Done)
+- Per-spell sound overrides — set a unique sound on individual tracked cooldowns, or fall back to a global default
 
 ### Shared Display Options
 The following settings are available for External Cooldowns and Cooldown Alerts:
@@ -70,45 +87,38 @@ All UI components integrate with WoW's Edit Mode via LibEQOL:
 
 ## Slash Commands
 
-### General
+The slash surface is intentionally small. Almost all user-facing settings live in the in-game config panel (`/ta`).
+
 ```
-/ta                  - Show help
-/ta toggle           - Enable/disable addon
-/ta config           - Open configuration panel
-/ta reset            - Reset frame position
-/ta test             - Run diagnostic tests
+/ta              - Open the configuration panel
+/ta toggle       - Enable / disable the addon
+/ta test         - Run diagnostic tests
+/ta help         - Print this command list
 ```
 
-### Positioning
-```
-/ta edit             - Instructions for using Edit Mode
-/ta lock             - (same as edit)
-/ta unlock           - (same as edit)
-```
-All frames are repositioned via WoW's Edit Mode (Escape > Edit Mode).
+Reposition frames via WoW's **Edit Mode** (Escape > Edit Mode).
 
-### Cooldown Alerts
+### Debug (diagnostics)
 ```
-/ta alert            - Show alert command help
-/ta alert list       - Show tracked spells
-/ta alert add <id>   - Track a spell by ID
-/ta alert remove <id>- Stop tracking a spell
-/ta alert defaults   - Load default spells for current tank spec
-/ta alert clear      - Clear all tracked spells
-```
-
-### Debug
-```
-/ta debug on/off     - Toggle debug mode
+/ta debug on/off     - Toggle verbose debug logging
 /ta debug utility    - Toggle tank utility debug output
 /ta debug stagger    - Show stagger diagnostic (Brewmaster)
 /ta debug health     - Show health percent
-/ta debug rage       - Show rage/resource info
+/ta debug rage       - Show rage / resource info
 /ta debug secondary  - Show secondary spell selection
 /ta debug tracking   - Show tracked cooldowns (internal timers)
 /ta debug combat     - Show combat state
 /ta debug settings   - Show saved settings
 ```
+
+### Configuration panel
+`/ta` opens the panel. Sidebar pages:
+- **General** — enable, scale, show-out-of-combat, show-without-target, Assisted Combat display options
+- **Cooldown Alerts** — per-spec tracked spell list (add / remove / load defaults / per-spell sound overrides)
+- **External CDs** — list of monitored externals and their display
+- **Consumables** — enable, scale, icon size, "also check outside instances", manual "Check Now" button
+- **Sounds & Alerts** — global sound channel and per-event default sounds
+- **Cast Bars** — player and target cast bar appearance and behaviour
 
 ## API Restrictions in 12.0
 
@@ -166,9 +176,9 @@ The `data/RotationData.lua` file contains APL-style rotation definitions that ca
 3. Run `/ta test` for diagnostics
 
 ### Cooldown Alerts not appearing
-1. Run `/ta alert list` to check if spells are tracked
-2. Run `/ta alert defaults` to load spells for your current spec
-3. Ensure the alert style is set to show what you expect (Edit Mode settings)
+1. Open `/ta` → **Cooldown Alerts** and confirm spells are listed for your current spec
+2. If empty, click **Load Spec Defaults** to populate the list
+3. Check the Alert Style setting (Ready Only / Countdown Only / Countdown + Ready) matches what you expect
 
 ### Limited functionality in M+
 This is expected due to API restrictions. The addon will show what's available.

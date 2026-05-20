@@ -51,16 +51,13 @@ function mf:CreateSpecIndicator(parent)
     local indicator = CreateFrame("Frame", nil, parent)
     indicator:SetSize(24, 24)
     indicator:SetPoint("TOPLEFT", parent, "TOPLEFT", 5, -5)
-
     indicator.icon = indicator:CreateTexture(nil, "ARTWORK")
     indicator.icon:SetAllPoints()
     indicator.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
     indicator.border = indicator:CreateTexture(nil, "OVERLAY")
     indicator.border:SetPoint("TOPLEFT", -1, 1)
     indicator.border:SetPoint("BOTTOMRIGHT", 1, -1)
     indicator.border:SetColorTexture(0.3, 0.3, 0.3, 0.8)
-
     indicator:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local specId = TankAssist.Utils:GetCurrentSpec()
@@ -72,7 +69,6 @@ function mf:CreateSpecIndicator(parent)
         GameTooltip:Hide()
     end)
     indicator:EnableMouse(true)
-
     self.specIndicator = indicator
 end
 
@@ -98,7 +94,6 @@ function mf:CreateModeIndicator(parent)
     local indicator = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     indicator:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -5, -5)
     indicator:SetTextColor(0.7, 0.7, 0.7, 1)
-
     self.modeIndicator = indicator
 end
 
@@ -111,7 +106,6 @@ function mf:UpdateModeIndicator(mode)
         LIMITED = "|cFFFF6600Limited|r",
         DISABLED = "|cFFFF0000Disabled|r",
     }
-
     self.modeIndicator:SetText(modeTexts[mode] or "")
 end
 

@@ -38,13 +38,11 @@ end
 
 local addon = TankAssist.Addon
 addon.specModules = {}
-
--- Chat color helpers (kept subtle). Format: prefix .. text .. C_END.
-local C_CMD = "|cFF00CCFF" -- cyan: command/keyword (matches addon prefix)
-local C_ON  = "|cFF40D040" -- green: on/enabled/success
-local C_OFF = "|cFFE85050" -- red: off/disabled
-local C_DIM = "|cFF888888" -- gray: dim descriptive text
-local C_HI  = "|cFFFFD100" -- yellow: highlighted value
+local C_CMD = "|cFF00CCFF"
+local C_ON  = "|cFF40D040"
+local C_OFF = "|cFFE85050"
+local C_DIM = "|cFF888888"
+local C_HI  = "|cFFFFD100"
 local C_END = "|r"
 
 local defaults = {
@@ -374,7 +372,7 @@ function addon:CreateNonTankModule()
     function nonTank:GetSecondarySpell()
         for _, spellData in ipairs(self.secondarySpells) do
             local spellId = spellData.spellId
-            if spellId and IsSpellKnown(spellId) then
+            if spellId and IsSpellKnown(spellId) then -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
                 local canCast = TankAssist.SecretValues:CanCastSpell(spellId)
                 if canCast then
                     local conditionMet = not spellData.condition or spellData.condition(self)
@@ -665,7 +663,7 @@ function addon:HandleSlashCommand(msg)
                 return
             end
             print("  Spec:", specModule.specName or "Unknown")
-            print("  IsPlayerSpell API exists:", IsPlayerSpell ~= nil)
+            print("  IsPlayerSpell API exists:", IsPlayerSpell ~= nil) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
 
             if specModule.aoeSpells then
                 print("  AoE spell candidates:")
@@ -673,8 +671,8 @@ function addon:HandleSlashCommand(msg)
                     local spellId = aoeData.spellId
                     local spellInfo = C_Spell.GetSpellInfo(spellId)
                     local spellName = spellInfo and spellInfo.name or "Unknown"
-                    local isKnown = IsSpellKnown(spellId)
-                    local isPlayerSpell = IsPlayerSpell and IsPlayerSpell(spellId)
+                    local isKnown = IsSpellKnown(spellId) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
+                    local isPlayerSpell = IsPlayerSpell and IsPlayerSpell(spellId) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
                     local cdInfo = C_Spell.GetSpellCooldown(spellId)
                     local hasCDInfo = cdInfo and cdInfo.startTime ~= nil
                     local usable, noMana = C_Spell.IsSpellUsable(spellId)
@@ -738,7 +736,7 @@ function addon:HandleSlashCommand(msg)
             local state = enabled and (C_ON .. "enabled" .. C_END) or (C_OFF .. "disabled" .. C_END)
             self:Print("Debug mode " .. state)
         end
-        
+
     elseif cmd == "test" then
         self:RunTestMode()
 
@@ -746,7 +744,6 @@ function addon:HandleSlashCommand(msg)
         self:PrintHelp()
 
     else
-        -- Unknown command: open the config panel rather than dumping help text.
         TankAssist.ConfigPanel:Toggle()
     end
 end
