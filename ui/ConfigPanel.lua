@@ -1,17 +1,12 @@
--- TankAssist Configuration Panel
-
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.ConfigPanel = {}
 local cp = TankAssist.ConfigPanel
-
--- Design constants
 local PANEL_WIDTH = 720
 local PANEL_HEIGHT = 540
 local SIDEBAR_WIDTH = 160
 local CONTENT_WIDTH = PANEL_WIDTH - SIDEBAR_WIDTH - 40
 
--- Colors (Whispr-inspired accents with Blizzard-compatible frames)
 local C = {
     bg          = { 0.08, 0.08, 0.12, 0.95 },
     sidebarBg   = { 0.05, 0.05, 0.08, 0.95 },
@@ -54,10 +49,6 @@ local BACKDROP_SMALL = {
     insets = { left = 2, right = 2, top = 2, bottom = 2 },
 }
 
--- ============================================================================
--- Main Frame
--- ============================================================================
-
 function cp:Create()
     if self.panel then return self.panel end
 
@@ -72,19 +63,15 @@ function cp:Create()
     panel:SetFrameStrata("DIALOG")
     panel:SetClampedToScreen(true)
     panel:Hide()
-
-    -- Portrait frame title and player portrait
     panel:SetTitle("TankAssist")
     panel:SetPortraitToUnit("player")
 
-    -- Inset is provided by ButtonFrameTemplate — use it as our content parent
     local inset = panel.Inset or CreateFrame("Frame", nil, panel, "InsetFrameTemplate")
     if not panel.Inset then
         inset:SetPoint("TOPLEFT", 4, -60)
         inset:SetPoint("BOTTOMRIGHT", -6, 6)
     end
 
-    -- Version text in the bottom-right footer strip of the inset
     local addonVersion = C_AddOns and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or ""
     local version = inset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     version:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -10, 6)
@@ -96,29 +83,19 @@ function cp:Create()
     self.categories = {}
     self.categoryFrames = {}
     self.activeCategory = nil
-
     self:CreateSidebar()
     self:CreateContentArea()
-
-    -- Register categories
     self:RegisterCategory("general", "General", function(f) self:BuildGeneralPage(f) end)
     self:RegisterCategory("cooldownAlerts", "Cooldown Alerts", function(f) self:BuildCooldownAlertsPage(f) end)
     self:RegisterCategory("externalCDs", "External CDs", function(f) self:BuildExternalCDsPage(f) end)
     self:RegisterCategory("consumables", "Consumables", function(f) self:BuildConsumablesPage(f) end)
     self:RegisterCategory("sounds", "Sounds & Alerts", function(f) self:BuildSoundsPage(f) end)
     self:RegisterCategory("castBars", "Cast Bars", function(f) self:BuildCastBarsPage(f) end)
-
     self:SelectCategory("general")
-
-    -- Close on Escape
     tinsert(UISpecialFrames, "TankAssistConfigPanel")
 
     return panel
 end
-
--- ============================================================================
--- Sidebar
--- ============================================================================
 
 function cp:CreateSidebar()
     local sidebar = CreateFrame("Frame", nil, self.inset, "BackdropTemplate")
@@ -138,26 +115,19 @@ function cp:AddSidebarButton(id, label, order)
     local btn = CreateFrame("Button", nil, self.sidebar)
     btn:SetSize(SIDEBAR_WIDTH - 12, 30)
     btn:SetPoint("TOPLEFT", 6, -6 + (-(order - 1) * 34))
-
-    -- Background
     btn.bg = btn:CreateTexture(nil, "BACKGROUND")
     btn.bg:SetAllPoints()
     btn.bg:SetColorTexture(0, 0, 0, 0)
-
-    -- Accent indicator bar (left edge, Whispr-style)
     btn.indicator = btn:CreateTexture(nil, "ARTWORK")
     btn.indicator:SetPoint("TOPLEFT", 0, 0)
     btn.indicator:SetPoint("BOTTOMLEFT", 0, 0)
     btn.indicator:SetWidth(3)
     btn.indicator:SetColorTexture(unpack(C.accent))
     btn.indicator:Hide()
-
-    -- Label
     btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     btn.text:SetPoint("LEFT", 12, 0)
     btn.text:SetText(label)
     btn.text:SetTextColor(unpack(C.textDim))
-
     btn:SetScript("OnEnter", function()
         if self_ref.activeCategory ~= id then
             btn.bg:SetColorTexture(unpack(C.sidebarHover))
@@ -180,10 +150,6 @@ function cp:AddSidebarButton(id, label, order)
     self.sidebarButtons[id] = btn
 end
 
--- ============================================================================
--- Content Area
--- ============================================================================
-
 function cp:CreateContentArea()
     local content = CreateFrame("Frame", nil, self.inset, "BackdropTemplate")
     content:SetPoint("TOPLEFT", self.sidebar, "TOPRIGHT", 6, 0)
@@ -191,7 +157,6 @@ function cp:CreateContentArea()
     content:SetBackdrop(BACKDROP_INNER)
     content:SetBackdropColor(unpack(C.contentBg))
     content:SetBackdropBorderColor(0.2, 0.2, 0.25, 0.5)
-
     self.contentArea = content
 end
 
@@ -240,10 +205,6 @@ function cp:SelectCategory(id)
         self:RefreshAlertSpellList()
     end
 end
-
--- ============================================================================
--- Shared UI Helpers
--- ============================================================================
 
 function cp:MakeSectionHeader(parent, text, yOffset)
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -323,23 +284,18 @@ function cp:MakeDropdown(parent, label, yOffset, options, getter, setter)
     text:SetPoint("LEFT", 2, 0)
     text:SetText(label)
     text:SetTextColor(unpack(C.textNormal))
-
-    -- Button-based dropdown (Blizzard styled)
     local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
     btn:SetPoint("LEFT", text, "RIGHT", 10, 0)
     btn:SetSize(150, 22)
     btn:SetBackdrop(BACKDROP_SMALL)
     btn:SetBackdropColor(0.12, 0.12, 0.16, 1)
     btn:SetBackdropBorderColor(0.3, 0.3, 0.35, 1)
-
     btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     btn.label:SetPoint("LEFT", 8, 0)
     btn.label:SetTextColor(unpack(C.textNormal))
-
     btn.arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     btn.arrow:SetPoint("RIGHT", -6, 0)
     btn.arrow:SetText("|cFF888888>|r")
-
     btn:SetScript("OnClick", function()
         local current = getter()
         for i, opt in ipairs(options) do

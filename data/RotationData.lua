@@ -176,7 +176,7 @@ function rotationData:ParseCondition(conditionStr, specModule)
         for _, check in ipairs(conditions) do
             local result = check()
             if result == false then return false end
-            if result == nil then return nil end -- Can't determine
+            if result == nil then return nil end
         end
         return true
     end

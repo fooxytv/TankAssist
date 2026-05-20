@@ -318,7 +318,6 @@ function ec:Update()
         icon:Show()
     end
 
-    -- Hide unused icons
     for i = #activeExternals + 1, #self.icons do
         self.icons[i]:Hide()
     end
@@ -628,8 +627,8 @@ function ec:OnEditModeEnter()
     self.editMode = true
     self.frame:SetMovable(true)
     local placeholders = {
-        self.EXTERNALS[1], -- Pain Suppression
-        self.EXTERNALS[3], -- Ironbark
+        self.EXTERNALS[1],
+        self.EXTERNALS[3],
     }
     local settings = self:GetSettings()
     local iconSize = settings.iconSize

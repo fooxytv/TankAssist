@@ -156,8 +156,6 @@ function secretValues:OnSpellCast(spellId)
         return
     end
 
-    -- Try to learn actual CD duration from the API at cast time
-    -- Use pcall because cdInfo.duration may be a secret value in combat
     local cdInfo = C_Spell.GetSpellCooldown(spellId)
     if cdInfo and cdInfo.duration then
         local ok, isReal = pcall(function()

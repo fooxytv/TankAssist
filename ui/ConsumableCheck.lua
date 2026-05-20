@@ -327,8 +327,6 @@ function cc:Layout()
     if self.minimizeBtn then self.minimizeBtn:Show() end
 end
 
--- Detection ---------------------------------------------------------------
-
 local function CollectPlayerBuffs()
     local byId, byName = {}, {}
     local sv = TankAssist.SecretValues
@@ -339,9 +337,6 @@ local function CollectPlayerBuffs()
         for i = 1, 40 do
             local data = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
             if not data then break end
-            -- In combat BOTH spellId AND name can be secret values; indexing a
-            -- table with a secret key throws. Skip secret fields and rely on
-            -- whichever one we can actually read.
             if data.spellId and not isSecret(data.spellId) then
                 byId[data.spellId] = true
             end
@@ -429,8 +424,6 @@ function cc:Update()
 
     self.frame:Show()
 
-    -- If everything's covered, fade out after a short window so the panel
-    -- isn't a permanent eyesore.
     if not anyMissing then
         self.autoHideAt = GetTime() + AUTO_HIDE_DELAY
         if not self.hideTicker then
@@ -471,10 +464,7 @@ function cc:OnEnteringWorld()
         self.frame:Hide()
         return
     end
-    -- New zone/instance: always start in the expanded view so the user
-    -- sees the full status before they decide to minimize.
     self.collapsed = false
-    -- Aura state isn't always ready the instant PEW fires; give it a beat.
     C_Timer.After(1.0, function()
         if self:IsEnabled() and self:ShouldCheckHere() then
             self:Update()
@@ -500,8 +490,6 @@ function cc:ManualCheck()
         TankAssist.Addon:Print("Missing: " .. table.concat(missing, ", "))
     end
 end
-
--- Edit mode ---------------------------------------------------------------
 
 function cc:RegisterEditMode()
     if not self.frame or not IsLibEQOLAvailable() then return end
@@ -601,7 +589,6 @@ function cc:OnEditModeEnter()
     if not self.frame then return end
     self.editMode = true
     self.frame:SetMovable(true)
-    -- Force expanded preview so users can position the full panel.
     self.collapsed = false
     if self.miniFrame then self.miniFrame:Hide() end
     if self.minimizeBtn then self.minimizeBtn:Hide() end
@@ -666,8 +653,6 @@ function cc:UpdateDisabledVisual()
     self.frame:SetAlpha(self:IsEnabled() and 1.0 or 0.4)
 end
 
--- Events ------------------------------------------------------------------
-
 function cc:RegisterEvents()
     local self_ref = self
     self.eventFrame = CreateFrame("Frame")
@@ -689,10 +674,6 @@ function cc:RegisterEvents()
                 self_ref:Update()
             end
         elseif self_ref.frame:IsShown() and not self_ref.inCombat then
-            -- Aura/equipment scans only out of combat: in combat the aura
-            -- spellId AND name are returned as secret values which can't
-            -- safely be used as table keys (consumables can't be applied
-            -- in combat anyway, so we lose nothing).
             self_ref:Update()
         end
     end)

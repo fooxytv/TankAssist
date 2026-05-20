@@ -569,6 +569,16 @@ end
 
 function CastBar:OnInterrupted()
     if not self.frame then return end
+    -- If the bar is disabled, swallow the event entirely. Otherwise the
+    -- "INTERRUPTED" linger/fade would still pop the hidden frame visible.
+    if not self:IsEnabled() and not self.editMode then
+        self.casting = false
+        self.channeling = false
+        self.interrupted = false
+        self.frame:SetScript("OnUpdate", nil)
+        self.frame:Hide()
+        return
+    end
     self.statusBar:SetStatusBarColor(1, 0, 0)
     self.spellName:SetText("INTERRUPTED")
     self.castTime:SetText("")
