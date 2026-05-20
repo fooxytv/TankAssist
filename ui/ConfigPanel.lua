@@ -741,7 +741,8 @@ function cp:RefreshAlertSpellList()
 
         cdBtn:SetScript("OnClick", function()
             cdText:Hide()
-            cdBtn.editBox:SetText(knownCD and tostring(knownCD) or "")
+            local liveCD = sv.KnownCooldowns[spellId]
+            cdBtn.editBox:SetText(liveCD and tostring(liveCD) or "")
             cdBtn.editBox:Show()
             cdBtn.editBox:SetFocus()
         end)

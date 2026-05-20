@@ -44,8 +44,6 @@ end
 
 function ca:GetTrackedSpells()
     local settings = self:GetSettings()
-
-    -- Migrate old flat array format to per-spec format
     if settings.trackedSpells and #settings.trackedSpells > 0 and type(settings.trackedSpells[1]) == "number" then
         local specId = self:GetCurrentSpecId()
         if specId and specId > 0 then
@@ -53,8 +51,8 @@ function ca:GetTrackedSpells()
                 settings.trackedSpellsBySpec = {}
             end
             settings.trackedSpellsBySpec[specId] = settings.trackedSpells
+            settings.trackedSpells = nil
         end
-        settings.trackedSpells = nil
     end
 
     if not settings.trackedSpellsBySpec then

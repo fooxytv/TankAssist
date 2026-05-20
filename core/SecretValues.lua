@@ -303,6 +303,7 @@ function secretValues:GetTrackedCooldown(spellId)
     local remaining = tracked.duration - elapsed
 
     if remaining <= 0 then
+        self.trackedCooldowns[spellId] = nil
         return 0
     end
 
