@@ -1028,6 +1028,17 @@ function cp:BuildCastBarsPage(frame)
         end
     )
 
+    y = self:MakeCheckbox(frame, "Use class colour for the bar", y,
+        function() return db.playerCastBar.useClassColor or false end,
+        function(v)
+            db.playerCastBar.useClassColor = v
+            if TankAssist.Addon.playerCastBar then
+                TankAssist.Addon.playerCastBar:ApplySettings()
+                TankAssist.Addon.playerCastBar:UpdateBarAppearance()
+            end
+        end
+    )
+
     y = self:MakeSlider(frame, "Width", y - 5, 100, 400, 1,
         function() return db.playerCastBar.width end,
         function(v)
