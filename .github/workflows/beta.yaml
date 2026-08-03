@@ -1,0 +1,101 @@
+name: "Beta - TankAssist"
+
+# Publishes a beta to CurseForge when a PR is merged into a release branch.
+#
+# The three publish paths are:
+#   alpha   - manual publish off develop (main.yaml, tag push or workflow_dispatch)
+#   beta    - merging develop into release/x.y.z (this workflow)
+#   release - merging release/x.y.z into main (release.yaml)
+#
+# Deliberately does NOT create a git tag. main.yaml triggers on "v*.*.*" tags,
+# so tagging here would fire a second, competing publish for the same build.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: ["release/**"]
+
+jobs:
+  beta:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Set up scripts
+        run: chmod +x ./ci/scripts/package.sh
+
+      - name: Determine beta version
+        id: version
+        run: |
+          # Base version comes from the .toc with any pre-release suffix stripped,
+          # then re-suffixed as a beta so CurseForge shows it as a pre-release.
+          RAW_VERSION=$(awk -F': ' '/^## Version:/ {print $2}' TankAssist.toc | tr -d '\r')
+          BASE_VERSION=$(echo "$RAW_VERSION" | sed 's/-.*//')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          VERSION="${BASE_VERSION}-beta.${SHORT_SHA}"
+
+          echo "Current .toc version: $RAW_VERSION"
+          echo "Beta version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version into .toc
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Stamped for the packaged zip only - not committed. The release
+          # branch keeps its own version; release.yaml sets the final one.
+          for toc_file in *.toc; do
+            if [ -f "$toc_file" ]; then
+              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
+              echo "Updated $toc_file with version: $VERSION"
+            fi
+          done
+
+      - name: Generate changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG"..HEAD --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          CHANGELOG="## ${VERSION}"$'\n\n'"$COMMITS"
+          {
+            echo 'CHANGELOG<<EOF'
+            echo "$CHANGELOG"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Package
+        run: ./ci/scripts/package.sh
+
+      - name: Find artifact
+        id: artifact
+        run: |
+          ZIP_FILE=$(ls ci/dist/*.zip | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No zip found"
+            exit 1
+          fi
+          echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to CurseForge
+        uses: itsmeow/curseforge-upload@v3
+        with:
+          file_path: ${{ steps.artifact.outputs.zip }}
+          project_id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+          game_endpoint: "wow"
+          token: ${{ secrets.CURSEFORGE_TOKEN }}
+          release_type: beta
+          changelog: ${{ env.CHANGELOG }}
+          changelog_type: "markdown"
+          game_versions: "12.0.7"
