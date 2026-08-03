@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
+
+## [0.4.1-alpha.8eccc46] - 2026-08-03
+
+_No user-facing changes; release cut from the same commit as the previous version._
+
+## [0.4.0-alpha.c36e001] - 2026-08-03
+
+### Added
+- Gear Advisor (opt-in, disabled by default): evaluates gear against per-spec stat weights and best-in-slot lists, annotates item tooltips with an upgrade verdict, and glows loot that's an upgrade. Supports importing custom stat weights and BIS item lists via a paste-in text format (with stat/slot aliases, comments, and versioning), plus a configurable glow colour and optional tier-set consideration.
+- `/ta gear` slash command to show Gear Advisor status and sample verdicts.
+- Class colour option for cast bars — cast bars can now be tinted by the unit's class colour.
+
+### Changed
+- CI publish script now scopes the GitHub token credential helper to the local repo instead of global git config, so the token isn't leaked to other repositories on the build machine.
+
+### Fixed
+- Cast bars now cancel correctly when a cast is interrupted or stops.
+
+## [0.3.0-alpha.6ae3945] - 2026-05-18
+
+### Added
+- Configurable sound alerts for cooldown-ready and external cooldown applied events, with per-spell sound overrides
+- LibSharedMedia-3.0 integration providing a selectable sound library, including six built-in TankAssist sound presets (Ready Ding, Raid Siren, Alarm, Boss Whisper, Soft Click, Quest Done)
+- Sound channel selection (Master, SFX, Music, Dialog, Ambience) for alert playback
+
+### Changed
+- Replaced hardcoded `.ogg` file paths for buff/cooldown sounds with named sounds resolved through LibSharedMedia
+- GitHub release titles now use "TankAssist <version>" instead of "Release <version>"
+- Release notes fall back to a filtered commit log when no AI-generated changelog is available
+
+## [0.2.6-alpha.2790150] - 2026-03-06
+
+### Fixed
+- Removed accidentally committed claude-plugins-official submodule reference
+
+## [0.2.5-alpha.4435388] - 2026-03-06
+
+### Changed
+- Version bump to 0.2.5-alpha.4435388
+
+## [0.2.4-alpha.f5c4e27] - 2026-03-06
+
+### Changed
+- Updated CI/CD pipeline and release workflow
+
+## [0.2.3-alpha.d2b781c] - 2026-03-06
+
+*No changes since previous release.*
+
+## [0.2.2-alpha.8970754] - 2026-03-06
+
+### Changed
+- Updated publish script to publish GitHub release packages
+
+### Fixed
+- Fixed PR review comments across multiple UI and spec files
+- Removed accidentally committed claude-plugins-official submodule reference
+
 
 
 ## [0.2.1-alpha.56bf278] - 2026-03-06

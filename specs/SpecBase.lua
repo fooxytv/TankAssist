@@ -51,7 +51,7 @@ function TankAssist.SpecBase:GetRecommendations()
 end
 
 function TankAssist.SpecBase:EvaluatePriorityEntry(entry)
-    if not IsSpellKnown(entry.spellId) then
+    if not entry.alwaysAvailable and not IsSpellKnown(entry.spellId) then
         return false
     end
 
@@ -258,7 +258,7 @@ function TankAssist.SpecBase:GetSecondarySpell()
     for _, spellData in ipairs(self.secondarySpells) do
         local spellId = spellData.spellId
 
-        if self:IsSpellAvailable(spellId) then
+        if spellData.alwaysAvailable or self:IsSpellAvailable(spellId) then
             local canCast, reason = TankAssist.SecretValues:CanCastSpell(spellId)
 
             if canCast then

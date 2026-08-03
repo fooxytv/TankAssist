@@ -48,7 +48,7 @@ rotationData.Profiles = {
             },
         },
     },
-    
+
     Brewmaster = {
         DEFAULT = {
             name = "Standard",
@@ -66,7 +66,7 @@ rotationData.Profiles = {
             },
         },
     },
-    
+
     ProtectionWarrior = {
         DEFAULT = {
             name = "Standard",
@@ -82,7 +82,7 @@ rotationData.Profiles = {
             },
         },
     },
-    
+
     ProtectionPaladin = {
         DEFAULT = {
             name = "Standard",
@@ -98,7 +98,7 @@ rotationData.Profiles = {
             },
         },
     },
-    
+
     VengeanceDemonHunter = {
         DEFAULT = {
             name = "Standard",
@@ -115,10 +115,10 @@ rotationData.Profiles = {
             },
         },
     },
-    
+
     GuardianDruid = {
         DEFAULT = {
-            name = "Standard", 
+            name = "Standard",
             description = "Balanced rage usage",
             priority = {
                 "frenzied_regeneration,if=health.pct<70&charges>=1",
@@ -136,8 +136,10 @@ rotationData.Profiles = {
 
 function rotationData:ParseCondition(conditionStr, specModule)
     local conditions = {}
-    for condition in conditionStr:gmatch("[^,]+") do
-        condition = condition:match("^%s*(.-)%s*$")
+    -- Trim into a fresh local rather than reassigning the loop variable: the
+    -- control variable is read-only from Lua 5.4 on, which the smoke test runs.
+    for rawCondition in conditionStr:gmatch("[^,]+") do
+        local condition = rawCondition:match("^%s*(.-)%s*$")
         local healthOp, healthVal = condition:match("health%.pct([<>=]+)(%d+)")
         if healthOp and healthVal then
             table.insert(conditions, function()
@@ -146,11 +148,11 @@ function rotationData:ParseCondition(conditionStr, specModule)
                 return self:Compare(hp * 100, tonumber(healthVal), healthOp)
             end)
         end
-        
-        local buffName, buffOp, buffVal = condition:match("buff%.([%w_]+)%.(%w+)([<>=]*)(%d*)")
-        if buffName then
-        end
-        
+
+        -- TODO: buff conditions ("buff.ironfur.stack<2") are not evaluated yet.
+        -- They were parsed here into an empty branch, so every rotation entry
+        -- carrying one silently behaved as if the condition were absent.
+
         local resource, resOp, resVal = condition:match("(%w+)([<>=]+)(%d+)")
         if resource and resOp and resVal then
             local resourceMap = {
@@ -161,7 +163,7 @@ function rotationData:ParseCondition(conditionStr, specModule)
                 holy_power = "HOLY_POWER",
                 rune = "RUNES",
             }
-            
+
             if resourceMap[resource:lower()] then
                 table.insert(conditions, function()
                     local val = specModule:GetResource(resourceMap[resource:lower()])
@@ -171,12 +173,12 @@ function rotationData:ParseCondition(conditionStr, specModule)
             end
         end
     end
-    
+
     return function()
         for _, check in ipairs(conditions) do
             local result = check()
             if result == false then return false end
-            if result == nil then return nil end -- Can't determine
+            if result == nil then return nil end
         end
         return true
     end

@@ -83,17 +83,17 @@ $cleanProjectDir = Clean-Path $projectDir
 
 Write-Host "Mounting drives: $($drives.Keys -join ', ')"
 
-# Pass Claude Code credentials
+# Pass credentials
 $envArgs = @()
 $claudeVolumeArgs = @()
 
-# Option 1: API key from environment
+# Claude Code: API key from environment
 $anthropicKey = [System.Environment]::GetEnvironmentVariable("ANTHROPIC_API_KEY")
 if ($anthropicKey) {
     $envArgs += @("-e", "ANTHROPIC_API_KEY=$anthropicKey")
     Write-Host "Claude Code API key detected."
 }
-# Option 2: Mount existing Claude config (from OAuth login)
+# Claude Code: Mount existing Claude config (from OAuth login)
 else {
     $claudeConfigPath = Join-Path $env:USERPROFILE ".claude"
     if (Test-Path $claudeConfigPath) {
@@ -104,6 +104,13 @@ else {
         $claudeVolumeArgs += @("-v", "${claudeConfigDocker}:/root/.claude")
         Write-Host "Mounting Claude config from ~/.claude"
     }
+}
+
+# GitHub token for git push and gh CLI
+$ghToken = [System.Environment]::GetEnvironmentVariable("GH_TOKEN")
+if ($ghToken) {
+    $envArgs += @("-e", "GH_TOKEN=$ghToken")
+    Write-Host "GitHub token detected."
 }
 
 Write-Host "Docker command: docker run --rm -ti $($volumeArgs -join ' ') $($envArgs -join ' ') $($claudeVolumeArgs -join ' ') -w ${cleanProjectDir} $imageName bash"

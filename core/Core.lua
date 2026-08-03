@@ -30,7 +30,7 @@ else
             end
         end
     end)
-    
+
     function TankAssist.Addon:Print(...)
         print("|cFF00CCFF[TankAssist]|r", ...)
     end
@@ -38,6 +38,12 @@ end
 
 local addon = TankAssist.Addon
 addon.specModules = {}
+local C_CMD = "|cFF00CCFF"
+local C_ON  = "|cFF40D040"
+local C_OFF = "|cFFE85050"
+local C_DIM = "|cFF888888"
+local C_HI  = "|cFFFFD100"
+local C_END = "|r"
 
 local defaults = {
     profile = {
@@ -78,6 +84,7 @@ local defaults = {
             height = 20,
             scale = 1.0,
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 100 },
+            useClassColor = false,
             interruptibleColor = { 1.0, 0.7, 0.0 },
             nonInterruptibleColor = { 0.6, 0.3, 0.3 },
             channelColor = { 0.0, 0.6, 1.0 },
@@ -102,6 +109,7 @@ local defaults = {
             height = 20,
             scale = 1.0,
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -100 },
+            useClassColor = false,
             interruptibleColor = { 0.0, 0.6, 1.0 },
             nonInterruptibleColor = { 0.0, 0.6, 1.0 },
             channelColor = { 0.0, 0.8, 0.4 },
@@ -141,13 +149,35 @@ local defaults = {
             borderColor = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
             soundEnabled = false,
             trackedSpells = {},
+            trackedSpellsBySpec = {},
+            customCooldowns = {},
+            spellSounds = {},
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -320 },
+        },
+        consumableCheck = {
+            enabled = true,
+            iconSize = 40,
+            scale = 1.0,
+            alsoOutsideInstances = false,
+            borderColor = { r = 0.5, g = 0.5, b = 0.55, a = 1 },
+            position = { point = "TOP", relativePoint = "TOP", x = 0, y = -180 },
+        },
+        gearAdvisor = {
+            -- Off by default: dedicated upgrade addons do this better. Opt in
+            -- from the Gear Advisor config page.
+            enabled = false,
+            annotateTooltips = true,
+            glowLoot = true,
+            considerTierSet = false,
+            glowColor = { 0, 0.75, 0.95, 1 },
+            profiles = {},
         },
         specs = {},
         sounds = {
             enabled = true,
-            buffExpiring = "Interface\\AddOns\\TankAssist\\Sounds\\warning.ogg",
-            cooldownReady = "Interface\\AddOns\\TankAssist\\Sounds\\ready.ogg",
+            channel = "Master",
+            cooldownReady = "None",
+            externalApplied = "None",
         },
     },
 }
@@ -354,7 +384,7 @@ function addon:CreateNonTankModule()
     function nonTank:GetSecondarySpell()
         for _, spellData in ipairs(self.secondarySpells) do
             local spellId = spellData.spellId
-            if spellId and IsSpellKnown(spellId) then
+            if spellId and IsSpellKnown(spellId) then -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
                 local canCast = TankAssist.SecretValues:CanCastSpell(spellId)
                 if canCast then
                     local conditionMet = not spellData.condition or spellData.condition(self)
@@ -430,6 +460,7 @@ function addon:SetupUI()
     self.buffMaintenance = nil
     self.externalCooldowns = nil
     self.cooldownAlerts = nil
+    self.consumableCheck = nil
 end
 
 function addon:UpdateUIForSpec()
@@ -499,27 +530,19 @@ function addon:HandleSlashCommand(msg)
     for word in msg:gmatch("%S+") do
         table.insert(args, word:lower())
     end
-    
-    local cmd = args[1] or "help"
-    if cmd == "toggle" then
+
+    local cmd = args[1]
+    if not cmd or cmd == "" or cmd == "config" or cmd == "options" then
+        TankAssist.ConfigPanel:Toggle()
+
+    elseif cmd == "toggle" then
         self.db.profile.enabled = not self.db.profile.enabled
-        self:Print("TankAssist " .. (self.db.profile.enabled and "enabled" or "disabled"))
+        local state = self.db.profile.enabled
+            and (C_ON .. "enabled" .. C_END)
+            or  (C_OFF .. "disabled" .. C_END)
+        self:Print("TankAssist " .. state)
         self:UpdateVisibility()
-        
-    elseif cmd == "edit" or cmd == "lock" or cmd == "unlock" then
-        self:Print("To reposition TankAssist, use WoW's Edit Mode:")
-        print("  1. Press Escape")
-        print("  2. Click 'Edit Mode'")
-        print("  3. Drag the TankAssist frame")
-        print("  4. Click 'Save Changes' when done")
-        
-    elseif cmd == "config" or cmd == "options" then
-        if self.configPanel then
-            self.configPanel:Show()
-        else
-            self:Print("Config panel not yet implemented. Use slash commands.")
-        end
-        
+
     elseif cmd == "debug" then
         local subCmd = args[2]
         if subCmd == "utility" or subCmd == "utilities" then
@@ -527,12 +550,13 @@ function addon:HandleSlashCommand(msg)
             if self.activeSpecModule then
                 local enabled = not self.activeSpecModule.debugUtilities
                 self.activeSpecModule.debugUtilities = enabled
-                self:Print("Utility debug " .. (enabled and "enabled" or "disabled"))
+                local state = enabled and (C_ON .. "enabled" .. C_END) or (C_OFF .. "disabled" .. C_END)
+                self:Print("Utility debug " .. state)
                 if enabled then
-                    print("  Watch chat for utility condition checks")
+                    print("  " .. C_DIM .. "Watch chat for utility condition checks" .. C_END)
                 end
             else
-                self:Print("No active spec module to debug")
+                self:Print(C_OFF .. "No active spec module to debug" .. C_END)
             end
         elseif subCmd == "stagger" then
             self:Print("Stagger diagnostic:")
@@ -577,6 +601,14 @@ function addon:HandleSlashCommand(msg)
             print("    GetResource('HOLY_POWER'):", holyPower)
 
         elseif subCmd == "tracking" or subCmd == "cooldowns" then
+            local toggleArg = args[3]
+            if toggleArg == "on" then
+                TankAssist.SecretValues:SetDebugTracking(true)
+                return
+            elseif toggleArg == "off" then
+                TankAssist.SecretValues:SetDebugTracking(false)
+                return
+            end
             self:Print("Tracked cooldowns (internal timer):")
             local hasTracked = false
             for spellId, data in pairs(TankAssist.SecretValues.trackedCooldowns) do
@@ -643,7 +675,7 @@ function addon:HandleSlashCommand(msg)
                 return
             end
             print("  Spec:", specModule.specName or "Unknown")
-            print("  IsPlayerSpell API exists:", IsPlayerSpell ~= nil)
+            print("  IsPlayerSpell API exists:", IsPlayerSpell ~= nil) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
 
             if specModule.aoeSpells then
                 print("  AoE spell candidates:")
@@ -651,8 +683,8 @@ function addon:HandleSlashCommand(msg)
                     local spellId = aoeData.spellId
                     local spellInfo = C_Spell.GetSpellInfo(spellId)
                     local spellName = spellInfo and spellInfo.name or "Unknown"
-                    local isKnown = IsSpellKnown(spellId)
-                    local isPlayerSpell = IsPlayerSpell and IsPlayerSpell(spellId)
+                    local isKnown = IsSpellKnown(spellId) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
+                    local isPlayerSpell = IsPlayerSpell and IsPlayerSpell(spellId) -- IsPlayerSpell deprecated by C_SpellBook.IsSpellKnown
                     local cdInfo = C_Spell.GetSpellCooldown(spellId)
                     local hasCDInfo = cdInfo and cdInfo.startTime ~= nil
                     local usable, noMana = C_Spell.IsSpellUsable(spellId)
@@ -713,102 +745,25 @@ function addon:HandleSlashCommand(msg)
             local enabled = subCmd == "on" or subCmd == "true" or subCmd == "1"
             TankAssist.Utils:SetDebug(enabled)
             TankAssist.SecretValues:SetDebug(enabled)
-            self:Print("Debug mode " .. (enabled and "enabled" or "disabled"))
-        end
-        
-    elseif cmd == "alert" then
-        local subCmd = args[2]
-        if subCmd == "list" then
-            local spells = self.db.profile.cooldownAlerts.trackedSpells
-            if #spells == 0 then
-                self:Print("No spells tracked. Use '/ta alert defaults' to load spec defaults.")
-            else
-                self:Print("Tracked cooldown alerts:")
-                for _, spellId in ipairs(spells) do
-                    local spellInfo = C_Spell.GetSpellInfo(spellId)
-                    local spellName = spellInfo and spellInfo.name or "Unknown"
-                    print(string.format("  %s (ID: %d)", spellName, spellId))
-                end
-            end
-        elseif subCmd == "add" then
-            local spellId = tonumber(args[3])
-            if not spellId then
-                self:Print("Usage: /ta alert add <spellId>")
-                return
-            end
-            if self.cooldownAlerts then
-                self.cooldownAlerts:AddTrackedSpell(spellId)
-            else
-                -- Manually add if UI not yet initialized
-                local spells = self.db.profile.cooldownAlerts.trackedSpells
-                for _, id in ipairs(spells) do
-                    if id == spellId then
-                        self:Print("Spell already tracked.")
-                        return
-                    end
-                end
-                table.insert(spells, spellId)
-                local spellInfo = C_Spell.GetSpellInfo(spellId)
-                self:Print("Now tracking: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
-            end
-        elseif subCmd == "remove" then
-            local spellId = tonumber(args[3])
-            if not spellId then
-                self:Print("Usage: /ta alert remove <spellId>")
-                return
-            end
-            if self.cooldownAlerts then
-                self.cooldownAlerts:RemoveTrackedSpell(spellId)
-            else
-                local spells = self.db.profile.cooldownAlerts.trackedSpells
-                for i, id in ipairs(spells) do
-                    if id == spellId then
-                        table.remove(spells, i)
-                        local spellInfo = C_Spell.GetSpellInfo(spellId)
-                        self:Print("Removed: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
-                        return
-                    end
-                end
-                self:Print("Spell not found in tracked list.")
-            end
-        elseif subCmd == "defaults" then
-            if self.cooldownAlerts then
-                self.cooldownAlerts:LoadSpecDefaults()
-            else
-                self:Print("Cooldown alerts not yet initialized. Try after /reload.")
-            end
-        elseif subCmd == "clear" then
-            self.db.profile.cooldownAlerts.trackedSpells = {}
-            if self.cooldownAlerts then
-                self.cooldownAlerts.spellStates = {}
-            end
-            self:Print("Cleared all tracked cooldown alerts.")
-        else
-            self:Print("Alert commands:")
-            print("  /ta alert list - Show tracked spells")
-            print("  /ta alert add <spellId> - Track a spell")
-            print("  /ta alert remove <spellId> - Stop tracking a spell")
-            print("  /ta alert defaults - Load spec default spells")
-            print("  /ta alert clear - Clear all tracked spells")
+            local state = enabled and (C_ON .. "enabled" .. C_END) or (C_OFF .. "disabled" .. C_END)
+            self:Print("Debug mode " .. state)
         end
 
-    elseif cmd == "reset" then
-        self.db.profile.display.position = {
-            point = "CENTER",
-            relativePoint = "CENTER",
-            x = 0,
-            y = -200,
-        }
-        if self.mainFrame then
-            self.mainFrame:ClearAllPoints()
-            self.mainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+    elseif cmd == "gear" then
+        if TankAssist.GearAdvisor then
+            TankAssist.GearAdvisor:DebugDump(args[2])
+        else
+            self:Print(C_OFF .. "Gear Advisor not loaded" .. C_END)
         end
-        self:Print("Position reset to default")
-        
+
     elseif cmd == "test" then
-        self:RunTestMode()  
-    else
+        self:RunTestMode()
+
+    elseif cmd == "help" then
         self:PrintHelp()
+
+    else
+        TankAssist.ConfigPanel:Toggle()
     end
 end
 
@@ -819,23 +774,20 @@ function addon:CountTable(t)
 end
 
 function addon:PrintHelp()
+    local function line(cmd, desc)
+        print("  " .. C_CMD .. cmd .. C_END .. string.rep(" ", math.max(1, 14 - #cmd)) .. C_DIM .. desc .. C_END)
+    end
     self:Print("Commands:")
-    print("  /ta toggle - Enable/disable addon")
-    print("  /ta reset - Reset frame position")
-    print("  /ta config - Open configuration panel")
-    print("  /ta debug on/off - Toggle debug mode")
-    print("  /ta debug utility - Toggle tank utility debug")
-    print("  /ta debug stagger - Show stagger info (Brewmaster)")
-    print("  /ta debug health - Show health percent")
-    print("  /ta debug rage - Show rage/resource info (Guardian)")
-    print("  /ta debug secondary - Show secondary button spell selection")
-    print("  /ta debug tracking - Show tracked cooldowns (internal timers)")
-    print("  /ta debug combat - Show combat state")
-    print("  /ta debug settings - Show saved settings")
-    print("  /ta alert - Cooldown alert commands (list/add/remove/defaults/clear)")
-    print("  /ta test - Run test mode")
+    line("/ta",          "Open the configuration panel")
+    line("/ta toggle",   "Enable / disable the addon")
+    line("/ta gear",     "Gear Advisor status & sample verdicts")
+    line("/ta test",     "Run test mode")
+    line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
+    print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")
-    print("  To reposition: Use WoW's Edit Mode (Escape > Edit Mode)")
+    print("  " .. C_DIM .. "Reposition frames via Edit Mode (" .. C_END
+        .. C_HI .. "Escape > Edit Mode" .. C_END
+        .. C_DIM .. ")." .. C_END)
 end
 
 function addon:RunTestMode()

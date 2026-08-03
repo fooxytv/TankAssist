@@ -52,3 +52,7 @@ luac.out
 *.i*86
 *.x86_64
 *.hex
+
+# Python bytecode from the CI check scripts
+__pycache__/
+*.pyc
