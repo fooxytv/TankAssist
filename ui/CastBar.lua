@@ -138,7 +138,7 @@ function CastBar:ApplySettings()
     self.statusBar:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 1, 1)
     self.statusBar:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -1, 1)
     self.statusBar:SetHeight(settings.height - 2)
-    self.statusBar:SetStatusBarColor(unpack(settings.interruptibleColor))
+    self.statusBar:SetStatusBarColor(unpack(self:GetFillColor(settings.interruptibleColor)))
     local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
     self:SetBorderColor(bc[1], bc[2], bc[3], 1)
     local fontSize = settings.fontSize or 11
@@ -265,19 +265,42 @@ function CastBar:SetBorderColor(r, g, b, a)
     end
 end
 
+-- Class colour of this bar's unit (player or target), or nil for non-players.
+function CastBar:GetClassColor()
+    local _, classFile = UnitClass(self.unit)
+    if classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFile] then
+        local c = RAID_CLASS_COLORS[classFile]
+        return { c.r, c.g, c.b }
+    end
+    return nil
+end
+
+-- Returns the class colour when "Use Class Color" is enabled and resolvable,
+-- otherwise the supplied configured colour.
+function CastBar:GetFillColor(fallback)
+    if self:GetSettings().useClassColor then
+        local c = self:GetClassColor()
+        if c then return c end
+    end
+    return fallback
+end
+
 function CastBar:UpdateBarAppearance()
     local settings = self:GetSettings()
     local thick = 1
     if self.notInterruptible then
-        self.statusBar:SetStatusBarColor(unpack(settings.nonInterruptibleColor))
+        -- Empowered/charged and other non-interruptible casts land here. Honour
+        -- the class-colour option for the fill (like the other branches) while
+        -- keeping the thick red border as the non-interruptible signal.
+        self.statusBar:SetStatusBarColor(unpack(self:GetFillColor(settings.nonInterruptibleColor)))
         self:SetBorderColor(0.8, 0.1, 0.1, 1)
         thick = 2
     elseif self.channeling then
-        self.statusBar:SetStatusBarColor(unpack(settings.channelColor))
+        self.statusBar:SetStatusBarColor(unpack(self:GetFillColor(settings.channelColor)))
         local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
         self:SetBorderColor(bc[1], bc[2], bc[3], 1)
     else
-        self.statusBar:SetStatusBarColor(unpack(settings.interruptibleColor))
+        self.statusBar:SetStatusBarColor(unpack(self:GetFillColor(settings.interruptibleColor)))
         local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
         self:SetBorderColor(bc[1], bc[2], bc[3], 1)
     end
@@ -514,10 +537,14 @@ function CastBar:RegisterEvents()
             elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
                 self_ref:StartEmpower(unit)
             elseif event == "UNIT_SPELLCAST_STOP"
-                or event == "UNIT_SPELLCAST_FAILED"
                 or event == "UNIT_SPELLCAST_CHANNEL_STOP"
                 or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
                 self_ref:StopCast()
+            elseif event == "UNIT_SPELLCAST_FAILED" then
+                -- A FAILED can be a duplicate cast attempt (e.g. double-click)
+                -- while the original cast is still running. Re-check instead of
+                -- blindly hiding, so we don't kill the active cast bar.
+                self_ref:Update()
             elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
                 self_ref:OnInterrupted()
             end
@@ -549,10 +576,11 @@ function CastBar:RegisterEvents()
                 elseif event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
                     self_ref:StartEmpower(unit)
                 elseif event == "UNIT_SPELLCAST_STOP"
-                    or event == "UNIT_SPELLCAST_FAILED"
                     or event == "UNIT_SPELLCAST_CHANNEL_STOP"
                     or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
                     self_ref:StopCast()
+                elseif event == "UNIT_SPELLCAST_FAILED" then
+                    self_ref:Update()
                 elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
                     self_ref:OnInterrupted()
                 elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
@@ -725,6 +753,20 @@ function CastBar:BuildLEMSettings()
             set = function(layoutName, value)
                 self_ref:GetSettings().interruptibleColor = { value.r, value.g, value.b }
                 self_ref:ApplySettings()
+            end,
+        },
+        {
+            order = 201.5,
+            name = "Use Class Color",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return self_ref:GetSettings().useClassColor or false
+            end,
+            set = function(layoutName, value)
+                self_ref:GetSettings().useClassColor = value
+                self_ref:ApplySettings()
+                self_ref:UpdateBarAppearance()
             end,
         },
         {
@@ -1166,7 +1208,7 @@ function CastBar:OnEditModeEnter()
     self.statusBar:SetValue(0.6)
     self:SetIcon("Interface\\Icons\\INV_Misc_QuestionMark")
     local settings = self:GetSettings()
-    self.statusBar:SetStatusBarColor(unpack(settings.interruptibleColor))
+    self.statusBar:SetStatusBarColor(unpack(self:GetFillColor(settings.interruptibleColor)))
     local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
     self:SetBorderColor(bc[1], bc[2], bc[3], 1)
     self.frame:Show()
