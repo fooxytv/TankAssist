@@ -32,7 +32,6 @@ local DISPLAY_MODES = {
 local READY_FLASH_DURATION = 2.0
 
 ca.spellStates = {}
-ca.lastSoundTime = 0
 
 function ca:GetSettings()
     return TankAssist.Addon.db.profile.cooldownAlerts
