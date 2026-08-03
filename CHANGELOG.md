@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-alpha.c36e001] - 2026-08-03
+
+### Added
+- Gear Advisor (opt-in, disabled by default): evaluates gear against per-spec stat weights and best-in-slot lists, annotates item tooltips with an upgrade verdict, and glows loot that's an upgrade. Supports importing custom stat weights and BIS item lists via a paste-in text format (with stat/slot aliases, comments, and versioning), plus a configurable glow colour and optional tier-set consideration.
+- `/ta gear` slash command to show Gear Advisor status and sample verdicts.
+- Class colour option for cast bars — cast bars can now be tinted by the unit's class colour.
+
+### Changed
+- CI publish script now scopes the GitHub token credential helper to the local repo instead of global git config, so the token isn't leaked to other repositories on the build machine.
+
+### Fixed
+- Cast bars now cancel correctly when a cast is interrupted or stops.
+
 ## [0.3.0-alpha.6ae3945] - 2026-05-18
 
 ### Added

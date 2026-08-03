@@ -32,7 +32,6 @@ function cc:Create()
     self.frame = CreateFrame("Frame", "TankAssistConsumableCheck", UIParent)
     self.frame:SetSize(1, 1)
     self.frame.editModeName = "Consumable Check"
-
     local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
     local pos = settings.position or {}
     if validAnchors[pos.point] and type(pos.x) == "number" and type(pos.y) == "number" then
@@ -43,12 +42,10 @@ function cc:Create()
     end
     self.frame:SetScale(settings.scale or 1.0)
     self.frame:SetClampedToScreen(true)
-
     self.icons = {}
     self.editMode = false
     self.autoHideAt = 0
     self.collapsed = false
-
     self:BuildIcons()
     self:BuildMinimizeButton()
     self:BuildMiniFrame()
@@ -63,17 +60,14 @@ function cc:BuildMinimizeButton()
     btn:SetSize(14, 14)
     btn:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 2, 2)
     btn:SetFrameLevel(self.frame:GetFrameLevel() + 5)
-
     btn.bg = btn:CreateTexture(nil, "BACKGROUND")
     btn.bg:SetAllPoints()
     btn.bg:SetColorTexture(0, 0, 0, 0.7)
-
     btn.x = btn:CreateFontString(nil, "OVERLAY")
     btn.x:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     btn.x:SetPoint("CENTER", btn, "CENTER", 0, 0)
     btn.x:SetText("x")
     btn.x:SetTextColor(0.8, 0.8, 0.8, 1)
-
     btn:SetScript("OnEnter", function(self)
         self.x:SetTextColor(1, 0.4, 0.4, 1)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -86,7 +80,6 @@ function cc:BuildMinimizeButton()
         GameTooltip:Hide()
     end)
     btn:SetScript("OnClick", function() cc:Collapse() end)
-
     self.minimizeBtn = btn
 end
 
@@ -95,17 +88,14 @@ function cc:BuildMiniFrame()
     local size = 28
     mini:SetSize(size, size)
     mini:SetPoint("CENTER", self.frame, "CENTER", 0, 0)
-
     mini.bg = mini:CreateTexture(nil, "BACKGROUND")
     mini.bg:SetAllPoints()
     mini.bg:SetColorTexture(0, 0, 0, 0.7)
-
     mini.icon = mini:CreateTexture(nil, "ARTWORK")
     mini.icon:SetPoint("TOPLEFT", 2, -2)
     mini.icon:SetPoint("BOTTOMRIGHT", -2, 2)
     mini.icon:SetTexture("Interface\\Icons\\inv_misc_food_legion_lavishsuramarfeast")
     mini.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
     mini.glow = mini:CreateTexture(nil, "OVERLAY", nil, 6)
     mini.glow:SetPoint("TOPLEFT", -5, 5)
     mini.glow:SetPoint("BOTTOMRIGHT", 5, -5)
@@ -114,7 +104,6 @@ function cc:BuildMiniFrame()
     mini.glow:SetBlendMode("ADD")
     mini.glow:SetVertexColor(unpack(MISSING_GLOW_COLOR))
     mini.glow:Hide()
-
     mini.glowAnim = mini.glow:CreateAnimationGroup()
     mini.glowAnim:SetLooping("BOUNCE")
     local fade = mini.glowAnim:CreateAnimation("Alpha")
@@ -122,12 +111,10 @@ function cc:BuildMiniFrame()
     fade:SetToAlpha(0.25)
     fade:SetDuration(0.7)
     fade:SetSmoothing("IN_OUT")
-
     mini.count = mini:CreateFontString(nil, "OVERLAY")
     mini.count:SetFont("Fonts\\FRIZQT__.TTF", 14, "THICKOUTLINE")
     mini.count:SetPoint("BOTTOMRIGHT", mini, "BOTTOMRIGHT", -1, 1)
     mini.count:SetTextColor(1, 0.85, 0.2, 1)
-
     mini:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Consumable Check (minimized)")
@@ -189,7 +176,6 @@ function cc:CreateCategoryIcon(category)
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetSize(size, size + 14)
     frame.category = category
-
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
@@ -201,7 +187,6 @@ function cc:CreateCategoryIcon(category)
     frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     frame.icon.texture:SetTexture(category.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
-
     local saved = settings.borderColor or { r = 0.5, g = 0.5, b = 0.55, a = 1 }
     local r, g, b, a = saved.r or 0.5, saved.g or 0.5, saved.b or 0.55, saved.a or 1
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
@@ -224,8 +209,6 @@ function cc:CreateCategoryIcon(category)
     frame.icon.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(r, g, b, a)
-
-    -- Pulsing glow used to flag a missing consumable.
     frame.glow = frame.icon:CreateTexture(nil, "OVERLAY", nil, 6)
     frame.glow:SetPoint("TOPLEFT", -6, 6)
     frame.glow:SetPoint("BOTTOMRIGHT", 6, -6)
@@ -234,7 +217,6 @@ function cc:CreateCategoryIcon(category)
     frame.glow:SetBlendMode("ADD")
     frame.glow:SetVertexColor(unpack(MISSING_GLOW_COLOR))
     frame.glow:Hide()
-
     frame.glowAnim = frame.glow:CreateAnimationGroup()
     frame.glowAnim:SetLooping("BOUNCE")
     local fade = frame.glowAnim:CreateAnimation("Alpha")
@@ -242,21 +224,16 @@ function cc:CreateCategoryIcon(category)
     fade:SetToAlpha(0.25)
     fade:SetDuration(0.7)
     fade:SetSmoothing("IN_OUT")
-
-    -- Green tick overlay shown when the category is satisfied.
     frame.tick = frame.icon:CreateTexture(nil, "OVERLAY", nil, 7)
     frame.tick:SetSize(size * 0.55, size * 0.55)
     frame.tick:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 2, -2)
     frame.tick:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
     frame.tick:Hide()
-
-    -- Dim the icon when missing so the glow draws the eye.
     frame.icon.dim = frame.icon:CreateTexture(nil, "OVERLAY", nil, 5)
     frame.icon.dim:SetPoint("TOPLEFT", 2, -2)
     frame.icon.dim:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.dim:SetColorTexture(0, 0, 0, 0.35)
     frame.icon.dim:Hide()
-
     frame.label = frame:CreateFontString(nil, "OVERLAY")
     frame.label:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     frame.label:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)

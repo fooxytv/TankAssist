@@ -1,8 +1,8 @@
-## Interface: 120001
+## Interface: 120007
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.3.0-alpha.6ae3945
+## Version: 0.4.0-alpha.c36e001
 ## SavedVariables: TankAssistDB
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
@@ -16,8 +16,6 @@ libs\AceDB-3.0\AceDB-3.0.lua
 libs\AceConsole-3.0\AceConsole-3.0.lua
 
 # LibEQOL Edit Mode Integration
-# Lua files only - XML templates excluded to avoid conflicts with other addons
-# LibStub ensures only one version loads if multiple addons bundle this library
 libs\LibEQOL\LibEQOLSettingsMode.lua
 libs\LibEQOL\LibEQOLSettingsMultiDropdown.lua
 libs\LibEQOL\LibEQOLSettingsScrollDropdown.lua
