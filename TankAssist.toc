@@ -1,21 +1,21 @@
-## Interface: 120001
+## Interface: 120007
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.2.1-alpha.56bf278
+## Version: 0.4.2-alpha.2715749
 ## SavedVariables: TankAssistDB
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
 # Libraries
 libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 libs\AceAddon-3.0\AceAddon-3.0.lua
 libs\AceEvent-3.0\AceEvent-3.0.lua
 libs\AceDB-3.0\AceDB-3.0.lua
 libs\AceConsole-3.0\AceConsole-3.0.lua
 
 # LibEQOL Edit Mode Integration
-# Lua files only - XML templates excluded to avoid conflicts with other addons
-# LibStub ensures only one version loads if multiple addons bundle this library
 libs\LibEQOL\LibEQOLSettingsMode.lua
 libs\LibEQOL\LibEQOLSettingsMultiDropdown.lua
 libs\LibEQOL\LibEQOLSettingsScrollDropdown.lua
@@ -26,7 +26,9 @@ libs\LibEQOL\LibEQOL.lua
 
 # Core
 core\Constants.lua
+core\GearData.lua
 core\Utils.lua
+core\Sounds.lua
 core\SecretValues.lua
 core\Core.lua
 
@@ -35,7 +37,9 @@ ui\AssistedCombatDisplay.lua
 ui\CastBar.lua
 ui\ExternalCooldowns.lua
 ui\CooldownAlerts.lua
+ui\ConsumableCheck.lua
 ui\ConfigPanel.lua
+ui\GearAdvisor.lua
 
 # Tank Spec Modules
 specs\SpecBase.lua
@@ -49,3 +53,4 @@ specs\Druid\Guardian.lua
 # Data (external definitions)
 data\ClassCooldowns.lua
 data\RotationData.lua
+data\Consumables.lua

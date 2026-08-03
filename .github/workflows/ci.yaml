@@ -1,0 +1,44 @@
+name: "CI - TankAssist"
+run-name: "CI - ${{ github.ref_name }}"
+
+# Checks only. Nothing here packages or publishes.
+#
+# The publish workflows run the same gates before uploading, but they only fire
+# on a tag or a merge -- so without this the first time anyone sees a lint
+# failure is halfway through a release, with the upload already committed to.
+# This runs them on every push instead.
+on:
+  push:
+    branches: ["**"]
+    # Tag pushes are already covered by the publish workflow.
+    tags-ignore: ["**"]
+  pull_request:
+
+# A newer push makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up scripts
+        run: chmod +x ./ci/scripts/lint.sh
+
+      - name: Lint
+        run: |
+          sudo apt-get update && sudo apt-get install -y luarocks
+          sudo luarocks install luacheck
+          ./ci/scripts/lint.sh
+
+      # Catches what a parse cannot: load-order mistakes, nil child widgets, and
+      # API branches that are never taken until someone reloads in game.
+      - name: Smoke test
+        run: |
+          python -m pip install --quiet lupa luaparser
+          python ci/scripts/check_globals.py
+          python ci/tests/smoke_test.py

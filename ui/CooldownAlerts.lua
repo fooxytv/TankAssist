@@ -31,12 +31,41 @@ local DISPLAY_MODES = {
 
 local READY_FLASH_DURATION = 2.0
 
--- State tracking
-ca.spellStates = {}  -- [spellId] = { wasOnCooldown, readyFlashTime }
-ca.lastSoundTime = 0
+ca.spellStates = {}
 
 function ca:GetSettings()
     return TankAssist.Addon.db.profile.cooldownAlerts
+end
+
+function ca:GetCurrentSpecId()
+    return TankAssist.Utils and TankAssist.Utils:GetCurrentSpec() or 0
+end
+
+function ca:GetTrackedSpells()
+    local settings = self:GetSettings()
+    if settings.trackedSpells and #settings.trackedSpells > 0 and type(settings.trackedSpells[1]) == "number" then
+        local specId = self:GetCurrentSpecId()
+        if specId and specId > 0 then
+            if not settings.trackedSpellsBySpec then
+                settings.trackedSpellsBySpec = {}
+            end
+            settings.trackedSpellsBySpec[specId] = settings.trackedSpells
+            settings.trackedSpells = nil
+        end
+    end
+
+    if not settings.trackedSpellsBySpec then
+        settings.trackedSpellsBySpec = {}
+    end
+
+    local specId = self:GetCurrentSpecId()
+    if not specId or specId == 0 then return {} end
+
+    if not settings.trackedSpellsBySpec[specId] then
+        settings.trackedSpellsBySpec[specId] = {}
+    end
+
+    return settings.trackedSpellsBySpec[specId]
 end
 
 function ca:Create()
@@ -61,43 +90,68 @@ function ca:Create()
     self.activeCount = 0
     self.editMode = false
     self.inCombat = UnitAffectingCombat("player") or false
-
-    -- Init spell states for tracked spells
     self:InitSpellStates()
-
     self:RegisterEditMode()
     self:RegisterEvents()
-
     self.frame:Hide()
-
     return self.frame
 end
 
 function ca:InitSpellStates()
     self.spellStates = {}
+    self.unavailableSpells = {}
     local settings = self:GetSettings()
-    for _, spellId in ipairs(settings.trackedSpells) do
+    local customCDs = settings.customCooldowns
+    if customCDs then
+        for spellIdStr, duration in pairs(customCDs) do
+            local spellId = tonumber(spellIdStr)
+            if spellId and duration > 0 then
+                TankAssist.SecretValues.KnownCooldowns[spellId] = duration
+            end
+        end
+    end
+    self.spellCache = {}
+
+    local trackedSpells = self:GetTrackedSpells()
+    for _, spellId in ipairs(trackedSpells) do
         self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
         self:EnsureSpellRegistered(spellId)
+        self:CacheSpellInfo(spellId)
     end
 end
 
--- Register a spell's cooldown duration in SecretValues.KnownCooldowns
--- so that GetTrackedCooldown can track it via cast events
+function ca:CacheSpellInfo(spellId)
+    local info = C_Spell.GetSpellInfo(spellId)
+    if info and info.iconID then
+        self.spellCache[spellId] = {
+            name = info.name or "Unknown",
+            icon = info.iconID,
+        }
+    elseif not self.spellCache[spellId] then
+        self.spellCache[spellId] = {
+            name = "Unknown",
+            icon = 134400,
+            needsRefresh = true,
+        }
+    end
+end
+
+
 function ca:EnsureSpellRegistered(spellId)
     local sv = TankAssist.SecretValues
     if sv.KnownCooldowns[spellId] then return end
-
-    -- Try to read the CD duration from the API (works reliably out of combat / at init)
     local cdInfo = C_Spell.GetSpellCooldown(spellId)
-    if cdInfo and cdInfo.duration and type(cdInfo.duration) == "number" and cdInfo.duration > 1.5 then
-        sv.KnownCooldowns[spellId] = cdInfo.duration
-        return
+    if cdInfo and cdInfo.duration then
+        local ok, isReal = pcall(function()
+            return cdInfo.duration > 1.5
+        end)
+        if ok and isReal then
+            sv.KnownCooldowns[spellId] = cdInfo.duration
+            return
+        end
     end
 
-    -- Fallback: look up from CooldownAlertDefaults and use well-known durations
     local knownDurations = {
-        -- Interrupts (15s baseline)
         [6552]   = 15,  -- Pummel
         [96231]  = 15,  -- Rebuke
         [47528]  = 15,  -- Mind Freeze
@@ -129,30 +183,20 @@ function ca:CreateAlertIcon()
 
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetSize(size, size + 15)
-
-    -- Icon container (matches ExternalCooldowns structure)
     frame.icon = CreateFrame("Frame", nil, frame)
     frame.icon:SetSize(size, size)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
-
-    -- Background
     frame.icon.bg = frame.icon:CreateTexture(nil, "BACKGROUND")
     frame.icon.bg:SetAllPoints()
     frame.icon.bg:SetColorTexture(0, 0, 0, 0.6)
-
-    -- Spell texture
     frame.icon.texture = frame.icon:CreateTexture(nil, "ARTWORK")
     frame.icon.texture:SetPoint("TOPLEFT", 2, -2)
     frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    -- Cooldown sweep
     frame.cooldown = CreateFrame("Cooldown", nil, frame.icon, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon.texture)
     frame.cooldown:SetDrawEdge(false)
     frame.cooldown:SetHideCountdownNumbers(true)
-
-    -- Border color (configurable via Edit Mode settings)
     local saved = self:GetSettings().borderColor or { r = 0.9, g = 0.7, b = 0.2, a = 1 }
     local borderColor = { saved.r or 0.9, saved.g or 0.7, saved.b or 0.2, saved.a or 1 }
     frame.icon.borderTop = frame.icon:CreateTexture(nil, "OVERLAY")
@@ -160,58 +204,43 @@ function ca:CreateAlertIcon()
     frame.icon.borderTop:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderTop:SetHeight(1)
     frame.icon.borderTop:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderBottom = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderBottom:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderBottom:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderBottom:SetHeight(1)
     frame.icon.borderBottom:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderLeft = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderLeft:SetPoint("TOPLEFT", 0, 0)
     frame.icon.borderLeft:SetPoint("BOTTOMLEFT", 0, 0)
     frame.icon.borderLeft:SetWidth(1)
     frame.icon.borderLeft:SetColorTexture(unpack(borderColor))
-
     frame.icon.borderRight = frame.icon:CreateTexture(nil, "OVERLAY")
     frame.icon.borderRight:SetPoint("TOPRIGHT", 0, 0)
     frame.icon.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
-
-    -- Timer text — inside icon (centered, large)
     frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
     frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.timerInside:SetTextColor(1, 1, 1, 1)
-
-    -- Timer text — below icon (matches ExternalCooldowns style)
     frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
     frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timerBelow:SetTextColor(1, 1, 1, 1)
-
-    -- Spell name text (anchored below timer when timer is below, or below icon when timer is inside)
     frame.spellName = frame:CreateFontString(nil, "OVERLAY")
     frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
     frame.spellName:SetTextColor(1, 1, 1, 1)
     frame.spellName:SetWordWrap(false)
-
-    -- Ready flash overlay
     frame.readyFlash = frame.icon:CreateTexture(nil, "OVERLAY", nil, 7)
     frame.readyFlash:SetAllPoints(frame.icon.texture)
     frame.readyFlash:SetColorTexture(0.2, 1, 0.2, 0.5)
     frame.readyFlash:Hide()
-
-    -- Ready text
     frame.readyText = frame.icon:CreateFontString(nil, "OVERLAY")
     frame.readyText:SetFont("Fonts\\FRIZQT__.TTF", 12, "THICKOUTLINE")
     frame.readyText:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.readyText:SetTextColor(0.2, 1, 0.2, 1)
     frame.readyText:SetText("READY")
     frame.readyText:Hide()
-
-    -- Tooltip on hover
     frame.icon:EnableMouse(true)
     frame.icon:SetScript("OnEnter", function(self)
         if frame.spellId then
@@ -244,7 +273,7 @@ function ca:Update()
         return
     end
 
-    local trackedSpells = settings.trackedSpells
+    local trackedSpells = self:GetTrackedSpells()
     if #trackedSpells == 0 then
         self.frame:Hide()
         return
@@ -254,67 +283,66 @@ function ca:Update()
     local countdownDuration = settings.countdownDuration or 3
     local displayMode = settings.displayMode or "ICON_ONLY"
     local iconSize = settings.iconSize or 36
+    local alertStyle = settings.alertStyle or "BOTH"
     local activeIcons = {}
+    local sv = TankAssist.SecretValues
 
     for _, spellId in ipairs(trackedSpells) do
-        -- Init state if missing
-        if not self.spellStates[spellId] then
-            self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
-            self:EnsureSpellRegistered(spellId)
-        end
-        local state = self.spellStates[spellId]
+        if not (self.unavailableSpells and self.unavailableSpells[spellId]) then
+            if not self.spellStates[spellId] then
+                self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
+            end
+            local state = self.spellStates[spellId]
+            local tracked = sv.trackedCooldowns[spellId]
+            local remaining = 0
+            local onCooldown = false
 
-        -- Use internal cast tracking (immune to secret values)
-        local trackedRemaining = TankAssist.SecretValues:GetTrackedCooldown(spellId)
-        local onCooldown = trackedRemaining ~= nil and trackedRemaining > 0
-        local remaining = trackedRemaining or 0
+            if tracked then
+                remaining = tracked.duration - (now - tracked.castTime)
+                if remaining > 0 then
+                    onCooldown = true
+                else
+                    remaining = 0
+                end
+            end
 
-        local showIcon = false
-        local isReady = false
-        local alertStyle = settings.alertStyle or "BOTH"
+            local showIcon = false
+            local isReady = false
 
-        -- Check for CD→ready transition
-        if state.wasOnCooldown and not onCooldown then
-            state.readyFlashTime = now
-        end
+            if state.wasOnCooldown and not onCooldown then
+                state.readyFlashTime = now
+                if TankAssist.Sounds then
+                    TankAssist.Sounds:PlayForSpell(spellId, "cooldownReady")
+                end
+            end
 
-        -- Show countdown during last N seconds (only in COUNTDOWN or BOTH alert style)
-        if alertStyle ~= "READY_ONLY" and onCooldown and remaining > 0 and remaining <= countdownDuration then
-            showIcon = true
-        end
-
-        -- Show READY flash for 2 seconds after coming off CD (only in READY_ONLY or BOTH alert style)
-        if alertStyle ~= "COUNTDOWN_ONLY" then
-            if state.readyFlashTime > 0 and (now - state.readyFlashTime) < READY_FLASH_DURATION then
+            if alertStyle ~= "READY_ONLY" and onCooldown and remaining <= countdownDuration then
                 showIcon = true
-                isReady = true
-            elseif state.readyFlashTime > 0 and (now - state.readyFlashTime) >= READY_FLASH_DURATION then
+            end
+
+            if alertStyle ~= "COUNTDOWN_ONLY" then
+                if state.readyFlashTime > 0 and (now - state.readyFlashTime) < READY_FLASH_DURATION then
+                    showIcon = true
+                    isReady = true
+                elseif state.readyFlashTime > 0 and (now - state.readyFlashTime) >= READY_FLASH_DURATION then
+                    state.readyFlashTime = 0
+                end
+            else
                 state.readyFlashTime = 0
             end
-        else
-            state.readyFlashTime = 0
-        end
 
-        state.wasOnCooldown = onCooldown
+            state.wasOnCooldown = onCooldown
 
-        if showIcon then
-            -- Get real cast time and duration from shadow tracker for accurate sweep
-            local startTime = 0
-            local duration = 0
-            local tracked = TankAssist.SecretValues.trackedCooldowns[spellId]
-            if tracked and remaining > 0 then
-                startTime = tracked.castTime
-                duration = tracked.duration
+            if showIcon then
+                table.insert(activeIcons, {
+                    spellId = spellId,
+                    remaining = remaining,
+                    isReady = isReady,
+                    onCooldown = onCooldown,
+                    startTime = tracked and tracked.castTime or 0,
+                    duration = tracked and tracked.duration or 0,
+                })
             end
-
-            table.insert(activeIcons, {
-                spellId = spellId,
-                remaining = remaining,
-                isReady = isReady,
-                onCooldown = onCooldown,
-                startTime = startTime,
-                duration = duration,
-            })
         end
     end
 
@@ -324,7 +352,6 @@ function ca:Update()
         return
     end
 
-    -- Use tighter spacing when all icons are ready flashes
     local allReady = true
     for _, data in ipairs(activeIcons) do
         if not data.isReady then
@@ -341,7 +368,6 @@ function ca:Update()
         iconWidth = 80
     end
 
-    -- Overlap icons slightly when 3+ ready flashes at once
     if allReady and #activeIcons >= 3 and displayMode ~= "NAME_ONLY" then
         spacing = -(iconSize * 0.2)
     end
@@ -357,14 +383,10 @@ function ca:Update()
 
     for i, data in ipairs(activeIcons) do
         local icon = self:GetIcon(i)
-
-        -- Hide both timers, then show the active one as needed
         icon.timerInside:Hide()
         icon.timerInside:SetText("")
         icon.timerBelow:Hide()
         icon.timerBelow:SetText("")
-
-        -- Update icon sizing
         if displayMode == "NAME_ONLY" then
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
@@ -374,17 +396,18 @@ function ca:Update()
             icon.icon:Show()
         end
 
-        -- Position
         icon:ClearAllPoints()
         icon:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (iconWidth + spacing), 0)
 
-        -- Spell texture
-        local spellInfo = C_Spell.GetSpellInfo(data.spellId)
-        local spellIcon = spellInfo and spellInfo.iconID
-        icon.icon.texture:SetTexture(spellIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
+        local cached = self.spellCache and self.spellCache[data.spellId]
+        if (not cached or cached.needsRefresh) and not self.inCombat then
+            self:CacheSpellInfo(data.spellId)
+            cached = self.spellCache[data.spellId]
+        end
+        local spellIcon = cached and cached.icon or 134400
+        local spellName = cached and cached.name or ""
+        icon.icon.texture:SetTexture(spellIcon)
         icon.spellId = data.spellId
-
-        -- Anchor spell name based on timer position and display mode
         icon.spellName:ClearAllPoints()
         if displayMode == "ICON_NAME" then
             if timerPosition == "BELOW" then
@@ -392,7 +415,7 @@ function ca:Update()
             else
                 icon.spellName:SetPoint("TOP", icon.icon, "BOTTOM", 0, -2)
             end
-            icon.spellName:SetText(spellInfo and spellInfo.name or "")
+            icon.spellName:SetText(spellName)
             icon.spellName:SetTextColor(1, 1, 1, 1)
             icon.spellName:Show()
         elseif displayMode == "NAME_ONLY" then
@@ -403,9 +426,6 @@ function ca:Update()
             icon.spellName:Hide()
         end
 
-        local spellName = spellInfo and spellInfo.name or ""
-
-        -- Ready flash or countdown
         if data.isReady then
             icon.cooldown:Clear()
             icon.readyFlash:Show()
@@ -457,28 +477,28 @@ function ca:Update()
     self.frame:Show()
 end
 
--- Spell management
-
 function ca:AddTrackedSpell(spellId)
-    local settings = self:GetSettings()
-    for _, id in ipairs(settings.trackedSpells) do
+    local trackedSpells = self:GetTrackedSpells()
+    for _, id in ipairs(trackedSpells) do
         if id == spellId then
             TankAssist.Addon:Print("Spell already tracked.")
             return
         end
     end
-    table.insert(settings.trackedSpells, spellId)
+    table.insert(trackedSpells, spellId)
     self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
     self:EnsureSpellRegistered(spellId)
-    local spellInfo = C_Spell.GetSpellInfo(spellId)
-    TankAssist.Addon:Print("Now tracking: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
+    self.spellCache = self.spellCache or {}
+    self:CacheSpellInfo(spellId)
+    local cached = self.spellCache[spellId]
+    TankAssist.Addon:Print("Now tracking: " .. (cached and cached.name or "Spell " .. spellId))
 end
 
 function ca:RemoveTrackedSpell(spellId)
-    local settings = self:GetSettings()
-    for i, id in ipairs(settings.trackedSpells) do
+    local trackedSpells = self:GetTrackedSpells()
+    for i, id in ipairs(trackedSpells) do
         if id == spellId then
-            table.remove(settings.trackedSpells, i)
+            table.remove(trackedSpells, i)
             self.spellStates[spellId] = nil
             local spellInfo = C_Spell.GetSpellInfo(spellId)
             TankAssist.Addon:Print("Removed: " .. (spellInfo and spellInfo.name or "Spell " .. spellId))
@@ -502,33 +522,29 @@ function ca:LoadSpecDefaults()
     end
 
     local settings = self:GetSettings()
-    local added = 0
+    if not settings.trackedSpellsBySpec then
+        settings.trackedSpellsBySpec = {}
+    end
+    settings.trackedSpellsBySpec[specId] = {}
+    self.spellStates = {}
+    self.unavailableSpells = {}
+
+    local trackedSpells = self:GetTrackedSpells()
     for _, spellId in ipairs(defaults) do
-        local alreadyTracked = false
-        for _, id in ipairs(settings.trackedSpells) do
-            if id == spellId then
-                alreadyTracked = true
-                break
-            end
-        end
-        if not alreadyTracked then
-            table.insert(settings.trackedSpells, spellId)
-            self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
-            added = added + 1
-        end
+        table.insert(trackedSpells, spellId)
+        self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
+        self:EnsureSpellRegistered(spellId)
     end
 
-    TankAssist.Addon:Print("Loaded " .. added .. " default spells for " .. (TankAssist.Constants.SpecNames[specId] or "this spec") .. ".")
+    TankAssist.Addon:Print("Loaded " .. #defaults .. " default spells for " .. (TankAssist.Constants.SpecNames[specId] or "this spec") .. ".")
 
     -- Print the list
-    for _, spellId in ipairs(settings.trackedSpells) do
+    for _, spellId in ipairs(trackedSpells) do
         local spellInfo = C_Spell.GetSpellInfo(spellId)
         local spellName = spellInfo and spellInfo.name or "Unknown"
         print(string.format("  %s (ID: %d)", spellName, spellId))
     end
 end
-
--- Edit Mode
 
 function ca:RegisterEditMode()
     if not self.frame then return end
@@ -890,15 +906,12 @@ function ca:OnEditModeEnter()
     local iconSize = settings.iconSize or 36
     local displayMode = settings.displayMode or "ICON_ONLY"
     local spacing = 4
-    local placeholderCount = 3
-
-    -- Placeholder spell IDs for display
-    local placeholderSpells = { 871, 12975, 6552 } -- Shield Wall, Last Stand, Pummel
+    local placeholderSpells = { 871, 12975, 6552 }
     local specId = TankAssist.Utils:GetCurrentSpec()
     if specId and TankAssist.Constants.CooldownAlertDefaults[specId] then
         placeholderSpells = TankAssist.Constants.CooldownAlertDefaults[specId]
     end
-    placeholderCount = math.min(3, #placeholderSpells)
+    local placeholderCount = math.min(3, #placeholderSpells)
 
     local iconWidth = iconSize
     if displayMode == "ICON_NAME" then
@@ -936,8 +949,6 @@ function ca:OnEditModeEnter()
         icon.icon.texture:SetTexture(spellIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = spellId
         icon.cooldown:Clear()
-
-        -- Fake countdown for edit mode preview
         local fakeTimer = string.format("%.1f", 1.5 + i * 0.5)
         icon.timerInside:Hide()
         icon.timerInside:SetText("")
@@ -978,7 +989,6 @@ function ca:OnEditModeEnter()
         icon:Show()
     end
 
-    -- Hide extra icons
     for i = placeholderCount + 1, #self.icons do
         self.icons[i]:Hide()
     end
@@ -998,8 +1008,6 @@ function ca:OnEditModeExit()
     end
     self.frame:Hide()
 end
-
--- Visibility / Settings
 
 function ca:IsEnabled()
     local enabled = self:GetSettings().enabled
@@ -1059,19 +1067,36 @@ end
 
 -- Events
 
+function ca:OnTrackedSpellCast(spellId)
+    local sv = TankAssist.SecretValues
+    local trackedSpells = self:GetTrackedSpells()
+
+    for _, trackedId in ipairs(trackedSpells) do
+        if trackedId == spellId then
+            local knownCD = sv.KnownCooldowns[spellId]
+            if knownCD and knownCD > 1.5 then
+                sv.trackedCooldowns[spellId] = {
+                    castTime = GetTime(),
+                    duration = knownCD,
+                }
+            end
+            return
+        end
+    end
+end
+
 function ca:RegisterEvents()
     local self_ref = self
     self.eventFrame = CreateFrame("Frame")
 
-    self.eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    self.eventFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     self.eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
     self.eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
-    self.eventFrame:SetScript("OnEvent", function(_, event)
-        if event == "SPELL_UPDATE_COOLDOWN" then
-            -- Immediate update on cooldown change (the 0.1s ticker also calls Update)
+    self.eventFrame:SetScript("OnEvent", function(_, event, unit, castGUID, spellId)
+        if event == "UNIT_SPELLCAST_SUCCEEDED" and unit == "player" then
             if self_ref:IsEnabled() and not self_ref.editMode then
-                self_ref:Update()
+                self_ref:OnTrackedSpellCast(spellId)
             end
         elseif event == "PLAYER_REGEN_DISABLED" then
             self_ref.inCombat = true
@@ -1082,9 +1107,8 @@ function ca:RegisterEvents()
             end
         end
     end)
-end
 
--- Initialization
+end
 
 local function Initialize()
     if TankAssist.Addon then

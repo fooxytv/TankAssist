@@ -72,10 +72,10 @@ TankAssist.Constants.BarTextures = {
 }
 
 TankAssist.Constants.CooldownAlertDefaults = {
-    [73]  = { 871, 12975, 6552 },       -- Prot Warrior: Shield Wall, Last Stand, Pummel
-    [66]  = { 31850, 86659, 96231 },     -- Prot Paladin: Ardent Defender, GoAK, Rebuke
-    [250] = { 48792, 55233, 47528 },     -- Blood DK: IBF, Vampiric Blood, Mind Freeze
-    [268] = { 115203, 122278, 116705 },  -- Brewmaster: Fort Brew, Dampen Harm, Spear Hand
-    [581] = { 187827, 204021, 183752 },  -- Vengeance: Meta, Fiery Brand, Disrupt
-    [104] = { 22812, 61336, 106839 },    -- Guardian: Barkskin, Survival Instincts, Skull Bash
+    [73]  = { 871, 12975, 6552 },
+    [66]  = { 31850, 86659, 96231 },
+    [250] = { 48792, 55233, 47528 },
+    [268] = { 115203, 122278, 116705 },
+    [581] = { 187827, 204021, 183752 },
+    [104] = { 22812, 61336, 106839 },
 }

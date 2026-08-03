@@ -244,29 +244,23 @@ end
 function utils:CreateIcon(parent, size, template)
     local frame = CreateFrame("Frame", nil, parent, template)
     frame:SetSize(size, size)
-
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetAllPoints()
     frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints()
     frame.cooldown:SetDrawSwipe(true)
     frame.cooldown:SetDrawEdge(false)
-
     frame.border = frame:CreateTexture(nil, "OVERLAY")
     frame.border:SetPoint("TOPLEFT", -2, 2)
     frame.border:SetPoint("BOTTOMRIGHT", 2, -2)
     frame.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     frame.border:SetBlendMode("ADD")
     frame.border:SetVertexColor(1, 1, 1, 0.8)
-
     frame.count = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     frame.count:SetPoint("BOTTOMRIGHT", -2, 2)
-
     frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
     frame.keybind:SetPoint("TOPLEFT", 2, -2)
-
     return frame
 end
 
@@ -281,8 +275,8 @@ function utils:ApplyGlow(frame, color, intensity)
     color = color or { 1, 1, 0 }
     intensity = intensity or 0.8
 
-    if ActionButton_ShowOverlayGlow then
-        ActionButton_ShowOverlayGlow(frame)
+    if ActionButton_ShowOverlayGlow then -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
+        ActionButton_ShowOverlayGlow(frame) -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
     else
         frame.glowFrame:SetBackdrop({
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -293,8 +287,8 @@ function utils:ApplyGlow(frame, color, intensity)
 end
 
 function utils:RemoveGlow(frame)
-    if ActionButton_HideOverlayGlow then
-        ActionButton_HideOverlayGlow(frame)
+    if ActionButton_HideOverlayGlow then -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
+        ActionButton_HideOverlayGlow(frame) -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
     elseif frame.glowFrame then
         frame.glowFrame:SetBackdrop(nil)
     end

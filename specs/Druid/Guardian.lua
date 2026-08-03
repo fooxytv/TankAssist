@@ -186,6 +186,9 @@ guardianDruid.secondarySpells = {
         category = "OFFENSIVE",
         urgency = "NORMAL",
         condition = function(self)
+            if not IsPlayerSpell(spells.ConvokeTheSpirits) then
+                return false
+            end
             return self:HasTarget() and self:InCombat()
         end,
     },
@@ -209,6 +212,15 @@ guardianDruid.secondarySpells = {
         spellId = spells.Maul,
         category = "FILLER",
         urgency = "LOW",
+        condition = function(self)
+            return self:HasTarget()
+        end,
+    },
+    {
+        spellId = spells.Swipe,
+        category = "FILLER",
+        urgency = "LOW",
+        alwaysAvailable = true,
         condition = function(self)
             return self:HasTarget()
         end,
@@ -384,13 +396,11 @@ guardianDruid.rotationPriority = {
     },
     {
         spellId = spells.Swipe,
-        defaultPriority = "NORMAL",
+        defaultPriority = "LOW",
+        alwaysAvailable = true,
         condition = function(self)
-            local enemies = self:GetEnemyCount()
-            if enemies >= 2 then
-                return true, "NORMAL", nil
-            end
-            return false
+            -- Always available as filler — it's free and has no CD
+            return true, "LOW", nil
         end,
     },
 }
