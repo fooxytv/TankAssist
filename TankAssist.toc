@@ -28,6 +28,7 @@ libs\LibEQOL\LibEQOL.lua
 
 # Core
 core\Constants.lua
+core\GearData.lua
 core\Utils.lua
 core\Sounds.lua
 core\SecretValues.lua
@@ -40,6 +41,7 @@ ui\ExternalCooldowns.lua
 ui\CooldownAlerts.lua
 ui\ConsumableCheck.lua
 ui\ConfigPanel.lua
+ui\GearAdvisor.lua
 
 # Tank Spec Modules
 specs\SpecBase.lua
