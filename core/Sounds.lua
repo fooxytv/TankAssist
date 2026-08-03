@@ -65,10 +65,11 @@ function sounds:PlayByName(name)
     if not VALID_CHANNELS[channel] then channel = "Master" end
 
     if type(resolved) == "number" then
-        local willPlay = PlaySound(resolved, channel)
-        if not willPlay then
-            PlaySoundFile(resolved, channel)
-        end
+        -- A numeric value from LibSharedMedia is a SOUNDKIT id, which only
+        -- PlaySound understands. Falling back to PlaySoundFile here would hand
+        -- it an id where a file path / fileDataID is expected, so if PlaySound
+        -- declines there is nothing further to try.
+        PlaySound(resolved, channel)
     else
         PlaySoundFile(resolved, channel)
     end
