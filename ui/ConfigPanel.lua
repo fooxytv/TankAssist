@@ -1,3 +1,5 @@
+-- [[ WIP - Requires alterations for scrolling for different selections ]] --
+
 local ADDON_NAME, TankAssist = ...
 
 TankAssist.ConfigPanel = {}

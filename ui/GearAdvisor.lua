@@ -7,17 +7,15 @@ local ACCENT    = { 0, 0.75, 0.95, 1 }
 local DIM       = { 0.62, 0.62, 0.65, 1 }
 local BIS_COLOR = { 1, 0.82, 0, 1 }
 
--- Prominent colour for the verdict header line in tooltips.
 local VERDICT_HEADER_COLOR = {
-    BIS       = { 1.00, 0.55, 0.00 }, -- orange-gold
-    UPGRADE   = { 1.00, 0.90, 0.15 }, -- yellow
+    BIS       = { 1.00, 0.55, 0.00 },
+    UPGRADE   = { 1.00, 0.90, 0.15 },
     SIDEGRADE = { 0.75, 0.75, 0.75 },
     DOWNGRADE = { 0.95, 0.35, 0.35 },
     OFFSPEC   = { 0.60, 0.60, 0.60 },
     UNKNOWN   = { 0.60, 0.60, 0.60 },
 }
 
--- Coloured "+N" / "-N" string for embedding in a tooltip line.
 local function deltaStr(d)
     local c = d > 0 and "ff40d040" or (d < 0 and "ffe85050" or "ffaaaaaa")
     return string.format("|c%s%+d|r", c, d)
@@ -37,7 +35,6 @@ end
 local PLATE_SPECS   = { [73] = true, [66] = true, [250] = true }
 local LEATHER_SPECS = { [104] = true, [268] = true, [581] = true }
 
--- Short spec name (without the class word) + class file token for class colour.
 local SPEC_INFO = {
     [250] = { short = "Blood",      class = "DEATHKNIGHT" },
     [268] = { short = "Brewmaster", class = "MONK" },
@@ -60,9 +57,6 @@ local function coloredSpecName(specId, fallback)
     return info.short
 end
 
--- ============================================================================
--- API wrappers (prefer C_Item namespace, fall back to globals)
--- ============================================================================
 local function getInfoInstant(link)
     if C_Item and C_Item.GetItemInfoInstant then return C_Item.GetItemInfoInstant(link) end
     return GetItemInfoInstant(link)
@@ -80,9 +74,6 @@ local function getItemLevel(link)
     return nil
 end
 
--- ============================================================================
--- Settings / profiles
--- ============================================================================
 function ga:GetSettings()
     if TankAssist.Addon and TankAssist.Addon.db then
         return TankAssist.Addon.db.profile.gearAdvisor
@@ -153,9 +144,6 @@ function ga:ClearForSpec(specId)
     if s then s.profiles[tostring(specId)] = nil end
 end
 
--- ============================================================================
--- Scoring
--- ============================================================================
 function ga:ScoreItem(link, weights)
     if not link then return nil end
     local stats = getItemStats(link)
@@ -164,7 +152,7 @@ function ga:ScoreItem(link, weights)
     local total, any = 0, false
     for statKey, value in pairs(stats) do
         if SV:IsSecret(value) then
-            return nil -- secret/tainted -> caller falls back to ilvl
+            return nil
         end
         local v = SV:SafeNumber(value, nil)
         if v then
@@ -200,22 +188,19 @@ function ga:GetEquippedComparison(equipLoc, weights)
 end
 
 function ga:ClassCanUse(specId, classID, subClassID, equipLoc)
-    if classID ~= 4 then return true end -- not armor (weapon/jewelry handled elsewhere)
+    if classID ~= 4 then return true end
     if subClassID == 4 then
         return PLATE_SPECS[specId] == true
     elseif subClassID == 3 then
-        return false -- mail: no tank in this set wears mail
+        return false
     elseif subClassID == 2 then
         return LEATHER_SPECS[specId] == true
     elseif subClassID == 1 then
-        -- cloth: cloaks are cloth but everyone wears them; block cloth body armor
         return equipLoc == "INVTYPE_CLOAK"
     end
-    return true -- generic (neck/finger/trinket) etc.
+    return true
 end
 
--- Returns a list of { internal, name, delta } for every weighted stat that
--- differs between candidate and equipped, sorted by weighted impact.
 local function buildStatDeltas(candLink, cmpLink, weights)
     local cs = getItemStats(candLink)
     if not cs then return nil end
@@ -281,7 +266,6 @@ local function classifyByIlvl(candIlvl, cmp, ilvlDelta, tainted)
     }
 end
 
--- The single brain used by the tooltip and loot surfaces.
 function ga:GetVerdict(itemLink)
     local s = self:GetSettings()
     if not s or not s.enabled or not itemLink then return nil end
@@ -290,7 +274,7 @@ function ga:GetVerdict(itemLink)
     if not itemID then return nil end
 
     local slots = TankAssist.GearData.INVTYPE_TO_SLOTS[equipLoc]
-    if not slots then return nil end -- not comparable gear
+    if not slots then return nil end
 
     local specId = TankAssist.Utils:GetCurrentSpec()
     local specName = TankAssist.Utils:GetSpecName(specId)
@@ -303,7 +287,6 @@ function ga:GetVerdict(itemLink)
     local profile = self:GetActiveProfile()
     local weights = (profile and profile.weights) or TankAssist.GearData:GetDefaultWeights(specId)
 
-    -- LAYER 2: explicit BIS override
     if profile and profile.bis then
         local bisKey = TankAssist.GearData:BisKeyForEquipLoc(equipLoc)
         if bisKey and profile.bis[bisKey] and profile.bis[bisKey][itemID] then
@@ -329,14 +312,12 @@ function ga:GetVerdict(itemLink)
     local cmpScore = cmp and cmp.link and self:ScoreItem(cmp.link, weights) or nil
     local ilvlDelta = (candIlvl and cmp and cmp.ilvl) and (candIlvl - cmp.ilvl) or nil
 
-    -- LAYER 1 fallback: pure item level when stats are unreadable
     if candScore == nil or cmpScore == nil then
         local v = classifyByIlvl(candIlvl, cmp, ilvlDelta, candScore == nil)
         v.specName = specName
         return v
     end
 
-    -- LAYER 3: weighted stat score
     local scoreDelta = candScore - cmpScore
     local eps = math.max(1, cmpScore * 0.005)
     local tier, label, color
@@ -362,9 +343,6 @@ function ga:VerdictRank(verdict)
     return 0
 end
 
--- ============================================================================
--- Tooltip annotation
--- ============================================================================
 function ga:AnnotateTooltip(tooltip, itemID)
     local s = self:GetSettings()
     if not s or not s.enabled or not s.annotateTooltips then return end
@@ -383,18 +361,15 @@ function ga:AnnotateTooltip(tooltip, itemID)
 
     tooltip:AddLine(" ")
 
-    -- Header: TankAssist: <Spec> (class-coloured)
     local header = "|cFF00BFFFTankAssist:|r"
     local specId = TankAssist.Utils:GetCurrentSpec()
     local nameStr = coloredSpecName(specId, v.specName)
     if nameStr then header = header .. " " .. nameStr end
     tooltip:AddLine(header)
 
-    -- Verdict (prominent, coloured)
     local hc = VERDICT_HEADER_COLOR[v.tier] or { 1, 1, 1 }
     tooltip:AddLine(v.label or "", hc[1], hc[2], hc[3])
 
-    -- Item level line (white)
     if v.ilvlCurrent and v.ilvlNew then
         tooltip:AddLine(string.format("Item Level: %d > %d  %s",
             v.ilvlCurrent, v.ilvlNew, deltaStr(v.ilvlNew - v.ilvlCurrent)), 1, 1, 1)
@@ -402,14 +377,12 @@ function ga:AnnotateTooltip(tooltip, itemID)
         tooltip:AddLine(string.format("Item Level: %d", v.ilvlNew), 1, 1, 1)
     end
 
-    -- Stat differences, one per line
     if v.statDeltas then
         for _, st in ipairs(v.statDeltas) do
             tooltip:AddLine(st.name .. "  " .. deltaStr(st.delta), 0.85, 0.85, 0.85)
         end
     end
 
-    -- Explanatory notes (BIS / empty slot / off-spec / ilvl-only)
     if v.reasons then
         for _, r in ipairs(v.reasons) do
             tooltip:AddLine(r, 0.55, 0.55, 0.55)
@@ -427,12 +400,6 @@ function ga:HookTooltip()
     end
 end
 
--- ============================================================================
--- Glow helpers (event-driven; never run from the combat ticker)
--- A bright additive border drawn ON TOP of the target frame, so it stays
--- visible over Blizzard art (unlike a backdrop placed behind the frame).
--- ============================================================================
--- Next strata up, so the ring sits above the frame's own item art.
 local STRATA_BUMP = {
     BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
     DIALOG = "FULLSCREEN", FULLSCREEN = "FULLSCREEN_DIALOG",
@@ -441,9 +408,6 @@ local STRATA_BUMP = {
 local function showGlow(frame, color)
     if not frame.taGlow then
         local g = CreateFrame("Frame", nil, frame)
-        -- A higher frame level alone isn't reliable across Blizzard's item
-        -- frames, so also nudge the strata up one band so the ring stays
-        -- visible over the displayed item.
         local baseStrata = (frame.GetFrameStrata and frame:GetFrameStrata()) or "MEDIUM"
         g:SetFrameStrata(STRATA_BUMP[baseStrata] or baseStrata)
         g:SetFrameLevel((frame:GetFrameLevel() or 1) + 20)
@@ -504,9 +468,6 @@ function ga:_DoLootGlow()
     end
 end
 
--- ============================================================================
--- Events
--- ============================================================================
 local function safeRegister(frame, event)
     pcall(function() frame:RegisterEvent(event) end)
 end
@@ -530,9 +491,7 @@ function ga:RegisterEvents()
     end)
 end
 
--- ============================================================================
--- Debug
--- ============================================================================
+-- [[ debug dump ]] 
 function ga:DebugDump(arg)
     local specId = TankAssist.Utils:GetCurrentSpec()
     local specName = TankAssist.Utils:GetSpecName(specId)
@@ -588,9 +547,6 @@ function ga:DebugDump(arg)
     end
 end
 
--- ============================================================================
--- Lifecycle
--- ============================================================================
 function ga:Create()
     if self.created then return end
     self.created = true
