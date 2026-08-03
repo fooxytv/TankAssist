@@ -162,6 +162,16 @@ local defaults = {
             borderColor = { r = 0.5, g = 0.5, b = 0.55, a = 1 },
             position = { point = "TOP", relativePoint = "TOP", x = 0, y = -180 },
         },
+        gearAdvisor = {
+            -- Off by default: dedicated upgrade addons do this better. Opt in
+            -- from the Gear Advisor config page.
+            enabled = false,
+            annotateTooltips = true,
+            glowLoot = true,
+            considerTierSet = false,
+            glowColor = { 0, 0.75, 0.95, 1 },
+            profiles = {},
+        },
         specs = {},
         sounds = {
             enabled = true,
@@ -739,6 +749,13 @@ function addon:HandleSlashCommand(msg)
             self:Print("Debug mode " .. state)
         end
 
+    elseif cmd == "gear" then
+        if TankAssist.GearAdvisor then
+            TankAssist.GearAdvisor:DebugDump(args[2])
+        else
+            self:Print(C_OFF .. "Gear Advisor not loaded" .. C_END)
+        end
+
     elseif cmd == "test" then
         self:RunTestMode()
 
@@ -763,6 +780,7 @@ function addon:PrintHelp()
     self:Print("Commands:")
     line("/ta",          "Open the configuration panel")
     line("/ta toggle",   "Enable / disable the addon")
+    line("/ta gear",     "Gear Advisor status & sample verdicts")
     line("/ta test",     "Run test mode")
     line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
     print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)

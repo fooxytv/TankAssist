@@ -91,6 +91,7 @@ function cp:Create()
     self:RegisterCategory("consumables", "Consumables", function(f) self:BuildConsumablesPage(f) end)
     self:RegisterCategory("sounds", "Sounds & Alerts", function(f) self:BuildSoundsPage(f) end)
     self:RegisterCategory("castBars", "Cast Bars", function(f) self:BuildCastBarsPage(f) end)
+    self:RegisterCategory("gearAdvisor", "Gear Advisor", function(f) self:BuildGearAdvisorPage(f) end)
     self:SelectCategory("general")
     tinsert(UISpecialFrames, "TankAssistConfigPanel")
 
@@ -203,6 +204,8 @@ function cp:SelectCategory(id)
 
     if id == "cooldownAlerts" then
         self:RefreshAlertSpellList()
+    elseif id == "gearAdvisor" then
+        self:RefreshGearAdvisorPage()
     end
 end
 
@@ -1155,6 +1158,170 @@ function cp:Toggle()
     else
         self:Show()
     end
+end
+
+-- ============================================================================
+-- Gear Advisor Page
+-- ============================================================================
+
+function cp:MakeMultiLineImportBox(parent, yOffset, height)
+    local container = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    container:SetPoint("TOPLEFT", 0, yOffset)
+    container:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+    container:SetHeight(height)
+    container:SetBackdrop(BACKDROP_SMALL)
+    container:SetBackdropColor(0.12, 0.12, 0.16, 1)
+    container:SetBackdropBorderColor(0.3, 0.3, 0.35, 1)
+
+    local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 6, -6)
+    scroll:SetPoint("BOTTOMRIGHT", -26, 6)
+
+    local edit = CreateFrame("EditBox", nil, scroll)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:SetFontObject("ChatFontNormal")
+    edit:SetWidth(CONTENT_WIDTH - 44)
+    edit:SetHeight(height - 12) -- give an initial clickable area even when empty
+    edit:SetMaxLetters(0)
+    edit:SetTextInsets(2, 2, 2, 2)
+    edit:EnableMouse(true)
+    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    -- multi-line edit boxes auto-grow; keep the cursor visible while typing/pasting
+    if ScrollingEdit_OnTextChanged then
+        edit:SetScript("OnTextChanged", function(self) ScrollingEdit_OnTextChanged(self, scroll) end)
+    end
+    if ScrollingEdit_OnCursorChanged then
+        edit:SetScript("OnCursorChanged", function(self, ...) ScrollingEdit_OnCursorChanged(self, ...) end)
+    end
+    scroll:SetScrollChild(edit)
+
+    -- Clicking anywhere in the box focuses the edit (the empty edit area is tiny otherwise)
+    scroll:EnableMouse(true)
+    scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)
+    container:EnableMouse(true)
+    container:SetScript("OnMouseDown", function() edit:SetFocus() end)
+
+    return edit, container
+end
+
+function cp:SetGearStatus(msg, level)
+    if not self.gearStatusText then return end
+    local color = C.textDim
+    if level == "ok" then color = C.success
+    elseif level == "warn" then color = C.warning
+    elseif level == "error" then color = C.danger end
+    self.gearStatusText:SetText(msg or "")
+    self.gearStatusText:SetTextColor(unpack(color))
+end
+
+function cp:RefreshGearAdvisorPage()
+    if not self.gearImportBox then return end
+    local specId = TankAssist.Utils:GetCurrentSpec()
+    local specName = TankAssist.Utils:GetSpecName(specId)
+    if self.gearSpecLabel then
+        self.gearSpecLabel:SetText("Editing profile for: |cFF00BFFF" .. specName .. "|r")
+    end
+    local raw = (TankAssist.GearAdvisor and specId) and TankAssist.GearAdvisor:GetRawImport(specId) or ""
+    self.gearImportBox:SetText(raw)
+
+    local s = TankAssist.Addon.db.profile.gearAdvisor
+    local p = s and specId and s.profiles[tostring(specId)]
+    if p and p.status then
+        self:SetGearStatus(p.status, p.statusLevel or "ok")
+    else
+        self:SetGearStatus("", "ok")
+    end
+end
+
+function cp:BuildGearAdvisorPage(frame)
+    local y = 0
+    local s = TankAssist.Addon.db.profile.gearAdvisor
+
+    y = self:MakeSectionHeader(frame, "Gear Advisor", y)
+
+    local intro = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    intro:SetPoint("TOPLEFT", 2, y)
+    intro:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    intro:SetJustifyH("LEFT")
+    intro:SetWordWrap(true)
+    intro:SetText("Optional and disabled by default - dedicated upgrade addons do this better. Enable if you'd rather keep it in one place.")
+    intro:SetTextColor(unpack(C.textMuted))
+    y = y - 28
+
+    y = self:MakeCheckbox(frame, "Enable Gear Advisor (off by default)", y,
+        function() return s.enabled end,
+        function(v)
+            s.enabled = v
+            if not v and TankAssist.GearAdvisor then
+                TankAssist.GearAdvisor:ClearAllGlows()
+            end
+        end
+    )
+    y = self:MakeCheckbox(frame, "Annotate item tooltips", y,
+        function() return s.annotateTooltips end,
+        function(v) s.annotateTooltips = v end
+    )
+    y = self:MakeCheckbox(frame, "Glow upgrade on loot rolls", y,
+        function() return s.glowLoot end,
+        function(v) s.glowLoot = v end
+    )
+
+    y = self:MakeSectionHeader(frame, "Import gear data", y - 10)
+
+    local specLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    specLabel:SetPoint("TOPLEFT", 2, y)
+    specLabel:SetTextColor(unpack(C.textDim))
+    self.gearSpecLabel = specLabel
+    y = y - 16
+
+    local help = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    help:SetPoint("TOPLEFT", 2, y)
+    help:SetText("Paste a TankAssist gear block (weights and/or BIS item IDs), then Import.")
+    help:SetTextColor(unpack(C.textMuted))
+    y = y - 18
+
+    local edit = self:MakeMultiLineImportBox(frame, y, 160)
+    self.gearImportBox = edit
+    y = y - 160 - 8
+
+    local importBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    importBtn:SetPoint("TOPLEFT", 2, y)
+    importBtn:SetSize(90, 22)
+    importBtn:SetText("Import")
+
+    local clearBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearBtn:SetPoint("LEFT", importBtn, "RIGHT", 8, 0)
+    clearBtn:SetSize(90, 22)
+    clearBtn:SetText("Clear")
+
+    local status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    status:SetPoint("TOPLEFT", importBtn, "BOTTOMLEFT", 0, -8)
+    status:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    status:SetJustifyH("LEFT")
+    status:SetWordWrap(true)
+    self.gearStatusText = status
+
+    importBtn:SetScript("OnClick", function()
+        local specId = TankAssist.Utils:GetCurrentSpec()
+        if not specId or not TankAssist.GearAdvisor then
+            self:SetGearStatus("No active spec to import for.", "error")
+            return
+        end
+        local _, msg, level = TankAssist.GearAdvisor:ImportForSpec(specId, edit:GetText())
+        self:SetGearStatus(msg, level)
+    end)
+
+    clearBtn:SetScript("OnClick", function()
+        local specId = TankAssist.Utils:GetCurrentSpec()
+        if specId and TankAssist.GearAdvisor then
+            TankAssist.GearAdvisor:ClearForSpec(specId)
+        end
+        edit:SetText("")
+        self:SetGearStatus("Cleared.", "ok")
+    end)
+
+    self:RefreshGearAdvisorPage()
 end
 
 -- ============================================================================
