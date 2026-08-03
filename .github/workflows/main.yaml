@@ -1,4 +1,7 @@
 name: "Build and Publish - TankAssist"
+# The version, not just the branch: on a tag push ref_name is the tag itself,
+# which is what makes the run list readable at a glance.
+run-name: "Publish ${{ github.ref_type == 'tag' && github.ref_name || format('{0} from {1}', inputs.release_type, github.ref_name) }}"
 
 on:
   push:

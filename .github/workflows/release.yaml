@@ -1,4 +1,6 @@
 name: "Release - TankAssist"
+# Named after the release branch being merged, which carries the version.
+run-name: "Release ${{ github.event.pull_request.head.ref }}"
 
 # Triggers when a release branch is merged into main.
 # Creates a clean version tag (no alpha/beta suffix), a GitHub release,

@@ -136,8 +136,10 @@ rotationData.Profiles = {
 
 function rotationData:ParseCondition(conditionStr, specModule)
     local conditions = {}
-    for condition in conditionStr:gmatch("[^,]+") do
-        condition = condition:match("^%s*(.-)%s*$")
+    -- Trim into a fresh local rather than reassigning the loop variable: the
+    -- control variable is read-only from Lua 5.4 on, which the smoke test runs.
+    for rawCondition in conditionStr:gmatch("[^,]+") do
+        local condition = rawCondition:match("^%s*(.-)%s*$")
         local healthOp, healthVal = condition:match("health%.pct([<>=]+)(%d+)")
         if healthOp and healthVal then
             table.insert(conditions, function()
