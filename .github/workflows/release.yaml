@@ -1,8 +1,11 @@
 name: "Release - TankAssist"
 
-# Triggers when a PR is merged into main.
+# Triggers when a release branch is merged into main.
 # Creates a clean version tag (no alpha/beta suffix), a GitHub release,
 # and publishes to CurseForge as a stable release.
+#
+# Guarded on a release/* head branch so a develop -> main merge cannot cut a
+# stable release by accident. Stable ships only via release/x.y.z.
 
 on:
   pull_request:
@@ -11,7 +14,9 @@ on:
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
