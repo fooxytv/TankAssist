@@ -1,7 +1,4 @@
 name: "Beta - TankAssist"
-# The release branch carries the version, so name the run after it rather than
-# after the develop branch being merged in.
-run-name: "Beta ${{ github.event.pull_request.base.ref }}"
 
 # Publishes a beta to CurseForge when a PR is merged into a release branch.
 #
