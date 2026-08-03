@@ -672,15 +672,17 @@ function ec:OnEditModeEnter()
         icon.icon.texture:SetTexture(spellIcon or ph.fallbackIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
         icon.spellId = ph.spellId
         icon.cooldown:Clear()
-        if displayMode == "NAME_ONLY" then
-        elseif timerPosition == "BELOW" then
-            icon.timerBelow:SetText(fakeTimer)
-            icon.timerBelow:SetTextColor(1, 1, 1, 1)
-            icon.timerBelow:Show()
-        else
-            icon.timerInside:SetText(fakeTimer)
-            icon.timerInside:SetTextColor(1, 1, 1, 1)
-            icon.timerInside:Show()
+        -- NAME_ONLY deliberately draws no timer.
+        if displayMode ~= "NAME_ONLY" then
+            if timerPosition == "BELOW" then
+                icon.timerBelow:SetText(fakeTimer)
+                icon.timerBelow:SetTextColor(1, 1, 1, 1)
+                icon.timerBelow:Show()
+            else
+                icon.timerInside:SetText(fakeTimer)
+                icon.timerInside:SetTextColor(1, 1, 1, 1)
+                icon.timerInside:Show()
+            end
         end
 
         local spellName = spellInfo and spellInfo.name or ph.name

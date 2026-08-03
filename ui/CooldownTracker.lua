@@ -222,9 +222,7 @@ function ct:UpdateCooldownIcon(icon)
             icon.wasReady = true
             icon.readyAnim:Play()
 
-            if TankAssist.Addon.db.profile.sounds.enabled and TankAssist.Addon.db.profile.sounds.cooldownReady then
-                -- PlaySoundFile(TankAssist.Addon.db.profile.sounds.cooldownReady)
-            end
+            -- Ready sounds are played by TankAssist.Sounds, not from here.
         end
     end
 end

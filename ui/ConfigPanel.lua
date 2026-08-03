@@ -435,7 +435,8 @@ function cp:BuildGeneralPage(frame)
         function(v) db.assistedCombat.enabled = v end
     )
 
-    y = self:MakeCheckbox(frame, "Show keybinds", y,
+    -- Last control on the page, so the returned y is not threaded any further.
+    self:MakeCheckbox(frame, "Show keybinds", y,
         function() return db.assistedCombat.showKeybinds end,
         function(v) db.assistedCombat.showKeybinds = v end
     )

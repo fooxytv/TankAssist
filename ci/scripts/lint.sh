@@ -28,6 +28,8 @@ echo "Running Lua lint checks on directory: $(pwd)"
 # Still ignored, because they are noise in a WoW addon:
 # 211 - unused local variable
 # 212 - unused argument
+# 213 - unused loop variable (for i = 1, n do ... end with i unused)
+# 431 - shadowing an upvalue
 # 432 - shadowing upvalue argument
 # 631 - line is too long
 luacheck "$ADDON_DIR" \
@@ -35,6 +37,8 @@ luacheck "$ADDON_DIR" \
     --codes \
     --ignore 211 \
     --ignore 212 \
+    --ignore 213 \
+    --ignore 431 \
     --ignore 432 \
     --ignore 631 \
     --exclude-files "ci/**" \

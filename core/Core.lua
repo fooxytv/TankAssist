@@ -30,7 +30,7 @@ else
             end
         end
     end)
-    
+
     function TankAssist.Addon:Print(...)
         print("|cFF00CCFF[TankAssist]|r", ...)
     end
@@ -530,7 +530,7 @@ function addon:HandleSlashCommand(msg)
     for word in msg:gmatch("%S+") do
         table.insert(args, word:lower())
     end
-    
+
     local cmd = args[1]
     if not cmd or cmd == "" or cmd == "config" or cmd == "options" then
         TankAssist.ConfigPanel:Toggle()

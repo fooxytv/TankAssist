@@ -288,8 +288,7 @@ function ca:Update()
     local sv = TankAssist.SecretValues
 
     for _, spellId in ipairs(trackedSpells) do
-        if self.unavailableSpells and self.unavailableSpells[spellId] then
-        else
+        if not (self.unavailableSpells and self.unavailableSpells[spellId]) then
             if not self.spellStates[spellId] then
                 self.spellStates[spellId] = { wasOnCooldown = false, readyFlashTime = 0 }
             end
@@ -907,13 +906,12 @@ function ca:OnEditModeEnter()
     local iconSize = settings.iconSize or 36
     local displayMode = settings.displayMode or "ICON_ONLY"
     local spacing = 4
-    local placeholderCount = 3
     local placeholderSpells = { 871, 12975, 6552 }
     local specId = TankAssist.Utils:GetCurrentSpec()
     if specId and TankAssist.Constants.CooldownAlertDefaults[specId] then
         placeholderSpells = TankAssist.Constants.CooldownAlertDefaults[specId]
     end
-    placeholderCount = math.min(3, #placeholderSpells)
+    local placeholderCount = math.min(3, #placeholderSpells)
 
     local iconWidth = iconSize
     if displayMode == "ICON_NAME" then

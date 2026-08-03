@@ -491,7 +491,7 @@ function ga:RegisterEvents()
     end)
 end
 
--- [[ debug dump ]] 
+-- [[ debug dump ]]
 function ga:DebugDump(arg)
     local specId = TankAssist.Utils:GetCurrentSpec()
     local specName = TankAssist.Utils:GetSpecName(specId)
