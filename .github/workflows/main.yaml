@@ -13,7 +13,7 @@ on:
       game_versions:
         description: "Game Version(s)"
         required: false
-        default: 12.0.0
+        default: 12.0.7
 
 jobs:
   publish-addon:
@@ -120,4 +120,7 @@ jobs:
           release_type: ${{ github.event.inputs.release_type || steps.detect_type.outputs.release_type || 'release' }}
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          game_versions: ${{ github.event.inputs.game_versions }}
+          # github.event.inputs only exists for workflow_dispatch. On a tag push
+          # it resolves to empty and the input is dropped entirely, leaving the
+          # action to pick its own game version on CurseForge - hence the fallback.
+          game_versions: ${{ github.event.inputs.game_versions || '12.0.7' }}

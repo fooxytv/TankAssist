@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
+
+## [0.4.1-alpha.8eccc46] - 2026-08-03
+
+_No user-facing changes; release cut from the same commit as the previous version._
+
 ## [0.4.0-alpha.c36e001] - 2026-08-03
 
 ### Added
