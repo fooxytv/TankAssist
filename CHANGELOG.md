@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Publish/CD pipeline de-duplicated: version stamping now goes through `ci/scripts/version.sh stamp`, and changelog generation through a new shared `ci/scripts/changelog.sh`, so the `main`/`beta`/`release` publish workflows reference one definition each instead of copy-pasted `sed`/`git log` blocks. Output is unchanged.
+
 The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
 
 ## [0.4.1-alpha.8eccc46] - 2026-08-03

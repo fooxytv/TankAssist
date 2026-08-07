@@ -58,12 +58,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          for toc_file in *.toc; do
-            if [ -f "$toc_file" ]; then
-              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
-              echo "Updated $toc_file"
-            fi
-          done
+          bash ci/scripts/version.sh stamp "$VERSION" > /dev/null
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -86,13 +81,7 @@ jobs:
           TAG="v${VERSION}"
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
 
-          if [ -n "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG".."$TAG" --no-merges)
-          else
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
-          fi
-
-          CHANGELOG="## ${TAG}"$'\n\n'"$COMMITS"
+          CHANGELOG=$(bash ci/scripts/changelog.sh "$PREVIOUS_TAG" "$TAG" "## ${TAG}")
           {
             echo 'CHANGELOG<<EOF'
             echo "$CHANGELOG"
