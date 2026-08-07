@@ -294,6 +294,75 @@ function utils:RemoveGlow(frame)
     end
 end
 
+-- LibCustomGlow-driven proc glow. Resolved lazily and cached: LibStub is absent
+-- under the headless smoke test (libs are not loaded there), so every entry
+-- point degrades to a no-op rather than erroring.
+local glowLib
+local function GetGlowLib()
+    if glowLib ~= nil then
+        return glowLib or nil
+    end
+    local ok, lib = pcall(function()
+        return LibStub and LibStub("LibCustomGlow-1.0", true)
+    end)
+    glowLib = (ok and lib) or false
+    return glowLib or nil
+end
+
+utils.GlowStyles = { "Action Button Glow", "Pixel Glow", "Autocast Shine", "Proc Glow" }
+
+function utils:IsGlowAvailable()
+    return GetGlowLib() ~= nil
+end
+
+function utils:StartProcGlow(frame, style, color)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    style = style or "Action Button Glow"
+    if style == "Pixel Glow" then
+        lib.PixelGlow_Start(frame, color)
+    elseif style == "Autocast Shine" then
+        lib.AutoCastGlow_Start(frame, color)
+    elseif style == "Proc Glow" then
+        lib.ProcGlow_Start(frame)
+    else
+        lib.ButtonGlow_Start(frame, color)
+    end
+end
+
+function utils:StopProcGlow(frame)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    -- Stop every style: a stop for a style that is not active is a no-op, so
+    -- this clears the glow cleanly even after the configured style changed.
+    if lib.ButtonGlow_Stop then lib.ButtonGlow_Stop(frame) end
+    if lib.PixelGlow_Stop then lib.PixelGlow_Stop(frame) end
+    if lib.AutoCastGlow_Stop then lib.AutoCastGlow_Stop(frame) end
+    if lib.ProcGlow_Stop then lib.ProcGlow_Stop(frame) end
+end
+
+-- Transition-guarded glow: only touches the library when the on/off state or the
+-- style actually changes, so it is safe to call every frame from the update loop.
+function utils:SetGlow(frame, shouldGlow, style, color)
+    if not frame then return end
+    style = style or "Action Button Glow"
+    if shouldGlow then
+        if frame.__taGlowing and frame.__taGlowStyle == style then
+            return
+        end
+        if frame.__taGlowing then
+            self:StopProcGlow(frame)
+        end
+        self:StartProcGlow(frame, style, color)
+        frame.__taGlowing = true
+        frame.__taGlowStyle = style
+    elseif frame.__taGlowing then
+        self:StopProcGlow(frame)
+        frame.__taGlowing = false
+        frame.__taGlowStyle = nil
+    end
+end
+
 function utils:FadeIn(frame, duration)
     duration = duration or 0.2
     if frame.fadeAnim then
