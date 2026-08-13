@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Proc / activation-overlay glow on the Assisted Combat display. When enabled, the recommended and secondary icons glow with the Blizzard proc look while Blizzard is overlaying that spell (Revenge!, Grand Crusader, ...) or a curated tank proc rule for the active spec is active (Blood Crimson Scourge → Death and Decay, Prot Warrior Revenge! → Revenge, Prot Paladin Grand Crusader → Avenger's Shield, Guardian Gore/Galactic Guardian → Mangle). Opt-in per the Assisted Combat Edit Mode options, with a selectable glow style (Action Button / Pixel / Autocast Shine / Proc Glow), defaulting off. Read-and-highlight only — never queues or casts. Bundles LibCustomGlow-1.0 and drives the glow from it; proc rules read aura *presence*, which is not a Secret Value, so they keep working when stacks/duration are hidden. A spec with no matching rule glows nothing.
+
 ## [0.4.3-alpha.fddb0c8] - 2026-08-13
 
 ### Added
