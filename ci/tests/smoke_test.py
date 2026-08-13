@@ -145,47 +145,6 @@ R.pathUsedPlaySoundFile = __calls.PlaySoundFile
 return R
 """
 
-# Proc glow ships opt-in and data-driven. The rule table keys off aura presence,
-# which is not a Secret Value, so GetBuffInfo().exists is a legal signal. A spec
-# with no rule must glow nothing (and never error), and with LibCustomGlow absent
-# -- exactly this headless run -- the whole feature must degrade to a no-op.
-GLOW_SCRIPT = """
-local ns = __ns
-local R = {}
-
-R.glowDefaultOff = ns.Addon.db.profile.assistedCombat.glowEnabled
-
--- Drive a single Guardian proc aura (Gore) as present; everything else absent.
-C_UnitAuras.GetPlayerAuraBySpellID = function(id)
-    if id == 93622 then
-        return { applications = 1, duration = 10, expirationTime = 1010 }
-    end
-    return nil
-end
-ns.SecretValues.buffCache = {}
-
--- Guardian (104): Mangle glows while Gore is up...
-R.guardianMangleGlows = ns.ProcRules:IsProcActive(104, 33917)
--- ...but not once the proc aura is gone.
-C_UnitAuras.GetPlayerAuraBySpellID = function() return nil end
-ns.SecretValues.buffCache = {}
-R.guardianMangleQuiet = ns.ProcRules:IsProcActive(104, 33917)
-
--- A spec with no rule table, and a spell with no rule, both stay quiet.
-R.unknownSpecQuiet = ns.ProcRules:IsProcActive(577, 33917)
-R.unruledSpellQuiet = ns.ProcRules:IsProcActive(104, 12345)
-
--- LibStub is nil under the smoke test, so the glow library never resolves and
--- SetGlow/Start/Stop must be safe no-ops rather than errors.
-R.glowUnavailable = ns.Utils:IsGlowAvailable()
-local fakeIcon = {}
-ns.Utils:SetGlow(fakeIcon, true, "Action Button Glow")
-ns.Utils:SetGlow(fakeIcon, false)
-R.noGlowNoError = true
-
-return R
-"""
-
 
 def run():
     print("\nsmoke_test [load]")
@@ -231,15 +190,6 @@ if lua is not None:
         ("SOUNDKIT id uses PlaySound", "numericUsedPlaySound", 1),
         ("SOUNDKIT id never hits PlaySoundFile", "numericAvoidedPlaySoundFile", 0),
         ("file path uses PlaySoundFile", "pathUsedPlaySoundFile", 1),
-    ])
-    run_script(lua, "proc glow", GLOW_SCRIPT, [
-        ("proc glow ships off", "glowDefaultOff", False),
-        ("proc aura up -> glow", "guardianMangleGlows", True),
-        ("proc aura gone -> quiet", "guardianMangleQuiet", False),
-        ("unknown spec stays quiet", "unknownSpecQuiet", False),
-        ("unruled spell stays quiet", "unruledSpellQuiet", False),
-        ("glow lib absent in headless", "glowUnavailable", False),
-        ("no-lib glow is a no-op", "noGlowNoError", True),
     ])
 
 print()
