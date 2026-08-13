@@ -11,6 +11,7 @@ The intent is to feel like a streamlined two-button rotation helper (in the spir
 - A **Secondary** ability button highlights situational offensive/defensive cooldowns using lightweight addon-side tracking
 - Shows keybinds for the recommended abilities
 - Works wherever the Assisted Combat system works — no custom rotation engine
+- **Proc glow** (opt-in): the recommended/secondary icon glows with the Blizzard proc look when the ability is being overlayed by Blizzard (Revenge!, Grand Crusader, ...) or a curated tank proc is up (e.g. Guardian Gore/Galactic Guardian → Mangle, Blood Crimson Scourge → Death and Decay). Read-and-highlight only; selectable glow style (Action Button / Pixel / Autocast Shine / Proc Glow) in Edit Mode
 
 ### Player & Target Cast Bars
 - Fully customisable replacements for Blizzard's default cast bars
