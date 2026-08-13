@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3-alpha.fddb0c8] - 2026-08-13
+
+### Added
+- Continuous integration that lints and smoke-tests every push, running the addon's load path through a minimal WoW client stub to catch load-order mistakes, nil child widgets, and untaken API branches before they surface in-game.
+- Beta release channel that publishes to CurseForge as a pre-release when develop is merged into a release branch, alongside the existing alpha and stable paths.
+
+### Changed
+- Linting is now strict: undefined-global warnings fail the build, so any mistyped API name is caught in CI rather than in-game, and all warnings (including shadowed upvalues and unused loop variables) are surfaced.
+- Stable releases are now gated behind a `release/*` branch merge, preventing an accidental develop-to-main merge from cutting a stable build.
+
+### Fixed
+- Action titles no longer include the run name, keeping them consistent with companion addons.
+
 The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
 
 ## [0.4.1-alpha.8eccc46] - 2026-08-03
