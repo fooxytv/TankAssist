@@ -87,4 +87,4 @@ jobs:
           release_type: beta
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          game_versions: "12.0.7"
+          game_versions: "12.1"
