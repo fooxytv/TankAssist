@@ -2,7 +2,7 @@
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.4.4-alpha.2a7596f
+## Version: 0.4.5-alpha.9fe43fd
 ## SavedVariables: TankAssistDB
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 

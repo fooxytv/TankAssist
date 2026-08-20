@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5-alpha.9fe43fd] - 2026-08-20
+
+### Added
+- Proc glow support: the LibCustomGlow library and a new ProcRules data module are now loaded by the addon, enabling glow highlights on abilities when their procs are active.
+
+### Changed
+- Updated supported game version to 12.1 (from 12.0.7) across publishing workflows.
+
+### Fixed
+- Proc glow now functions correctly — LibCustomGlow and ProcRules were previously not loaded in the .toc, so the feature had no effect until this fix.
+
 ### Fixed
 - The proc/activation-overlay glow feature was inert in 0.4.4-alpha: `TankAssist.toc` did not load `libs/LibCustomGlow-1.0` or `data/ProcRules.lua` (the load lines were lost in a merge), so the glow library never registered and no glow could appear. Both are now loaded. A smoke-test guard asserts the proc-rules table loads so this cannot silently regress.
 
