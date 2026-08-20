@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The proc/activation-overlay glow feature was inert in 0.4.4-alpha: `TankAssist.toc` did not load `libs/LibCustomGlow-1.0` or `data/ProcRules.lua` (the load lines were lost in a merge), so the glow library never registered and no glow could appear. Both are now loaded. A smoke-test guard asserts the proc-rules table loads so this cannot silently regress.
+
 ## [0.4.4-alpha.2a7596f] - 2026-08-13
 
 ### Added
