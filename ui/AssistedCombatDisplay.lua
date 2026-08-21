@@ -150,10 +150,7 @@ function acd:CreateIcon(parent, size)
     frame.gcdCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.gcdCooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.gcdCooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
-    frame.gcdCooldown:SetDrawEdge(true)
-    frame.gcdCooldown:SetDrawSwipe(true)
-    frame.gcdCooldown:SetSwipeColor(1, 1, 1, 0.5)
-    frame.gcdCooldown:SetHideCountdownNumbers(true)
+    TankAssist.Utils:StyleGCDCooldown(frame.gcdCooldown)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
     frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 12 or 10, "OUTLINE")
@@ -650,18 +647,24 @@ function acd:UpdateIcon(icon, spellId, spellType, priority)
     end
 
     local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
-    if cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5 then
-        local cdStart = GetTime() - cdInfo.remaining
-        icon.cooldown:SetCooldown(cdStart, cdInfo.remaining + (GetTime() - cdStart))
+    local onSpellCooldown = cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5
+    if onSpellCooldown then
+        if cdInfo.startTime and cdInfo.duration and cdInfo.duration > 0 then
+            TankAssist.Utils:SetCooldownSwipe(icon.cooldown, cdInfo.startTime, cdInfo.duration)
+        else
+            TankAssist.Utils:SetCooldownSwipeFromRemaining(icon.cooldown, cdInfo.remaining)
+        end
     else
-        icon.cooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
     end
 
-    local gcdInfo = C_Spell.GetSpellCooldown(61304)
-    if gcdInfo and gcdInfo.startTime and gcdInfo.duration and gcdInfo.duration > 0 then
-        icon.gcdCooldown:SetCooldown(gcdInfo.startTime, gcdInfo.duration)
+    -- Action bars draw one swipe per button: the spell's own cooldown wins over
+    -- the GCD, so only sweep the GCD when nothing longer is already running.
+    local gcdInfo = not onSpellCooldown and C_Spell.GetSpellCooldown(61304) or nil
+    if gcdInfo and gcdInfo.duration and gcdInfo.duration > 0 then
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, gcdInfo.startTime, gcdInfo.duration)
     else
-        icon.gcdCooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     end
 
     if cdInfo.charges and cdInfo.maxCharges and cdInfo.maxCharges > 1 then
@@ -761,8 +764,8 @@ function acd:ClearIcon(icon)
     icon.icon:SetTexture(nil)
     icon.keybind:SetText("")
     icon.count:SetText("")
-    icon.cooldown:Clear()
-    icon.gcdCooldown:Clear()
+    TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
+    TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     icon.unusable:Hide()
     TankAssist.Utils:SetGlow(icon, false)
     if icon.border then

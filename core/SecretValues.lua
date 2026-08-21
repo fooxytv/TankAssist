@@ -642,6 +642,8 @@ function secretValues:GetCooldownInfo(spellId)
         remaining = 0,
         charges = nil,
         maxCharges = nil,
+        startTime = nil,
+        duration = nil,
         isSecret = false,
         isWhitelisted = self.WhitelistedCooldowns[spellId] or false,
     }
@@ -670,6 +672,8 @@ function secretValues:GetCooldownInfo(spellId)
             local start = self:SafeNumber(chargeStartRaw, 0)
             local duration = self:SafeNumber(chargeDurationRaw, 0)
             result.remaining = math.max(0, (start + duration) - GetTime())
+            result.startTime = start
+            result.duration = duration
         end
     else
         local cooldownInfo = C_Spell.GetSpellCooldown(spellId)
@@ -691,6 +695,8 @@ function secretValues:GetCooldownInfo(spellId)
         if remaining > 0 and duration > 1.5 then
             result.onCooldown = true
             result.remaining = remaining
+            result.startTime = start
+            result.duration = duration
         else
             result.onCooldown = false
             result.remaining = 0

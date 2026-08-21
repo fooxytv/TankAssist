@@ -264,6 +264,56 @@ function utils:CreateIcon(parent, size, template)
     return frame
 end
 
+-- Styles a Cooldown frame the way Blizzard styles action button / Cooldown
+-- Manager swipes: dark swipe, no edge line, no bling flash.
+function utils:StyleGCDCooldown(cd)
+    cd:SetDrawSwipe(true)
+    cd:SetDrawEdge(false)
+    cd:SetDrawBling(false)
+    cd:SetSwipeColor(0, 0, 0, 0.8)
+    cd:SetHideCountdownNumbers(true)
+end
+
+-- Applies a cooldown swipe only when the values actually change. Calling
+-- SetCooldown on every ticker pass restarts the swipe, which pins it at a
+-- fixed fraction instead of sweeping like a normal cooldown does.
+function utils:SetCooldownSwipe(cd, start, duration)
+    if not cd then
+        return
+    end
+    if not start or not duration or start <= 0 or duration <= 0 then
+        if cd.taSwipeStart then
+            cd.taSwipeStart, cd.taSwipeDuration = nil, nil
+            cd:Clear()
+        end
+        return
+    end
+    if cd.taSwipeStart == start and cd.taSwipeDuration == duration then
+        return
+    end
+    cd.taSwipeStart, cd.taSwipeDuration = start, duration
+    cd:SetCooldown(start, duration)
+end
+
+-- Same as SetCooldownSwipe but when only the time left is known: keeps the
+-- existing swipe running unless the projected finish time has actually drifted.
+function utils:SetCooldownSwipeFromRemaining(cd, remaining)
+    if not cd then
+        return
+    end
+    if not remaining or remaining <= 0 then
+        return self:SetCooldownSwipe(cd, nil, nil)
+    end
+    local now = GetTime()
+    if cd.taSwipeStart and cd.taSwipeDuration then
+        local currentEnd = cd.taSwipeStart + cd.taSwipeDuration
+        if currentEnd > now and math.abs(currentEnd - (now + remaining)) < 0.3 then
+            return
+        end
+    end
+    self:SetCooldownSwipe(cd, now, remaining)
+end
+
 function utils:ApplyGlow(frame, color, intensity)
     if not frame.glowFrame then
         frame.glowFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6-alpha.4f7eaab] - 2026-08-21
+
+### Fixed
+- The GCD sweep on the Assisted Combat and Tank Actions buttons now matches Blizzard's action bars and Cooldown Manager: a dark swipe instead of a half-transparent white one, with the spinning edge line and the end-of-GCD "bling" flash removed.
+- The GCD sweep no longer stacks on top of a spell's own cooldown swipe. As on the action bars, the longer cooldown wins and each button shows a single swipe; the GCD only animates when no spell cooldown is running.
+- Spell cooldown swipes animate again instead of freezing at a fixed fraction. The swipe was being restarted on every 0.1s update; it now uses the real start time and duration and is only re-applied when those values actually change.
+
+### Fixed
+- The GCD sweep on the primary and secondary Assisted Combat buttons now matches Blizzard's action bars and the Cooldown Manager: a dark swipe instead of a half-transparent white one, no spinning edge line, and no "bling" flash at the end of every global.
+- The GCD sweep no longer stacks on top of a spell's own cooldown sweep. Action bars draw a single swipe per button with the longer cooldown winning; the buttons now do the same.
+- Spell cooldown swipes animate again. `SetCooldown` was re-applied on every 0.1s ticker pass with freshly computed values, which restarted the swipe each time and pinned it at a fixed fraction; the real start time and duration are now used, and only re-applied when they change.
+
 ## [0.4.5-alpha.9fe43fd] - 2026-08-20
 
 ### Added
