@@ -32,6 +32,10 @@ core\Utils.lua
 core\Sounds.lua
 core\SecretValues.lua
 core\Core.lua
+core\Bindings.lua
+
+# Bindings.xml is deliberately absent from this list: the client loads it
+# from the addon folder by itself, and listing it here does nothing.
 
 # UI Components
 ui\AssistedCombatDisplay.lua

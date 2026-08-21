@@ -11,9 +11,9 @@ on:
         required: false
         default: alpha
       game_versions:
-        description: "Game Version(s)"
+        description: "Game version override, e.g. 12.1.0. Blank derives it from the .toc interface."
         required: false
-        default: 12.1
+        default: ""
 
 jobs:
   publish-addon:
@@ -61,7 +61,9 @@ jobs:
         id: changelog
         run: |
           CURRENT_TAG="${GITHUB_REF#refs/tags/}"
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          # Alphas are incremental, so this one deliberately starts at the
+          # previous tag of any kind rather than the last stable.
+          PREVIOUS_TAG=$(bash ci/scripts/previous_tag.sh any HEAD^)
 
           echo "Current tag: $CURRENT_TAG"
           echo "Previous tag: $PREVIOUS_TAG"
@@ -97,6 +99,18 @@ jobs:
           echo "Found artifact: $ZIP_FILE"
           echo "ZIP_PATH=$ZIP_FILE" >> $GITHUB_ENV
 
+      - name: Resolve CurseForge game version
+        id: game_version
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          # Derived from the .toc interface and checked against CurseForge's
+          # version list. The upload action does not fail on a name it cannot
+          # resolve -- it uploads an empty version list and CurseForge labels
+          # the file with a default -- so the check has to happen here.
+          VERSION=$(bash ci/scripts/game_version.sh "${{ github.event.inputs.game_versions }}")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish to CurseForge
         uses: itsmeow/curseforge-upload@v3
         with:
@@ -107,7 +121,8 @@ jobs:
           release_type: ${{ github.event.inputs.release_type || steps.detect_type.outputs.release_type || 'release' }}
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          # github.event.inputs only exists for workflow_dispatch. On a tag push
-          # it resolves to empty and the input is dropped entirely, leaving the
-          # action to pick its own game version on CurseForge - hence the fallback.
-          game_versions: ${{ github.event.inputs.game_versions || '12.1' }}
+          # github.event.inputs only exists for workflow_dispatch; on a tag push it
+          # resolves to empty, which game_version.sh treats as "derive it from the
+          # .toc". Either way the value is validated before it gets here, because
+          # the action itself accepts an unresolvable name without complaint.
+          game_versions: ${{ steps.game_version.outputs.version }}
