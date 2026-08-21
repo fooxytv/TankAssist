@@ -14,6 +14,7 @@ leaving LibStub nil exercises the addon's no-Ace fallback paths for free.
 Requires: pip install lupa
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[2]
 STUB = Path(__file__).with_name("wow_stub.lua")
+BINDINGS_XML = ROOT / "Bindings.xml"
 
 failures = []
 
@@ -186,6 +188,50 @@ return R
 """
 
 
+
+def check_bindings(lua):
+    """Bindings.xml is loaded by the client straight out of the addon folder and
+    is never listed in the .toc, so nothing else in CI would notice it going
+    missing or its handler being renamed out from under it. It was absent from
+    the repo entirely until 0.4.6, and the stray copy that existed on one
+    machine bound a function that had never been written.
+    """
+    print("\nsmoke_test [key bindings]")
+
+    if not BINDINGS_XML.exists():
+        failures.append("[key bindings] Bindings.xml is missing from the addon root")
+        print("  FAIL Bindings.xml is missing from the addon root")
+        return
+
+    text = BINDINGS_XML.read_text(encoding="utf-8")
+    bindings = re.findall(r'<Binding\s+name="([^"]+)"[^>]*>(.*?)</Binding>', text, re.S)
+    if not bindings:
+        failures.append("[key bindings] Bindings.xml declares no bindings")
+        print("  FAIL Bindings.xml declares no bindings")
+        return
+
+    script = ["local R = {}"]
+    expectations = []
+    for name, body in bindings:
+        called = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(", body)
+        if not called:
+            failures.append(f"[key bindings] {name} calls nothing")
+            print(f"  FAIL {name} calls nothing")
+            continue
+        fn = called.group(1)
+        script.append(f'R["{fn}"] = type(_G["{fn}"]) == "function"')
+        script.append(f'R["{name}"] = type(_G["BINDING_NAME_{name}"]) == "string"')
+        expectations.append((f"{fn} is defined", fn))
+        expectations.append((f"{name} has a label", name))
+    script.append('R["header"] = type(_G["BINDING_HEADER_TANKASSIST"]) == "string"')
+    script.append("return R")
+
+    results = dict(lua.execute("\n".join(script)))
+    for label, key in expectations:
+        check(label, results.get(key), True)
+    check("binding header has a label", results.get("header"), True)
+
+
 def run():
     print("\nsmoke_test [load]")
     try:
@@ -241,6 +287,7 @@ if lua is not None:
         ("glow lib absent in headless", "glowUnavailable", False),
         ("no-lib glow is a no-op", "noGlowNoError", True),
     ])
+    check_bindings(lua)
 
 print()
 if failures:
