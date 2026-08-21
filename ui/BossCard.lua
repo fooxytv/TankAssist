@@ -574,7 +574,22 @@ end
 
 function bc:SelectAbility(index)
     local ability = state.abilities[index]
-    if not ability then return end
+    if not ability then
+        -- No abilities at all: the Journal had nothing for this encounter, or
+        -- it has not finished populating. Say so rather than leaving the last
+        -- boss's diagram on screen looking like this one's.
+        state.selectedIndex = nil
+        state.ability = nil
+        local f = self.frame
+        f.abilityIcon:SetTexture(state.portrait or FALLBACK_PORTRAIT)
+        f.abilityName:SetText(state.bossName or "")
+        f.verdictText:SetText("")
+        f.empty:SetText("The Adventure Guide lists no abilities for this boss.")
+        f.empty:Show()
+        self:ShowDiagram(false)
+        self:RefreshStrip()
+        return
+    end
 
     state.selectedIndex = index
 
@@ -908,10 +923,16 @@ function bc:RefreshInfoButton()
     if not self.infoButton then return end
 
     local designing = TankAssist.BossCardDesigner and TankAssist.BossCardDesigner:IsActive()
-    local relevant = state.encounterID ~= nil and (self:HasCardForSelection() or designing)
+    local selected = state.encounterID ~= nil
+    local authored = self:HasCardForSelection()
 
-    self.infoButton:SetShown(relevant)
-    if not relevant and self.frame and self.frame:IsShown() then
+    -- Shown for any boss, so there is always a way in. Dimmed when nothing has
+    -- been authored for it, so the button still says which bosses have a card
+    -- without being invisible on the ones that do not.
+    self.infoButton:SetShown(selected)
+    self.infoButton:SetAlpha((authored or designing) and 1 or 0.45)
+
+    if not selected and self.frame and self.frame:IsShown() then
         self:Hide()
     end
 end
@@ -943,6 +964,29 @@ function bc:AttachToJournal()
         bc:RefreshInfoButton()
     end)
 
+    -- The Journal has changed which function selects an encounter more than
+    -- once. Watching its own encounterID costs a comparison every quarter
+    -- second and does not care how the value got there.
+    local watcher = CreateFrame("Frame", nil, _G.EncounterJournal)
+    watcher.since = 0
+    watcher:SetScript("OnUpdate", function(self_, elapsed)
+        self_.since = self_.since + elapsed
+        if self_.since < 0.25 then return end
+        self_.since = 0
+
+        local current = _G.EncounterJournal.encounterID
+        if current == self_.lastSeen then return end
+        self_.lastSeen = current
+
+        state.encounterID = nil
+        bc:ReadJournal()
+        bc:RefreshInfoButton()
+        if bc.frame and bc.frame:IsShown() then
+            bc:RefreshStrip()
+            bc:SelectAbility(1)
+        end
+    end)
+
     self:ReadJournal()
     self:RefreshInfoButton()
     self.attached = true
@@ -961,11 +1005,15 @@ end
 -- Public
 ----------------------------------------------------------------------------
 
+function bc:Say(message)
+    local addon = TankAssist.Addon
+    if addon then addon:Print(message) else print(message) end
+end
+
+
 function bc:Show()
     if not self:EnsureJournalLoaded() then
-        local addon = TankAssist.Addon
-        local message = "The Encounter Journal could not be loaded."
-        if addon then addon:Print(message) else print(message) end
+        self:Say("The Encounter Journal could not be loaded.")
         return
     end
 
@@ -981,10 +1029,13 @@ function bc:Show()
     end
 
     if not self:ReadJournal() then
-        local addon = TankAssist.Addon
-        local message = "Pick a boss in the Adventure Guide first."
-        if addon then addon:Print(message) else print(message) end
+        self:Say("Open a dungeon in the Adventure Guide and click a boss, then use the "
+            .. "|cff00bfffi|r button next to the portrait.")
         return
+    end
+
+    if #state.abilities == 0 then
+        self:Say("The Adventure Guide lists no abilities for " .. tostring(state.bossName) .. ".")
     end
 
     self.frame:Show()
