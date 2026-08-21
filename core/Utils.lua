@@ -264,6 +264,56 @@ function utils:CreateIcon(parent, size, template)
     return frame
 end
 
+-- Styles a Cooldown frame the way Blizzard styles action button / Cooldown
+-- Manager swipes: dark swipe, no edge line, no bling flash.
+function utils:StyleGCDCooldown(cd)
+    cd:SetDrawSwipe(true)
+    cd:SetDrawEdge(false)
+    cd:SetDrawBling(false)
+    cd:SetSwipeColor(0, 0, 0, 0.8)
+    cd:SetHideCountdownNumbers(true)
+end
+
+-- Applies a cooldown swipe only when the values actually change. Calling
+-- SetCooldown on every ticker pass restarts the swipe, which pins it at a
+-- fixed fraction instead of sweeping like a normal cooldown does.
+function utils:SetCooldownSwipe(cd, start, duration)
+    if not cd then
+        return
+    end
+    if not start or not duration or start <= 0 or duration <= 0 then
+        if cd.taSwipeStart then
+            cd.taSwipeStart, cd.taSwipeDuration = nil, nil
+            cd:Clear()
+        end
+        return
+    end
+    if cd.taSwipeStart == start and cd.taSwipeDuration == duration then
+        return
+    end
+    cd.taSwipeStart, cd.taSwipeDuration = start, duration
+    cd:SetCooldown(start, duration)
+end
+
+-- Same as SetCooldownSwipe but when only the time left is known: keeps the
+-- existing swipe running unless the projected finish time has actually drifted.
+function utils:SetCooldownSwipeFromRemaining(cd, remaining)
+    if not cd then
+        return
+    end
+    if not remaining or remaining <= 0 then
+        return self:SetCooldownSwipe(cd, nil, nil)
+    end
+    local now = GetTime()
+    if cd.taSwipeStart and cd.taSwipeDuration then
+        local currentEnd = cd.taSwipeStart + cd.taSwipeDuration
+        if currentEnd > now and math.abs(currentEnd - (now + remaining)) < 0.3 then
+            return
+        end
+    end
+    self:SetCooldownSwipe(cd, now, remaining)
+end
+
 function utils:ApplyGlow(frame, color, intensity)
     if not frame.glowFrame then
         frame.glowFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -291,6 +341,75 @@ function utils:RemoveGlow(frame)
         ActionButton_HideOverlayGlow(frame) -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
     elseif frame.glowFrame then
         frame.glowFrame:SetBackdrop(nil)
+    end
+end
+
+-- LibCustomGlow-driven proc glow. Resolved lazily and cached: LibStub is absent
+-- under the headless smoke test (libs are not loaded there), so every entry
+-- point degrades to a no-op rather than erroring.
+local glowLib
+local function GetGlowLib()
+    if glowLib ~= nil then
+        return glowLib or nil
+    end
+    local ok, lib = pcall(function()
+        return LibStub and LibStub("LibCustomGlow-1.0", true)
+    end)
+    glowLib = (ok and lib) or false
+    return glowLib or nil
+end
+
+utils.GlowStyles = { "Action Button Glow", "Pixel Glow", "Autocast Shine", "Proc Glow" }
+
+function utils:IsGlowAvailable()
+    return GetGlowLib() ~= nil
+end
+
+function utils:StartProcGlow(frame, style, color)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    style = style or "Action Button Glow"
+    if style == "Pixel Glow" then
+        lib.PixelGlow_Start(frame, color)
+    elseif style == "Autocast Shine" then
+        lib.AutoCastGlow_Start(frame, color)
+    elseif style == "Proc Glow" then
+        lib.ProcGlow_Start(frame)
+    else
+        lib.ButtonGlow_Start(frame, color)
+    end
+end
+
+function utils:StopProcGlow(frame)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    -- Stop every style: a stop for a style that is not active is a no-op, so
+    -- this clears the glow cleanly even after the configured style changed.
+    if lib.ButtonGlow_Stop then lib.ButtonGlow_Stop(frame) end
+    if lib.PixelGlow_Stop then lib.PixelGlow_Stop(frame) end
+    if lib.AutoCastGlow_Stop then lib.AutoCastGlow_Stop(frame) end
+    if lib.ProcGlow_Stop then lib.ProcGlow_Stop(frame) end
+end
+
+-- Transition-guarded glow: only touches the library when the on/off state or the
+-- style actually changes, so it is safe to call every frame from the update loop.
+function utils:SetGlow(frame, shouldGlow, style, color)
+    if not frame then return end
+    style = style or "Action Button Glow"
+    if shouldGlow then
+        if frame.__taGlowing and frame.__taGlowStyle == style then
+            return
+        end
+        if frame.__taGlowing then
+            self:StopProcGlow(frame)
+        end
+        self:StartProcGlow(frame, style, color)
+        frame.__taGlowing = true
+        frame.__taGlowStyle = style
+    elseif frame.__taGlowing then
+        self:StopProcGlow(frame)
+        frame.__taGlowing = false
+        frame.__taGlowStyle = nil
     end
 end
 

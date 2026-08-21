@@ -39,6 +39,9 @@ globals = {
     "UnitPowerMax",
     "UnitStagger",
     "UnitExists",
+    "UnitName",
+    "SetRaidTarget",
+    "MenuUtil",
     "UnitIsDead",
     "UnitCanAttack",
     "UnitAffectingCombat",
@@ -102,6 +105,11 @@ globals = {
     -- Addon global (set by the addon itself)
     "TankAssist",
     "TankAssistDB",
+
+    -- Key binding handler and labels, called by name from Bindings.xml
+    "TankAssist_OpenTargetMarkerMenu",
+    "BINDING_HEADER_TANKASSIST",
+    "BINDING_NAME_TANKASSIST_TARGETMARKER_MENU",
 }
 
 -- Read-only globals (accessed but not modified)

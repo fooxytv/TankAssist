@@ -14,6 +14,7 @@ leaving LibStub nil exercises the addon's no-Ace fallback paths for free.
 Requires: pip install lupa
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[2]
 STUB = Path(__file__).with_name("wow_stub.lua")
+BINDINGS_XML = ROOT / "Bindings.xml"
 
 failures = []
 
@@ -145,6 +147,90 @@ R.pathUsedPlaySoundFile = __calls.PlaySoundFile
 return R
 """
 
+# Proc glow ships opt-in and data-driven. `procRulesLoaded` is the load-bearing
+# check: the proc-rule table (and LibCustomGlow) only work if the .toc actually
+# lists data/ProcRules.lua and libs/LibCustomGlow-1.0. A merge once dropped those
+# .toc lines while keeping the files, so the feature shipped inert -- this guards
+# that exact regression. The rest confirm the rule table reads aura presence
+# (not a Secret Value) and that the whole feature degrades to a no-op when the
+# glow library is absent, as it is in this headless run.
+GLOW_SCRIPT = """
+local ns = __ns
+local R = {}
+
+R.procRulesLoaded = ns.ProcRules ~= nil
+R.glowDefaultOff = ns.Addon.db.profile.assistedCombat.glowEnabled
+
+-- Drive a single Guardian proc aura (Gore) as present; everything else absent.
+C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+    if id == 93622 then
+        return { applications = 1, duration = 10, expirationTime = 1010 }
+    end
+    return nil
+end
+ns.SecretValues.buffCache = {}
+
+R.guardianMangleGlows = ns.ProcRules:IsProcActive(104, 33917)
+C_UnitAuras.GetPlayerAuraBySpellID = function() return nil end
+ns.SecretValues.buffCache = {}
+R.guardianMangleQuiet = ns.ProcRules:IsProcActive(104, 33917)
+
+R.unknownSpecQuiet = ns.ProcRules:IsProcActive(577, 33917)
+R.unruledSpellQuiet = ns.ProcRules:IsProcActive(104, 12345)
+
+R.glowUnavailable = ns.Utils:IsGlowAvailable()
+local fakeIcon = {}
+ns.Utils:SetGlow(fakeIcon, true, "Action Button Glow")
+ns.Utils:SetGlow(fakeIcon, false)
+R.noGlowNoError = true
+
+return R
+"""
+
+
+
+def check_bindings(lua):
+    """Bindings.xml is loaded by the client straight out of the addon folder and
+    is never listed in the .toc, so nothing else in CI would notice it going
+    missing or its handler being renamed out from under it. It was absent from
+    the repo entirely until 0.4.6, and the stray copy that existed on one
+    machine bound a function that had never been written.
+    """
+    print("\nsmoke_test [key bindings]")
+
+    if not BINDINGS_XML.exists():
+        failures.append("[key bindings] Bindings.xml is missing from the addon root")
+        print("  FAIL Bindings.xml is missing from the addon root")
+        return
+
+    text = BINDINGS_XML.read_text(encoding="utf-8")
+    bindings = re.findall(r'<Binding\s+name="([^"]+)"[^>]*>(.*?)</Binding>', text, re.S)
+    if not bindings:
+        failures.append("[key bindings] Bindings.xml declares no bindings")
+        print("  FAIL Bindings.xml declares no bindings")
+        return
+
+    script = ["local R = {}"]
+    expectations = []
+    for name, body in bindings:
+        called = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(", body)
+        if not called:
+            failures.append(f"[key bindings] {name} calls nothing")
+            print(f"  FAIL {name} calls nothing")
+            continue
+        fn = called.group(1)
+        script.append(f'R["{fn}"] = type(_G["{fn}"]) == "function"')
+        script.append(f'R["{name}"] = type(_G["BINDING_NAME_{name}"]) == "string"')
+        expectations.append((f"{fn} is defined", fn))
+        expectations.append((f"{name} has a label", name))
+    script.append('R["header"] = type(_G["BINDING_HEADER_TANKASSIST"]) == "string"')
+    script.append("return R")
+
+    results = dict(lua.execute("\n".join(script)))
+    for label, key in expectations:
+        check(label, results.get(key), True)
+    check("binding header has a label", results.get("header"), True)
+
 
 def run():
     print("\nsmoke_test [load]")
@@ -191,6 +277,17 @@ if lua is not None:
         ("SOUNDKIT id never hits PlaySoundFile", "numericAvoidedPlaySoundFile", 0),
         ("file path uses PlaySoundFile", "pathUsedPlaySoundFile", 1),
     ])
+    run_script(lua, "proc glow", GLOW_SCRIPT, [
+        ("proc rules loaded from .toc", "procRulesLoaded", True),
+        ("proc glow ships off", "glowDefaultOff", False),
+        ("proc aura up -> glow", "guardianMangleGlows", True),
+        ("proc aura gone -> quiet", "guardianMangleQuiet", False),
+        ("unknown spec stays quiet", "unknownSpecQuiet", False),
+        ("unruled spell stays quiet", "unruledSpellQuiet", False),
+        ("glow lib absent in headless", "glowUnavailable", False),
+        ("no-lib glow is a no-op", "noGlowNoError", True),
+    ])
+    check_bindings(lua)
 
 print()
 if failures:
