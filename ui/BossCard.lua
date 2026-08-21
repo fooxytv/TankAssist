@@ -3,18 +3,22 @@
 -- A per-boss tanking diagram: where to stand, which way to point the boss, what
 -- the frontal wants, what the buster wants. Tank information only.
 --
--- This file is the first pass and deliberately has no data layer. It exists to
--- answer one question: does a top-down diagram drawn from primitives actually
--- read clearly at panel size? Everything downstream -- the archetype library,
--- the verdict schema, the Encounter Journal import -- is wasted effort if the
--- answer is no, so the two demo layouts below are hardcoded and the only real
--- data pulled from the client is a boss portrait and a dungeon backdrop.
+-- It lives inside the Encounter Journal rather than in a window of its own. The
+-- Journal is already where you go to read about a boss, it already knows which
+-- boss you are looking at, and it already has the portrait and the dungeon --
+-- so the card augments the page you are on instead of asking you to find a
+-- second window and re-pick the same boss in it. Click a boss, hit Tank.
 --
---   /ta bosscard         toggle the card
+-- Falls back to a standalone window if the Journal cannot be reached, so the
+-- diagram is always inspectable.
+--
+-- This is still the first pass and deliberately has no data layer: the two
+-- layouts below are hardcoded, and the only real data pulled from the client is
+-- the boss name, its portrait and the dungeon art. The question it exists to
+-- answer is whether the diagram reads at all.
+--
+--   /ta bosscard         open the Journal and show the card
 --   /ta bosscard debug   report which client APIs resolved here
---
--- The visual language is the actual product, so it is defined once at the top
--- and nothing below is allowed to invent a colour.
 
 local ADDON_NAME, TankAssist = ...
 
@@ -35,43 +39,49 @@ local TEX = {
 -- The whole point is that these are read, not decoded. Danger is always the
 -- same red, safe is always the same blue, and nothing else uses either.
 local COLOR = {
-    panel      = { 0.05, 0.06, 0.08, 0.94 },
-    canvas     = { 0.08, 0.09, 0.12, 1.00 },
-    border     = { 0.20, 0.22, 0.28, 1.00 },
-    grid       = { 1.00, 1.00, 1.00, 0.04 },
-    wall       = { 0.52, 0.56, 0.64, 0.90 },
+    panel   = { 0.05, 0.06, 0.08, 0.94 },
+    canvas  = { 0.08, 0.09, 0.12, 1.00 },
+    border  = { 0.20, 0.22, 0.28, 1.00 },
+    grid    = { 1.00, 1.00, 1.00, 0.05 },
+    wall    = { 0.52, 0.56, 0.64, 0.90 },
 
-    boss       = { 0.90, 0.30, 0.30, 1.00 },
-    tank       = { 0.20, 0.72, 0.95, 1.00 },
-    healer     = { 0.35, 0.85, 0.45, 1.00 },
-    dps        = { 0.92, 0.58, 0.25, 1.00 },
+    boss    = { 0.90, 0.30, 0.30, 1.00 },
+    tank    = { 0.20, 0.72, 0.95, 1.00 },
+    healer  = { 0.35, 0.85, 0.45, 1.00 },
+    dps     = { 0.92, 0.58, 0.25, 1.00 },
 
-    danger     = { 0.95, 0.22, 0.22, 0.50 },  -- cone that must not touch the group
-    safe       = { 0.25, 0.70, 1.00, 0.42 },  -- cone the group is meant to stand in
-    accent     = { 0.00, 0.75, 0.95, 1.00 },
-    dim        = { 0.62, 0.62, 0.66, 1.00 },
-    text       = { 0.92, 0.92, 0.94, 1.00 },
+    danger  = { 0.95, 0.22, 0.22, 0.50 },  -- cone the group must not be in
+    safe    = { 0.25, 0.70, 1.00, 0.42 },  -- cone the group is meant to stand in
+    accent  = { 0.00, 0.75, 0.95, 1.00 },
+    dim     = { 0.62, 0.62, 0.66, 1.00 },
+    text    = { 0.92, 0.92, 0.94, 1.00 },
 }
 
 local ROLE_COLOR = { TANK = COLOR.tank, HEALER = COLOR.healer, DAMAGER = COLOR.dps }
 
 -- Buster tiers. A glyph, not a sentence: size and colour carry the meaning.
 local BUSTER = {
-    MAJOR    = { size = 30, color = { 0.95, 0.30, 0.30 }, label = "Major cooldown" },
-    PERSONAL = { size = 22, color = { 0.95, 0.78, 0.25 }, label = "Personal" },
-    NONE     = { size = 18, color = { 0.45, 0.45, 0.48 }, label = "No cooldown needed" },
+    MAJOR    = { size = 30, color = { 0.95, 0.30, 0.30 } },
+    PERSONAL = { size = 22, color = { 0.95, 0.78, 0.25 } },
+    NONE     = { size = 18, color = { 0.45, 0.45, 0.48 } },
 }
 local BUSTER_ICON = "Interface\\Icons\\Spell_Holy_DefensiveStance"
+local FALLBACK_PORTRAIT = "Interface\\Icons\\Ability_Creature_Cursed_02"
 
-local CANVAS_SIZE = 356
-local CYCLE = 6.0  -- seconds per animation loop
+local CYCLE = 6.0            -- seconds per animation loop
+local DEFAULT_CANVAS = 340
+local MIN_CANVAS = 220
+local CHROME_HEIGHT = 128    -- header plus footer, around the canvas
+
+local JOURNAL_ADDON = "Blizzard_EncounterJournal"
 
 ----------------------------------------------------------------------------
 -- Layouts
 --
--- Coordinates are 0..1 across the canvas with the origin top-left, so a layout
--- is resolution independent and an archetype can later be reused at any panel
--- size. Facing is in degrees clockwise from "up".
+-- Coordinates are 0..1 across the canvas, so a layout is resolution
+-- independent and the same archetype can be reused at any panel size -- which
+-- matters now that the card sizes itself to whatever room the Journal has.
+-- Facing is degrees clockwise from "up".
 ----------------------------------------------------------------------------
 
 local LAYOUTS = {
@@ -92,11 +102,9 @@ local LAYOUTS = {
             { role = "DAMAGER", x = 0.58, y = 0.80 },
             { role = "DAMAGER", x = 0.50, y = 0.72 },
         },
-        -- The loop: cone starts on the group (wrong), tank drags the boss
-        -- around, cone ends pointing at the wall (right).
         facingFrom = 180,
         facingTo   = 0,
-        groupSafeAtEnd = true,
+        flashGroupAtStart = true,
     },
     {
         key      = "soak",
@@ -116,7 +124,6 @@ local LAYOUTS = {
         },
         facingFrom = 180,
         facingTo   = 180,
-        groupSafeAtEnd = false,  -- the cone is safe here from the start
         coneSafeAlways = true,
     },
 }
@@ -155,15 +162,15 @@ function bc:GetSeasonMaps()
     return nil
 end
 
--- Best-effort: find the Encounter Journal instance matching a season dungeon,
--- so the demo shows a boss the player will actually meet rather than a museum
--- piece. Falls back to the first dungeon of the current tier.
+-- Best-effort: find the Journal instance matching a season dungeon, so the
+-- fallback demo shows a boss the player will actually meet. Only used when the
+-- Journal has not told us what is selected.
 local function findJournalDungeon(wantedName)
     if not EJ_GetNumTiers or not EJ_SelectTier or not EJ_GetInstanceByIndex then
         return nil
     end
 
-    if EJ_GetCurrentTier and EJ_SelectTier then
+    if EJ_GetCurrentTier then
         EJ_SelectTier(EJ_GetCurrentTier())
     end
 
@@ -179,27 +186,91 @@ local function findJournalDungeon(wantedName)
     return first
 end
 
+-- Dungeon art for the diagram backdrop. Two sources, because neither is
+-- reliably present: the Mythic+ map info carries a background for season
+-- dungeons, and the Journal carries one for everything it knows about.
+local function resolveBackground(instanceID, dungeonName)
+    local maps = bc:GetSeasonMaps()
+    if maps and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
+        for _, mapID in ipairs(maps) do
+            local name, _, _, texture, background = try("C_ChallengeMode.GetMapUIInfo", function()
+                return C_ChallengeMode.GetMapUIInfo(mapID)
+            end)
+            if name and (not dungeonName or name == dungeonName) then
+                if background or texture then
+                    probe["background source"] = "C_ChallengeMode.GetMapUIInfo"
+                    return background or texture
+                end
+            end
+        end
+    end
+
+    if instanceID and EJ_GetInstanceInfo then
+        -- name, description, bgImage, buttonImage, loreImage, ...
+        local _, _, bgImage, _, loreImage = try("EJ_GetInstanceInfo", function()
+            return EJ_GetInstanceInfo(instanceID)
+        end)
+        if bgImage or loreImage then
+            probe["background source"] = "EJ_GetInstanceInfo"
+            return bgImage or loreImage
+        end
+    end
+
+    probe["background source"] = "none found"
+    return nil
+end
+
+-- What the Journal currently has selected. This is the normal path once the
+-- card is attached: the player clicks a boss, we follow.
+function bc:ReadJournalSelection()
+    local ej = _G.EncounterJournal
+    local encounterID = ej and ej.encounterID
+    if not encounterID or not EJ_GetEncounterInfo then return nil end
+
+    local name, _, _, _, _, journalInstanceID = try("EJ_GetEncounterInfo", function()
+        return EJ_GetEncounterInfo(encounterID)
+    end)
+    if not name then return nil end
+
+    local selection = { bossName = name, encounterID = encounterID }
+
+    if EJ_GetCreatureInfo then
+        local _, _, _, _, icon = try("EJ_GetCreatureInfo", function()
+            return EJ_GetCreatureInfo(1, encounterID)
+        end)
+        selection.portrait = icon
+    end
+
+    local instanceID = journalInstanceID or (EJ_GetCurrentInstance and EJ_GetCurrentInstance())
+    if instanceID and EJ_GetInstanceInfo then
+        local instanceName = try("EJ_GetInstanceInfo", function()
+            return EJ_GetInstanceInfo(instanceID)
+        end)
+        selection.dungeonName = instanceName
+    end
+    selection.background = resolveBackground(instanceID, selection.dungeonName)
+
+    return selection
+end
+
+-- Used only when nothing is selected -- opening the card cold, or the fallback
+-- window. Picks the first boss of the first season dungeon.
 function bc:ResolveDemoBoss()
     if self.demo then return self.demo end
 
-    local demo = { bossName = "Boss", dungeonName = nil, portrait = nil, background = nil }
+    local demo = { bossName = "Select a boss", dungeonName = nil }
 
     local wantedName
     local maps = self:GetSeasonMaps()
     if maps and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
-        local name, _, _, texture, background = try("C_ChallengeMode.GetMapUIInfo", function()
+        wantedName = try("C_ChallengeMode.GetMapUIInfo", function()
             return C_ChallengeMode.GetMapUIInfo(maps[1])
         end)
-        wantedName = name
-        demo.dungeonName = name
-        demo.background = background or texture
     end
 
-    local dungeon = try("EJ_GetInstanceByIndex", function() return findJournalDungeon(wantedName) end)
+    local dungeon = try("findJournalDungeon", function() return findJournalDungeon(wantedName) end)
     if dungeon then
-        demo.dungeonName = demo.dungeonName or dungeon.name
-        probe["journal dungeon"] = tostring(dungeon.name)
-
+        demo.dungeonName = dungeon.name
         if EJ_SelectInstance then pcall(EJ_SelectInstance, dungeon.id) end
 
         local encName, _, encounterID = try("EJ_GetEncounterInfoByIndex", function()
@@ -217,17 +288,11 @@ function bc:ResolveDemoBoss()
             demo.portrait = icon
         end
 
-        if not demo.background and EJ_GetInstanceInfo then
-            local _, _, bgImage = try("EJ_GetInstanceInfo", function()
-                return EJ_GetInstanceInfo()
-            end)
-            demo.background = bgImage
-        end
+        demo.background = resolveBackground(dungeon.id, dungeon.name)
     end
 
     -- Not used yet, but this is the call that would place bosses on a real
-    -- dungeon map instead of hand-placed coordinates, so probe it now while
-    -- there is someone to read the answer.
+    -- dungeon map instead of hand-placed coordinates, so probe it now.
     try("C_EncounterJournal.GetEncountersOnMap", function()
         local uiMapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
         if not uiMapID or not C_EncounterJournal or not C_EncounterJournal.GetEncountersOnMap then
@@ -261,22 +326,27 @@ local function setColor(texture, color, alphaOverride)
     texture:SetVertexColor(color[1], color[2], color[3], alphaOverride or color[4] or 1)
 end
 
--- Canvas coordinates: layouts speak 0..1, frames speak pixels from TOPLEFT.
+local function canvasSize()
+    return bc.canvasSize or DEFAULT_CANVAS
+end
+
+-- Layouts speak 0..1; frames speak pixels from the canvas TOPLEFT.
 local function place(canvas, region, x, y, w, h)
+    local size = canvasSize()
     region:ClearAllPoints()
     region:SetSize(w, h)
-    region:SetPoint("CENTER", canvas, "TOPLEFT", x * CANVAS_SIZE, -y * CANVAS_SIZE)
+    region:SetPoint("CENTER", canvas, "TOPLEFT", x * size, -y * size)
 end
 
 local function newToken(canvas, size)
     local token = CreateFrame("Frame", nil, canvas)
     token:SetSize(size, size)
 
-    token.halo = token:CreateTexture(nil, "BACKGROUND")
+    token.halo = token:CreateTexture(nil, "ARTWORK", nil, 1)
     token.halo:SetTexture(TEX.disc)
     token.halo:SetAllPoints(token)
 
-    token.icon = token:CreateTexture(nil, "ARTWORK")
+    token.icon = token:CreateTexture(nil, "ARTWORK", nil, 2)
     token.icon:SetPoint("CENTER")
     token.icon:SetSize(size * 0.74, size * 0.74)
 
@@ -295,14 +365,9 @@ function bc:BuildFrame()
     if self.frame then return self.frame end
 
     local f = CreateFrame("Frame", "TankAssistBossCard", UIParent, "BackdropTemplate")
-    f:SetSize(CANVAS_SIZE + 32, CANVAS_SIZE + 150)
+    f:SetSize(DEFAULT_CANVAS + 32, DEFAULT_CANVAS + CHROME_HEIGHT)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:SetClampedToScreen(true)
     f:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -311,14 +376,13 @@ function bc:BuildFrame()
     })
     f:SetBackdropColor(unpack(COLOR.panel))
     f:SetBackdropBorderColor(unpack(COLOR.border))
-    tinsert(UISpecialFrames, "TankAssistBossCard")
 
     ------------------------------------------------------------------
-    -- Header: portrait, boss name, dungeon
+    -- Header
     ------------------------------------------------------------------
     local portrait = CreateFrame("Frame", nil, f)
-    portrait:SetSize(44, 44)
-    portrait:SetPoint("TOPLEFT", 12, -12)
+    portrait:SetSize(40, 40)
+    portrait:SetPoint("TOPLEFT", 12, -10)
 
     portrait.icon = portrait:CreateTexture(nil, "ARTWORK")
     portrait.icon:SetAllPoints(portrait)
@@ -327,32 +391,34 @@ function bc:BuildFrame()
     portrait.ring = portrait:CreateTexture(nil, "OVERLAY")
     portrait.ring:SetTexture(TEX.ring)
     portrait.ring:SetPoint("CENTER")
-    portrait.ring:SetSize(52, 52)
+    portrait.ring:SetSize(47, 47)
     setColor(portrait.ring, COLOR.boss)
     f.portrait = portrait
 
     f.bossName = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    f.bossName:SetPoint("TOPLEFT", portrait, "TOPRIGHT", 10, -2)
+    f.bossName:SetPoint("TOPLEFT", portrait, "TOPRIGHT", 10, -1)
     f.bossName:SetTextColor(unpack(COLOR.text))
 
     f.dungeonName = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    f.dungeonName:SetPoint("TOPLEFT", f.bossName, "BOTTOMLEFT", 0, -3)
+    f.dungeonName:SetPoint("TOPLEFT", f.bossName, "BOTTOMLEFT", 0, -2)
     f.dungeonName:SetTextColor(unpack(COLOR.dim))
 
     f.verdictText = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    f.verdictText:SetPoint("TOPLEFT", f.dungeonName, "BOTTOMLEFT", 0, -4)
+    f.verdictText:SetPoint("TOPLEFT", f.dungeonName, "BOTTOMLEFT", 0, -3)
     f.verdictText:SetTextColor(unpack(COLOR.accent))
 
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", 2, 2)
-    close:SetScript("OnClick", function() bc:Hide() end)
+    -- Standalone-only chrome. Hidden and disabled once the card is living
+    -- inside the Journal, which brings its own frame and close button.
+    f.closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    f.closeButton:SetPoint("TOPRIGHT", 2, 2)
+    f.closeButton:SetScript("OnClick", function() bc:Hide() end)
 
     ------------------------------------------------------------------
     -- Canvas
     ------------------------------------------------------------------
     local canvas = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    canvas:SetSize(CANVAS_SIZE, CANVAS_SIZE)
-    canvas:SetPoint("TOP", f, "TOP", 0, -68)
+    canvas:SetSize(DEFAULT_CANVAS, DEFAULT_CANVAS)
+    canvas:SetPoint("TOP", f, "TOP", 0, -62)
     canvas:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -363,37 +429,31 @@ function bc:BuildFrame()
     canvas:SetClipsChildren(true)
     f.canvas = canvas
 
-    -- Dungeon art, sat behind everything and knocked well back so it reads as
-    -- "you are here" rather than competing with the diagram. Off by default so
-    -- the plain background can be judged first.
-    canvas.background = canvas:CreateTexture(nil, "BACKGROUND", nil, -8)
+    -- Dungeon art. This sublevel matters: the backdrop's fill is an opaque
+    -- texture in the BACKGROUND layer, so anything below it is painted over
+    -- and never seen. Sitting above the fill and below the grid is the only
+    -- place this shows up at all.
+    canvas.background = canvas:CreateTexture(nil, "BACKGROUND", nil, 2)
     canvas.background:SetAllPoints(canvas)
-    canvas.background:SetAlpha(0.22)
+    canvas.background:SetAlpha(0.30)
     canvas.background:Hide()
 
     canvas.grid = {}
     for i = 1, 7 do
         for _, orient in ipairs({ "H", "V" }) do
-            local line = canvas:CreateLine(nil, "BACKGROUND", nil, -6)
+            local line = canvas:CreateLine(nil, "BACKGROUND", nil, 5)
             line:SetThickness(1)
             line:SetColorTexture(unpack(COLOR.grid))
-            local t = i / 8
-            if orient == "H" then
-                line:SetStartPoint("TOPLEFT", canvas, 0, -t * CANVAS_SIZE)
-                line:SetEndPoint("TOPLEFT", canvas, CANVAS_SIZE, -t * CANVAS_SIZE)
-            else
-                line:SetStartPoint("TOPLEFT", canvas, t * CANVAS_SIZE, 0)
-                line:SetEndPoint("TOPLEFT", canvas, t * CANVAS_SIZE, -CANVAS_SIZE)
-            end
+            line.gridFraction = i / 8
+            line.gridOrient = orient
             tinsert(canvas.grid, line)
         end
     end
 
     canvas.walls = {}
-
     canvas.cone = canvas:CreateTexture(nil, "ARTWORK", nil, -2)
 
-    canvas.boss = newToken(canvas, 46)
+    canvas.boss = newToken(canvas, 44)
     setColor(canvas.boss.halo, COLOR.boss, 0.30)
     setColor(canvas.boss.ring, COLOR.boss)
 
@@ -402,22 +462,20 @@ function bc:BuildFrame()
     canvas.bossArrow:SetTexture(TEX.arrow)
     setColor(canvas.bossArrow, COLOR.boss)
 
-    canvas.tank = newToken(canvas, 34)
+    canvas.tank = newToken(canvas, 32)
     setColor(canvas.tank.halo, COLOR.tank, 0.30)
     setColor(canvas.tank.ring, COLOR.tank)
 
-    canvas.busterGlyph = canvas:CreateTexture(nil, "OVERLAY")
+    canvas.busterGlyph = canvas:CreateTexture(nil, "OVERLAY", nil, 2)
     canvas.busterGlyph:SetTexture(BUSTER_ICON)
-    canvas.busterGlyph:SetSize(30, 30)
 
     canvas.group = {}
     for i = 1, 4 do
-        local token = newToken(canvas, 26)
-        canvas.group[i] = token
+        canvas.group[i] = newToken(canvas, 25)
     end
 
     ------------------------------------------------------------------
-    -- Footer: layout switch, toggles
+    -- Footer
     ------------------------------------------------------------------
     local function makeButton(label, width, onClick)
         local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -427,36 +485,202 @@ function bc:BuildFrame()
         return b
     end
 
-    f.btnAway = makeButton("Turn it away", 104, function() bc:SetLayout("away") end)
-    f.btnAway:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -10)
+    f.btnAway = makeButton("Turn it away", 100, function() bc:SetLayout("away") end)
+    f.btnAway:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -8)
 
-    f.btnSoak = makeButton("Soak together", 108, function() bc:SetLayout("soak") end)
-    f.btnSoak:SetPoint("LEFT", f.btnAway, "RIGHT", 6, 0)
+    f.btnSoak = makeButton("Soak together", 104, function() bc:SetLayout("soak") end)
+    f.btnSoak:SetPoint("LEFT", f.btnAway, "RIGHT", 4, 0)
 
-    f.btnMap = makeButton("Map", 60, function() bc:ToggleBackground() end)
-    f.btnMap:SetPoint("LEFT", f.btnSoak, "RIGHT", 6, 0)
+    f.btnMap = makeButton("Art", 50, function() bc:ToggleBackground() end)
+    f.btnMap:SetPoint("LEFT", f.btnSoak, "RIGHT", 4, 0)
 
-    f.btnDebug = makeButton("Debug", 62, function() bc:Debug() end)
-    f.btnDebug:SetPoint("LEFT", f.btnMap, "RIGHT", 6, 0)
+    f.btnDebug = makeButton("Debug", 56, function() bc:Debug() end)
+    f.btnDebug:SetPoint("LEFT", f.btnMap, "RIGHT", 4, 0)
 
-    -- Legend. This is the one place words are allowed, because the visual
-    -- language has to be learnable once before it can be read everywhere.
+    -- The one place words are allowed: the visual language has to be learnable
+    -- once before it can be read everywhere.
     f.legend = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    f.legend:SetPoint("TOPLEFT", f.btnAway, "BOTTOMLEFT", 1, -8)
-    f.legend:SetPoint("TOPRIGHT", f.btnDebug, "BOTTOMRIGHT", -1, -8)
+    f.legend:SetPoint("TOPLEFT", f.btnAway, "BOTTOMLEFT", 1, -6)
+    f.legend:SetPoint("TOPRIGHT", f.btnDebug, "BOTTOMRIGHT", -1, -6)
     f.legend:SetJustifyH("LEFT")
     f.legend:SetTextColor(unpack(COLOR.dim))
+    f.legend:SetText("|cff33b8f0Tank|r  |cff59d973Healer|r  |cffeb9440DPS|r"
+        .. "        |cffe63838Red cone|r = stay out"
+        .. "        |cff40b3ffBlue cone|r = stand in")
 
     f:SetScript("OnUpdate", function(_, elapsed) bc:OnUpdate(elapsed) end)
     f:Hide()
 
     self.frame = f
+    self:SetMode("window")
     return f
+end
+
+----------------------------------------------------------------------------
+-- Placement: inside the Journal, or a window of its own
+----------------------------------------------------------------------------
+
+-- The Journal's right-hand info panel is where boss detail already lives, so
+-- that is where the card goes. Falls back through progressively less specific
+-- frames rather than assuming one layout survives every patch.
+local function journalAnchor()
+    local ej = _G.EncounterJournal
+    if not ej then return nil end
+    local encounter = ej.encounter
+    if encounter and encounter.info then return encounter.info end
+    if encounter then return encounter end
+    return ej
+end
+
+function bc:SetMode(mode, anchor)
+    local f = self.frame
+    if not f then return end
+
+    self.mode = mode
+
+    if mode == "journal" and anchor then
+        f:SetParent(anchor)
+        f:SetFrameStrata(anchor:GetFrameStrata())
+        f:SetFrameLevel((anchor:GetFrameLevel() or 1) + 10)
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", anchor, "TOPLEFT", 2, -2)
+        f:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -2, 2)
+        f:SetMovable(false)
+        f:EnableMouse(true)
+        f:RegisterForDrag()
+        f:SetScript("OnDragStart", nil)
+        f:SetScript("OnDragStop", nil)
+        f.closeButton:Hide()
+    else
+        f:SetParent(UIParent)
+        f:SetFrameStrata("DIALOG")
+        f:ClearAllPoints()
+        f:SetPoint("CENTER")
+        f:SetSize(DEFAULT_CANVAS + 32, DEFAULT_CANVAS + CHROME_HEIGHT)
+        f:SetMovable(true)
+        f:EnableMouse(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        f.closeButton:Show()
+    end
+
+    self:Relayout()
+end
+
+-- The canvas is square and takes whatever room is left after the chrome, so
+-- the card fits the Journal's panel instead of assuming a fixed size.
+function bc:Relayout()
+    local f = self.frame
+    if not f then return end
+
+    local width = f:GetWidth() or 0
+    local height = f:GetHeight() or 0
+    if width <= 1 or height <= 1 then
+        width, height = DEFAULT_CANVAS + 32, DEFAULT_CANVAS + CHROME_HEIGHT
+    end
+
+    local size = math.floor(math.min(width - 24, height - CHROME_HEIGHT))
+    if size < MIN_CANVAS then size = MIN_CANVAS end
+
+    self.canvasSize = size
+    f.canvas:SetSize(size, size)
+
+    for _, line in ipairs(f.canvas.grid) do
+        local t = line.gridFraction
+        if line.gridOrient == "H" then
+            line:SetStartPoint("TOPLEFT", f.canvas, 0, -t * size)
+            line:SetEndPoint("TOPLEFT", f.canvas, size, -t * size)
+        else
+            line:SetStartPoint("TOPLEFT", f.canvas, t * size, 0)
+            line:SetEndPoint("TOPLEFT", f.canvas, t * size, -size)
+        end
+    end
+
+    if self.layout then
+        self:SetLayout(self.layout.key)
+    end
+end
+
+----------------------------------------------------------------------------
+-- Encounter Journal integration
+----------------------------------------------------------------------------
+
+function bc:AttachToJournal()
+    if self.attached then return true end
+
+    local anchor = journalAnchor()
+    if not anchor then
+        probe["journal anchor"] = "not found"
+        return false
+    end
+    probe["journal anchor"] = anchor:GetName() or "unnamed frame"
+
+    self:BuildFrame()
+
+    -- Toggle sits on the Journal itself so it is reachable whichever tab is up.
+    local button = CreateFrame("Button", "TankAssistBossCardToggle", _G.EncounterJournal,
+        "UIPanelButtonTemplate")
+    button:SetSize(76, 22)
+    button:SetText("Tank")
+    button:SetPoint("TOPRIGHT", _G.EncounterJournal, "TOPRIGHT", -60, -28)
+    button:SetScript("OnClick", function() bc:Toggle() end)
+    button:SetScript("OnEnter", function(self_)
+        GameTooltip:SetOwner(self_, "ANCHOR_LEFT")
+        GameTooltip:SetText("Tank card")
+        GameTooltip:AddLine("Tanking diagram for the selected boss.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    self.toggleButton = button
+
+    self:SetMode("journal", anchor)
+
+    -- Follow whatever boss the player clicks.
+    if EJ_SelectEncounter then
+        hooksecurefunc("EJ_SelectEncounter", function()
+            if bc.frame and bc.frame:IsShown() then
+                bc:SyncToJournal()
+            end
+        end)
+    end
+
+    -- The Journal closing should take the card with it.
+    _G.EncounterJournal:HookScript("OnHide", function()
+        if bc.frame then bc.frame:Hide() end
+    end)
+
+    self.attached = true
+    return true
+end
+
+function bc:SyncToJournal()
+    local selection = self:ReadJournalSelection()
+    if selection then
+        self.current = selection
+    end
+    if self.layout then
+        self:SetLayout(self.layout.key)
+    end
+end
+
+-- The Journal is load-on-demand, so attach when it arrives rather than at login.
+function bc:EnsureJournalLoaded()
+    if _G.EncounterJournal then return true end
+    if C_AddOns and C_AddOns.LoadAddOn then
+        local ok = pcall(C_AddOns.LoadAddOn, JOURNAL_ADDON)
+        if ok and _G.EncounterJournal then return true end
+    end
+    return _G.EncounterJournal ~= nil
 end
 
 ----------------------------------------------------------------------------
 -- Layout application
 ----------------------------------------------------------------------------
+
+function bc:CurrentBoss()
+    return self.current or self:ResolveDemoBoss()
+end
 
 function bc:SetLayout(key)
     local f = self:BuildFrame()
@@ -467,21 +691,27 @@ function bc:SetLayout(key)
     if not layout then return end
 
     self.layout = layout
-    self.elapsed = 0
+    self.elapsed = self.elapsed or 0
 
     local canvas = f.canvas
-    local demo = self:ResolveDemoBoss()
+    local size = canvasSize()
+    local boss = self:CurrentBoss()
 
     ------------------------------------------------------------------
     -- Header
     ------------------------------------------------------------------
-    f.portrait.icon:SetTexture(demo.portrait or "Interface\\Icons\\Ability_Creature_Cursed_02")
-    f.bossName:SetText(demo.bossName or "Boss")
-    f.dungeonName:SetText(demo.dungeonName or "")
+    f.portrait.icon:SetTexture(boss.portrait or FALLBACK_PORTRAIT)
+    f.bossName:SetText(boss.bossName or "Boss")
+    f.dungeonName:SetText(boss.dungeonName or "")
     f.verdictText:SetText(layout.title .. "  |cff808080" .. layout.subtitle .. "|r")
 
-    if demo.background then
-        canvas.background:SetTexture(demo.background)
+    if boss.background then
+        canvas.background:SetTexture(boss.background)
+        if self.backgroundWanted ~= false then
+            canvas.background:Show()
+        end
+    else
+        canvas.background:Hide()
     end
 
     ------------------------------------------------------------------
@@ -496,8 +726,8 @@ function bc:SetLayout(key)
             canvas.walls[index] = line
         end
         line:SetColorTexture(unpack(COLOR.wall))
-        line:SetStartPoint("TOPLEFT", canvas, wall[1] * CANVAS_SIZE, -wall[2] * CANVAS_SIZE)
-        line:SetEndPoint("TOPLEFT", canvas, wall[3] * CANVAS_SIZE, -wall[4] * CANVAS_SIZE)
+        line:SetStartPoint("TOPLEFT", canvas, wall[1] * size, -wall[2] * size)
+        line:SetEndPoint("TOPLEFT", canvas, wall[3] * size, -wall[4] * size)
         line:Show()
     end
 
@@ -505,26 +735,30 @@ function bc:SetLayout(key)
     -- Cone. The texture's apex sits at its own centre, so centring it on the
     -- boss and rotating about the middle pivots the cone around the boss.
     ------------------------------------------------------------------
-    local reach = layout.cone.reach * CANVAS_SIZE * 2
+    local reach = layout.cone.reach * size * 2
     canvas.cone:SetTexture(layout.cone.texture)
     canvas.cone:ClearAllPoints()
     canvas.cone:SetSize(reach, reach)
-    canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT",
-        layout.boss.x * CANVAS_SIZE, -layout.boss.y * CANVAS_SIZE)
+    canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT", layout.boss.x * size, -layout.boss.y * size)
 
     ------------------------------------------------------------------
     -- Tokens
     ------------------------------------------------------------------
-    place(canvas, canvas.boss, layout.boss.x, layout.boss.y, 46, 46)
-    canvas.boss.icon:SetTexture(demo.portrait or "Interface\\Icons\\Ability_Creature_Cursed_02")
+    local tokenScale = size / DEFAULT_CANVAS
+    self.tokenScale = tokenScale
+
+    place(canvas, canvas.boss, layout.boss.x, layout.boss.y, 44 * tokenScale, 44 * tokenScale)
+    canvas.boss.icon:SetTexture(boss.portrait or FALLBACK_PORTRAIT)
     canvas.boss.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
 
-    local tankCoordL, tankCoordR, tankCoordT, tankCoordB = roleTexCoords("TANK")
-    canvas.tank.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-ROLES")
-    if tankCoordL then
-        canvas.tank.icon:SetTexCoord(tankCoordL, tankCoordR, tankCoordT, tankCoordB)
+    local l, r, t, b = roleTexCoords("TANK")
+    if l then
+        canvas.tank.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-ROLES")
+        canvas.tank.icon:SetTexCoord(l, r, t, b)
+        canvas.tank.icon:SetVertexColor(1, 1, 1, 1)
     else
         canvas.tank.icon:SetTexture(TEX.disc)
+        canvas.tank.icon:SetTexCoord(0, 1, 0, 1)
         setColor(canvas.tank.icon, COLOR.tank)
     end
 
@@ -534,13 +768,14 @@ function bc:SetLayout(key)
         setColor(token.halo, color, 0.30)
         setColor(token.ring, color)
 
-        local l, r, t, b = roleTexCoords(member.role)
-        if l then
+        local ml, mr, mt, mb = roleTexCoords(member.role)
+        if ml then
             token.icon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-ROLES")
-            token.icon:SetTexCoord(l, r, t, b)
+            token.icon:SetTexCoord(ml, mr, mt, mb)
             token.icon:SetVertexColor(1, 1, 1, 1)
         else
             token.icon:SetTexture(TEX.disc)
+            token.icon:SetTexCoord(0, 1, 0, 1)
             setColor(token.icon, color)
         end
         token:Show()
@@ -549,17 +784,9 @@ function bc:SetLayout(key)
         canvas.group[index]:Hide()
     end
 
-    ------------------------------------------------------------------
-    -- Buster glyph
-    ------------------------------------------------------------------
     local buster = BUSTER[layout.buster] or BUSTER.NONE
-    canvas.busterGlyph:SetSize(buster.size, buster.size)
+    canvas.busterGlyph:SetSize(buster.size * tokenScale, buster.size * tokenScale)
     canvas.busterGlyph:SetVertexColor(buster.color[1], buster.color[2], buster.color[3], 1)
-
-    f.legend:SetText(
-        ("|cff33b8f0Tank|r  |cff59d973Healer|r  |cffeb9440DPS|r        %s        %s"):format(
-            "|cffe63838Red cone|r = stay out",
-            "|cff40b3ffBlue cone|r = stand in"))
 
     f.btnAway:SetEnabled(key ~= "away")
     f.btnSoak:SetEnabled(key ~= "soak")
@@ -568,12 +795,21 @@ end
 function bc:ToggleBackground()
     local f = self:BuildFrame()
     local bg = f.canvas.background
+
     if bg:IsShown() then
+        self.backgroundWanted = false
         bg:Hide()
-    elseif bg:GetTexture() then
+        return
+    end
+
+    self.backgroundWanted = true
+    if bg:GetTexture() then
         bg:Show()
     else
-        TankAssist.Addon:Print("No dungeon art available for the current season on this client.")
+        local addon = TankAssist.Addon
+        local message = "No dungeon art resolved for this boss ("
+            .. tostring(probe["background source"] or "not probed") .. ")."
+        if addon then addon:Print(message) else print(message) end
     end
 end
 
@@ -582,7 +818,7 @@ end
 --
 -- One loop shows the tank doing the thing, which is the part a list of words
 -- cannot carry. Nothing here is per-boss: it is driven entirely by the layout's
--- facingFrom/facingTo and token start/end positions.
+-- facing and token start/end positions.
 ----------------------------------------------------------------------------
 
 local function lerp(a, b, t) return a + (b - a) * t end
@@ -598,8 +834,11 @@ function bc:OnUpdate(elapsed)
 
     self.elapsed = ((self.elapsed or 0) + elapsed) % CYCLE
     local t = self.elapsed
+    local size = canvasSize()
+    local scale = self.tokenScale or 1
 
-    -- Beat 1 hold wrong, beat 2 the tank acts, beat 3 hold right.
+    -- Beat one holds the mistake, beat two is the tank acting, beat three holds
+    -- the result.
     local moveStart, moveEnd = 1.4, 3.4
     local progress = 0
     if t > moveEnd then
@@ -610,14 +849,14 @@ function bc:OnUpdate(elapsed)
 
     local canvas = self.frame.canvas
 
-    -- Facing: degrees clockwise from up, and WoW rotates counter-clockwise.
+    -- Facing is degrees clockwise from up; WoW rotates counter-clockwise.
     local facing = lerp(layout.facingFrom, layout.facingTo, progress)
     canvas.cone:SetRotation(-math.rad(facing))
 
-    local coneColor = COLOR.danger
+    local coneColor
     if layout.coneSafeAlways then
         coneColor = COLOR.safe
-    elseif layout.groupSafeAtEnd then
+    else
         -- Cross-fade danger to safe as the boss comes around, so the colour
         -- change and the movement read as one event.
         coneColor = {
@@ -629,23 +868,21 @@ function bc:OnUpdate(elapsed)
     end
     setColor(canvas.cone, coneColor)
 
-    -- Boss facing arrow, just outside the token.
     local radians = math.rad(facing)
-    local offset = 34
+    local offset = 32 * scale
     canvas.bossArrow:ClearAllPoints()
-    canvas.bossArrow:SetSize(16, 16)
+    canvas.bossArrow:SetSize(15 * scale, 15 * scale)
     canvas.bossArrow:SetPoint("CENTER", canvas, "TOPLEFT",
-        layout.boss.x * CANVAS_SIZE + math.sin(radians) * offset,
-        -(layout.boss.y * CANVAS_SIZE) + math.cos(radians) * offset)
+        layout.boss.x * size + math.sin(radians) * offset,
+        -(layout.boss.y * size) + math.cos(radians) * offset)
     canvas.bossArrow:SetRotation(-radians)
 
-    -- Tank walks the boss round.
     local tx = lerp(layout.tank.from.x, layout.tank.to.x, progress)
     local ty = lerp(layout.tank.from.y, layout.tank.to.y, progress)
-    place(canvas, canvas.tank, tx, ty, 34, 34)
+    place(canvas, canvas.tank, tx, ty, 32 * scale, 32 * scale)
 
     canvas.busterGlyph:ClearAllPoints()
-    canvas.busterGlyph:SetPoint("CENTER", canvas.tank, "CENTER", 22, 16)
+    canvas.busterGlyph:SetPoint("CENTER", canvas.tank, "CENTER", 20 * scale, 15 * scale)
     -- Pulse once the tank is in position, so the eye lands on it last.
     local pulse = 0.55 + 0.45 * math.abs(math.sin(t * 2.2))
     canvas.busterGlyph:SetAlpha(progress >= 1 and pulse or 0.25)
@@ -654,11 +891,11 @@ function bc:OnUpdate(elapsed)
         local token = canvas.group[index]
         local gx = member.toX and lerp(member.x, member.toX, progress) or member.x
         local gy = member.toY and lerp(member.y, member.toY, progress) or member.y
-        place(canvas, token, gx, gy, 26, 26)
+        place(canvas, token, gx, gy, 25 * scale, 25 * scale)
 
-        -- In the "turn it away" loop the group is standing in the frontal at
-        -- the start; flashing them makes the mistake obvious before the fix.
-        if layout.groupSafeAtEnd then
+        -- In the "turn it away" loop the group starts standing in the frontal;
+        -- flashing them makes the mistake obvious before the fix.
+        if layout.flashGroupAtStart then
             token.halo:SetAlpha(lerp(0.25 + 0.55 * math.abs(math.sin(t * 5)), 0.30, progress))
         else
             token.halo:SetAlpha(0.30)
@@ -671,9 +908,23 @@ end
 ----------------------------------------------------------------------------
 
 function bc:Show()
-    local f = self:BuildFrame()
+    self:BuildFrame()
+
+    if self:EnsureJournalLoaded() then
+        self:AttachToJournal()
+        if _G.EncounterJournal and not _G.EncounterJournal:IsShown() then
+            if ToggleEncounterJournal then
+                pcall(ToggleEncounterJournal)
+            elseif ShowUIPanel then
+                pcall(ShowUIPanel, _G.EncounterJournal)
+            end
+        end
+        self:SyncToJournal()
+    end
+
     if not self.layout then self:SetLayout("away") end
-    f:Show()
+    self.frame:Show()
+    self:Relayout()
 end
 
 function bc:Hide()
@@ -681,8 +932,8 @@ function bc:Hide()
 end
 
 function bc:Toggle()
-    local f = self:BuildFrame()
-    if f:IsShown() then self:Hide() else self:Show() end
+    self:BuildFrame()
+    if self.frame:IsShown() then self:Hide() else self:Show() end
 end
 
 -- Which client APIs actually answered. This is the real output of the first
@@ -691,7 +942,11 @@ end
 function bc:Debug()
     self.demo = nil
     probe = {}
-    local demo = self:ResolveDemoBoss()
+
+    self:EnsureJournalLoaded()
+    local selection = self:ReadJournalSelection()
+    local boss = selection or self:ResolveDemoBoss()
+    probe["journal selection"] = selection and "ok" or "nothing selected"
 
     local addon = TankAssist.Addon
     local function say(line) if addon then addon:Print(line) else print(line) end end
@@ -701,24 +956,34 @@ function bc:Debug()
     for name in pairs(probe) do tinsert(names, name) end
     table.sort(names)
     for _, name in ipairs(names) do
-        local value = probe[name]
+        local value = tostring(probe[name])
         local color = value:match("^ok") and "|cff40d040" or "|cffe85050"
         print(("  %-42s %s%s|r"):format(name, color, value))
     end
-    print(("  %-42s %s"):format("resolved boss", tostring(demo.bossName)))
-    print(("  %-42s %s"):format("resolved dungeon", tostring(demo.dungeonName)))
-    print(("  %-42s %s"):format("portrait texture", tostring(demo.portrait)))
-    print(("  %-42s %s"):format("background texture", tostring(demo.background)))
+    print(("  %-42s %s"):format("resolved boss", tostring(boss.bossName)))
+    print(("  %-42s %s"):format("resolved dungeon", tostring(boss.dungeonName)))
+    print(("  %-42s %s"):format("portrait texture", tostring(boss.portrait)))
+    print(("  %-42s %s"):format("background texture", tostring(boss.background)))
+    print(("  %-42s %s"):format("mode", tostring(self.mode)))
 end
 
-local function Initialize()
-    if TankAssist.Addon then
-        TankAssist.Addon.bossCard = bc
-    end
-end
+----------------------------------------------------------------------------
+-- Init
+----------------------------------------------------------------------------
 
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
-initFrame:SetScript("OnEvent", function()
-    C_Timer.After(0.8, Initialize)
+initFrame:RegisterEvent("ADDON_LOADED")
+initFrame:SetScript("OnEvent", function(_, event, addOnName)
+    if event == "ADDON_LOADED" and addOnName == JOURNAL_ADDON then
+        -- The Journal builds its frames as it loads, so give it a tick before
+        -- reaching into them.
+        C_Timer.After(0, function() bc:AttachToJournal() end)
+    elseif event == "PLAYER_LOGIN" then
+        C_Timer.After(0.8, function()
+            if TankAssist.Addon then
+                TankAssist.Addon.bossCard = bc
+            end
+        end)
+    end
 end)
