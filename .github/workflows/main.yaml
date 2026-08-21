@@ -61,7 +61,9 @@ jobs:
         id: changelog
         run: |
           CURRENT_TAG="${GITHUB_REF#refs/tags/}"
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          # Alphas are incremental, so this one deliberately starts at the
+          # previous tag of any kind rather than the last stable.
+          PREVIOUS_TAG=$(bash ci/scripts/previous_tag.sh any HEAD^)
 
           echo "Current tag: $CURRENT_TAG"
           echo "Previous tag: $PREVIOUS_TAG"

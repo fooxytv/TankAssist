@@ -79,7 +79,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="v${VERSION}"
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          # Last stable, so the release notes span the whole gap between
+          # public versions rather than stopping at an internal alpha tag.
+          PREVIOUS_TAG=$(bash ci/scripts/previous_tag.sh stable "${TAG}^")
 
           CHANGELOG=$(bash ci/scripts/changelog.sh "$PREVIOUS_TAG" "$TAG" "## ${TAG}")
           {
