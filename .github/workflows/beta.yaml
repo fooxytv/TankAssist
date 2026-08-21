@@ -77,6 +77,18 @@ jobs:
           fi
           echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve CurseForge game version
+        id: game_version
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          # Derived from the .toc interface and checked against CurseForge's
+          # version list. The upload action does not fail on a name it cannot
+          # resolve -- it uploads an empty version list and CurseForge labels
+          # the file with a default -- so the check has to happen here.
+          VERSION=$(bash ci/scripts/game_version.sh)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish to CurseForge
         uses: itsmeow/curseforge-upload@v3
         with:
@@ -87,4 +99,4 @@ jobs:
           release_type: beta
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          game_versions: "12.1"
+          game_versions: ${{ steps.game_version.outputs.version }}
