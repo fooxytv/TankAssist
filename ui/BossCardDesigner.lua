@@ -146,6 +146,13 @@ function designer:MakeDraggable(token, kind, index)
         if not target then return end
         local x, y = TankAssist.BossCard:CursorToCanvas()
         target.x, target.y = x, y
+
+        -- Moving the boss by hand means you meant it there, so it stops being
+        -- snapped back to wherever the map pin says it stands.
+        if self_.designerKind == "boss" then
+            local card = currentCard()
+            if card then card.bossPlaced = true end
+        end
     end)
 
     -- Wheeling the boss turns it. Five degree steps are fine enough to line a
@@ -188,6 +195,59 @@ function designer:SyncHandles(card)
     for _, token in ipairs(canvas.group) do
         token:EnableMouse(active)
     end
+
+    self:WireCanvas(canvas)
+    canvas:EnableMouse(active)
+    canvas:EnableMouseWheel(active)
+end
+
+-- Framing the shot: wheel zooms the floor plan, dragging the empty canvas pans
+-- it. Both write into card.map, so a boss reopens on the framing it was
+-- authored at rather than on a default guess.
+function designer:WireCanvas(canvas)
+    if canvas.designerWired then return end
+    canvas.designerWired = true
+
+    canvas:SetScript("OnMouseWheel", function(_, delta)
+        if not designer:IsActive() then return end
+        local card = currentCard()
+        if not card or not card.map then return end
+        local step = (delta > 0) and 1.15 or (1 / 1.15)
+        card.map.scale = math.max(0.4, math.min(12, (card.map.scale or 1) * step))
+        designer:RefreshReadout()
+    end)
+
+    canvas:SetScript("OnMouseDown", function(self_)
+        if not designer:IsActive() then return end
+        local card = currentCard()
+        if not card or not card.map then return end
+        self_.panning = true
+        self_.panCursorX, self_.panCursorY = GetCursorPosition()
+        self_.panFocusX, self_.panFocusY = card.map.focusX or 0.5, card.map.focusY or 0.5
+    end)
+
+    canvas:SetScript("OnMouseUp", function(self_)
+        self_.panning = false
+        designer:RefreshReadout()
+    end)
+
+    canvas:SetScript("OnUpdate", function(self_)
+        if not self_.panning or not designer:IsActive() then return end
+        local card = currentCard()
+        local cardmap = TankAssist.BossCardMap
+        if not card or not card.map or not cardmap:IsLoaded() then return end
+
+        local scale = canvas:GetEffectiveScale()
+        if not scale or scale == 0 then return end
+
+        local cx, cy = GetCursorPosition()
+        local dx = (cx - self_.panCursorX) / scale
+        local dy = (cy - self_.panCursorY) / scale
+
+        local mapScale = math.max(0.2, card.map.scale or 1)
+        card.map.focusX = self_.panFocusX - dx / (cardmap.layerWidth * mapScale)
+        card.map.focusY = self_.panFocusY - dy / (cardmap.layerHeight * mapScale)
+    end)
 end
 
 ----------------------------------------------------------------------------
@@ -253,6 +313,14 @@ function designer:Serialise()
                 num(wall[1]), num(wall[2]), num(wall[3]), num(wall[4])))
         end
         add("            },")
+    end
+
+    if card.map then
+        add(string.format("            map     = { scale = %s, focusX = %s, focusY = %s },",
+            num(card.map.scale), num(card.map.focusX), num(card.map.focusY)))
+    end
+    if card.bossPlaced then
+        add("            bossPlaced = true,")
     end
 
     if card.move then
@@ -429,6 +497,17 @@ function designer:BuildPalette()
     end)
     panel.clearWallsButton:SetPoint("LEFT", panel.wallButton, "RIGHT", 6, 0)
 
+    panel.resetViewButton = makeButton(panel, "Reset map view", 206, function()
+        local card = currentCard()
+        if not card then return end
+        local bstate = TankAssist.BossCard.state
+        card.map = TankAssist.BossCardMap:DefaultView(bstate.bossMapX, bstate.bossMapY)
+        card.bossPlaced = nil
+        TankAssist.BossCard:Render(card)
+        designer:RefreshReadout()
+    end)
+    panel.resetViewButton:SetPoint("TOPLEFT", panel.wallButton, "BOTTOMLEFT", 0, -4)
+
     panel.clearMoveButton = makeButton(panel, "Clear 'after' state", 206, function()
         local card = currentCard()
         if not card then return end
@@ -436,7 +515,7 @@ function designer:BuildPalette()
         designer.editing = "before"
         designer:RefreshReadout()
     end)
-    panel.clearMoveButton:SetPoint("TOPLEFT", panel.wallButton, "BOTTOMLEFT", 0, -4)
+    panel.clearMoveButton:SetPoint("TOPLEFT", panel.resetViewButton, "BOTTOMLEFT", 0, -4)
 
     panel.exportButton = makeButton(panel, "Export", 206, function()
         designer:ShowExport()
@@ -477,10 +556,11 @@ function designer:RefreshReadout()
         or "Last role: -")
 
     panel.readout:SetText(string.format(
-        "boss %.2f, %.2f  facing %d\ntank %.2f, %.2f\n%d in group%s",
+        "boss %.3f, %.3f  facing %d\ntank %.3f, %.3f\n%d in group\n%s%s",
         card.boss.x or 0, card.boss.y or 0, card.boss.facing or 0,
         card.tank.x or 0, card.tank.y or 0,
         card.group and #card.group or 0,
+        card.map and string.format("map zoom %.2f", card.map.scale or 1) or "no map",
         card.move and "\nhas an 'after' state" or ""))
 end
 

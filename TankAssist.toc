@@ -45,6 +45,7 @@ ui\CooldownAlerts.lua
 ui\ConsumableCheck.lua
 ui\ConfigPanel.lua
 ui\GearAdvisor.lua
+ui\BossCardMap.lua
 ui\BossCard.lua
 ui\BossCardDesigner.lua
 

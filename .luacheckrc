@@ -101,6 +101,7 @@ globals = {
     "GetTexCoordsForRoleSmallCircle",
 
     -- Sound API
+    "SetPortraitTextureFromCreatureDisplayID",
     "PlaySound",
     "PlaySoundFile",
     "SOUNDKIT",

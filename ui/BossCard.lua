@@ -214,9 +214,27 @@ function bc:ReadJournal()
 
     local instanceID = journalInstanceID or (EJ_GetCurrentInstance and EJ_GetCurrentInstance())
     state.instanceID = instanceID
+    state.dungeonAreaMapID = nil
     if instanceID and EJ_GetInstanceInfo then
-        state.dungeonName = try("EJ_GetInstanceInfo", function() return EJ_GetInstanceInfo(instanceID) end)
+        -- name, description, bgImage, _, loreImage, buttonImage, dungeonAreaMapID
+        local instanceName, _, _, _, _, _, dungeonAreaMapID = try("EJ_GetInstanceInfo", function()
+            return EJ_GetInstanceInfo(instanceID)
+        end)
+        state.dungeonName = instanceName
+        state.dungeonAreaMapID = dungeonAreaMapID
     end
+
+    -- The real floor plan, and where the game says this boss stands on it.
+    state.mapID, state.bossMapX, state.bossMapY =
+        TankAssist.BossCardMap:FindFloorFor(encounterID, state.dungeonAreaMapID)
+    if state.mapID then
+        probe["dungeon floor map"] = ("ok (map %d at %.2f, %.2f)"):format(
+            state.mapID, state.bossMapX or 0, state.bossMapY or 0)
+    else
+        probe["dungeon floor map"] = "not found"
+    end
+
+    -- Lore art is the fallback for when a floor plan cannot be had.
     state.background = resolveBackground(instanceID, state.dungeonName)
 
     if rootSectionID then
@@ -259,12 +277,23 @@ function bc:CanvasSize()
     return self.canvasSize or 300
 end
 
--- Diagrams speak 0..1; frames speak pixels from the canvas TOPLEFT.
+-- With a dungeon map attached, card coordinates are map coordinates, so the
+-- tokens stay locked to the room when it is zoomed or panned. Without one they
+-- are plain canvas coordinates. Converting here means every call site gets that
+-- for free rather than each one remembering to ask.
+function bc:ToCanvas(x, y)
+    if not self.mapActive then return x, y end
+    local card = state.ability
+    if not card or not card.map then return x, y end
+    return TankAssist.BossCardMap:MapToCanvas(x, y, self:CanvasSize(), card.map)
+end
+
 function bc:Place(region, x, y, w, h)
     local size = self:CanvasSize()
+    local cx, cy = self:ToCanvas(x, y)
     region:ClearAllPoints()
     region:SetSize(w, h)
-    region:SetPoint("CENTER", self.frame.canvas, "TOPLEFT", x * size, -y * size)
+    region:SetPoint("CENTER", self.frame.canvas, "TOPLEFT", cx * size, -cy * size)
 end
 
 -- Screen position -> 0..1 inside the canvas. The designer drags with this.
@@ -284,7 +313,15 @@ function bc:CursorToCanvas()
 
     local x = (cx - left) / width
     local y = (top - cy) / height
-    return math.max(0, math.min(1, x)), math.max(0, math.min(1, y))
+    x, y = math.max(0, math.min(1, x)), math.max(0, math.min(1, y))
+
+    -- Store in the same space the card reads from, or a drag would land
+    -- somewhere else the moment the map moved.
+    local card = state.ability
+    if self.mapActive and card and card.map then
+        return TankAssist.BossCardMap:CanvasToMap(x, y, self:CanvasSize(), card.map)
+    end
+    return x, y
 end
 
 local function newToken(parent, size)
@@ -653,8 +690,32 @@ function bc:Render(card)
     local canvas = f.canvas
     local size = self:CanvasSize()
 
-    canvas.background:SetTexture(state.background)
-    canvas.background:SetShown(state.background ~= nil)
+    -- The dungeon floor first; the instance's lore art only if there is no
+    -- floor plan to be had. A room you recognise beats a mood painting.
+    local cardmap = TankAssist.BossCardMap
+    self.mapActive = false
+    if state.mapID then
+        cardmap:Build(canvas)
+        if cardmap:SetMap(canvas, state.mapID) then
+            card.map = card.map or cardmap:DefaultView(state.bossMapX, state.bossMapY)
+            cardmap:Apply(size, card.map)
+            self.mapActive = true
+        end
+    end
+
+    if self.mapActive then
+        canvas.background:Hide()
+    else
+        cardmap:Hide()
+        canvas.background:SetTexture(state.background)
+        canvas.background:SetShown(state.background ~= nil)
+    end
+
+    -- With a floor plan up, the boss belongs where the game says it stands
+    -- rather than wherever it was dragged, so the diagram lines up with the room.
+    if self.mapActive and state.bossMapX and not card.bossPlaced then
+        card.boss.x, card.boss.y = state.bossMapX, state.bossMapY
+    end
 
     ------------------------------------------------------------------
     -- Walls
@@ -668,8 +729,10 @@ function bc:Render(card)
             canvas.walls[index] = line
         end
         line:SetColorTexture(unpack(COLOR.wall))
-        line:SetStartPoint("TOPLEFT", canvas, wall[1] * size, -wall[2] * size)
-        line:SetEndPoint("TOPLEFT", canvas, wall[3] * size, -wall[4] * size)
+        local ax, ay = self:ToCanvas(wall[1], wall[2])
+        local bx, by = self:ToCanvas(wall[3], wall[4])
+        line:SetStartPoint("TOPLEFT", canvas, ax * size, -ay * size)
+        line:SetEndPoint("TOPLEFT", canvas, bx * size, -by * size)
         line:Show()
     end
 
@@ -683,7 +746,8 @@ function bc:Render(card)
         local reach = (card.cone.reach or 0.44) * size * 2
         canvas.cone:ClearAllPoints()
         canvas.cone:SetSize(reach, reach)
-        canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT", card.boss.x * size, -card.boss.y * size)
+        local coneX, coneY = self:ToCanvas(card.boss.x, card.boss.y)
+        canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT", coneX * size, -coneY * size)
         canvas.cone:Show()
     else
         canvas.cone:Hide()
@@ -696,9 +760,11 @@ function bc:Render(card)
     self.tokenScale = scale
 
     self:Place(canvas.boss, card.boss.x, card.boss.y, 44 * scale, 44 * scale)
-    canvas.boss.icon:SetTexture(state.portrait or FALLBACK_PORTRAIT)
-    canvas.boss.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
     canvas.boss.icon:SetVertexColor(1, 1, 1, 1)
+    if not cardmap:ApplyBossPortrait(canvas.boss.icon, state.encounterID) then
+        canvas.boss.icon:SetTexture(state.portrait or FALLBACK_PORTRAIT)
+        canvas.boss.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+    end
 
     applyRoleIcon(canvas.tank, "TANK", COLOR.tank)
 
@@ -808,18 +874,19 @@ function bc:OnUpdate(elapsed)
 
     self:Place(canvas.boss, card.boss.x, card.boss.y, 44 * scale, 44 * scale)
     if card.cone then
+        local coneX, coneY = self:ToCanvas(card.boss.x, card.boss.y)
         canvas.cone:ClearAllPoints()
-        canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT",
-            card.boss.x * size, -card.boss.y * size)
+        canvas.cone:SetPoint("CENTER", canvas, "TOPLEFT", coneX * size, -coneY * size)
     end
 
     local radians = math.rad(facing)
     local offset = 32 * scale
     canvas.bossArrow:ClearAllPoints()
     canvas.bossArrow:SetSize(15 * scale, 15 * scale)
+    local arrowX, arrowY = self:ToCanvas(card.boss.x, card.boss.y)
     canvas.bossArrow:SetPoint("CENTER", canvas, "TOPLEFT",
-        card.boss.x * size + math.sin(radians) * offset,
-        -(card.boss.y * size) + math.cos(radians) * offset)
+        arrowX * size + math.sin(radians) * offset,
+        -(arrowY * size) + math.cos(radians) * offset)
     canvas.bossArrow:SetRotation(-radians)
 
     ------------------------------------------------------------------
