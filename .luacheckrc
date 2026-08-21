@@ -92,6 +92,7 @@ globals = {
     "EJ_GetInstanceInfo",
     "EJ_GetNumTiers",
     "EJ_GetSectionInfo",
+    "EJ_GetTierInfo",
     "EJ_SelectEncounter",
     "EJ_SelectInstance",
     "EJ_SelectTier",

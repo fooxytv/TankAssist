@@ -107,6 +107,64 @@ return R
 # diagram in game, hit Export, and paste the result into data/BossCards.lua. If
 # that text is not loadable Lua then a session of positioning work cannot be
 # saved, and the failure would only surface when someone tried to use it.
+# A child frame draws above every region its parent owns, and above siblings
+# that share its level -- so parenting the dungeon tiles straight onto the
+# canvas buried the cone, the walls and every token the moment a floor plan
+# resolved. Nothing about that is visible in the Lua; it needs either a
+# screenshot or this. The stub hands out increasing frame levels in creation
+# order, exactly as the client does, so the original bug fails these.
+BOSS_CARD_LAYER_SCRIPT = """
+local ns = __ns
+local R = {}
+
+local bc = ns.BossCard
+local f = bc:BuildFrame()
+R.built = f ~= nil
+
+local canvas = f.canvas
+local mapFrame = ns.BossCardMap:Build(canvas.mapLayer)
+
+local mapLevel = mapFrame:GetFrameLevel()
+R.mapUnderPlate = mapLevel < canvas.plate:GetFrameLevel()
+
+local lowestToken = canvas.boss:GetFrameLevel()
+for _, token in ipairs(canvas.group) do
+    lowestToken = math.min(lowestToken, token:GetFrameLevel())
+end
+lowestToken = math.min(lowestToken, canvas.tank:GetFrameLevel())
+R.mapUnderTokens = mapLevel < lowestToken
+
+R.wallsOnPlate = canvas.cone:GetParent() == canvas.plate
+
+-- EncounterTabTemplate pins itself at frame level 510. A card at or above that
+-- covers the Journal's own tabs and strands the player with no way back.
+local highest = f:GetFrameLevel()
+for _, frame in ipairs({ canvas, canvas.mapLayer, canvas.plate, canvas.boss, canvas.tank }) do
+    highest = math.max(highest, frame:GetFrameLevel())
+end
+R.underTabColumn = highest < 510
+
+-- A dungeon's floors are a map group, not a parent's children. Asking
+-- dungeonAreaMapID for children returns nothing for most dungeons, which is why
+-- every boss above the ground floor silently lost its map.
+C_Map = {
+    GetMapGroupID = function(mapID) return (mapID == 2000) and 42 or nil end,
+    GetMapGroupMembersInfo = function(groupID)
+        if groupID ~= 42 then return nil end
+        return { { mapID = 2000 }, { mapID = 2001 } }
+    end,
+}
+C_EncounterJournal = {
+    GetEncountersOnMap = function(mapID)
+        if mapID == 2001 then return { { encounterID = 7, mapX = 0.4, mapY = 0.6 } } end
+        return {}
+    end,
+}
+R.foundGroupFloor = ns.BossCardMap:FindFloorFor(7, 2000)
+
+return R
+"""
+
 BOSS_CARD_SCRIPT = """
 local ns = __ns
 local R = {}
@@ -316,6 +374,14 @@ if lua is not None:
         ("counts down by the clock", "afterTwenty", 40),
         ("expired reads zero", "afterExpiry", 0),
         ("expired entry is dropped", "entryCleared", True),
+    ])
+    run_script(lua, "boss card layering", BOSS_CARD_LAYER_SCRIPT, [
+        ("card frame builds headless", "built", True),
+        ("floor plan sits below the diagram", "mapUnderPlate", True),
+        ("floor plan sits below the tokens", "mapUnderTokens", True),
+        ("walls and cone live on the plate", "wallsOnPlate", True),
+        ("card stays under the journal tab column", "underTabColumn", True),
+        ("floors come from the map group", "foundGroupFloor", 2001),
     ])
     run_script(lua, "boss card", BOSS_CARD_SCRIPT, [
         ("designer has starting templates", "templateCount", 2),

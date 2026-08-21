@@ -175,6 +175,14 @@ local defaults = {
             profiles = {},
         },
         specs = {},
+        bossCard = {
+            -- The floor plan is off by default on purpose. The card's whole
+            -- claim is that a consistent diagram is read instantly, and a real
+            -- dungeon map is a different shape, orientation and palette on every
+            -- boss. It is here to be judged against a plain background, and to
+            -- trace walls against in the designer -- not assumed better.
+            showMap = false,
+        },
         sounds = {
             enabled = true,
             channel = "Master",
@@ -762,6 +770,8 @@ function addon:HandleSlashCommand(msg)
         if TankAssist.BossCard then
             if args[2] == "debug" then
                 TankAssist.BossCard:Debug()
+            elseif args[2] == "scan" then
+                TankAssist.BossCard:Scan()
             elseif args[2] == "design" or args[2] == "designer" then
                 if TankAssist.BossCardDesigner then
                     TankAssist.BossCardDesigner:Toggle()
@@ -800,7 +810,7 @@ function addon:PrintHelp()
     line("/ta toggle",   "Enable / disable the addon")
     line("/ta gear",     "Gear Advisor status & sample verdicts")
     line("/ta test",     "Run test mode")
-    line("/ta bosscard", "Tank card in the Adventure Guide ('design', 'debug')")
+    line("/ta bosscard", "Tank card in the Adventure Guide ('design', 'scan', 'debug')")
     line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
     print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")

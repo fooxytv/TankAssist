@@ -70,6 +70,10 @@ local BUSTER_ICON = "Interface\\Icons\\Spell_Holy_DefensiveStance"
 local FALLBACK_PORTRAIT = "Interface\\Icons\\Ability_Creature_Cursed_02"
 local ROLE_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-ROLES"
 
+-- Blizzard's boss-page tabs sit at frame level 510. Everything the card builds
+-- has to stay under that, including the levels it stacks on itself.
+local CARD_LEVEL_CAP = 495
+
 local CYCLE = 6.0
 local STRIP_HEIGHT = 46
 local HEADER_HEIGHT = 52
@@ -277,6 +281,31 @@ function bc:CanvasSize()
     return self.canvasSize or 300
 end
 
+-- Settings, when the addon has finished loading them. The card is reachable
+-- from the Journal before that on a slow login, so it must not assume a db.
+function bc:Settings()
+    local addon = TankAssist.Addon
+    return addon and addon.db and addon.db.profile and addon.db.profile.bossCard
+end
+
+-- The designer always gets the floor plan whether or not the card is showing
+-- one: tracing the room into a couple of wall segments is the only reason the
+-- map has to exist at all, and you cannot trace what you cannot see.
+function bc:MapWanted()
+    if TankAssist.BossCardDesigner and TankAssist.BossCardDesigner:IsActive() then
+        return true
+    end
+    local settings = self:Settings()
+    return settings and settings.showMap or false
+end
+
+function bc:SetMapShown(shown)
+    local settings = self:Settings()
+    if settings then settings.showMap = shown and true or false end
+    self:RefreshMapToggle()
+    if state.ability then self:Render(state.ability) end
+end
+
 -- With a dungeon map attached, card coordinates are map coordinates, so the
 -- tokens stay locked to the room when it is zoomed or panned. Without one they
 -- are plain canvas coordinates. Converting here means every call site gets that
@@ -379,7 +408,13 @@ function bc:BuildFrame()
     local parent = contentAnchor() or UIParent
     local f = CreateFrame("Frame", "TankAssistBossCard", parent, "BackdropTemplate")
     f:SetFrameStrata(parent:GetFrameStrata())
-    f:SetFrameLevel((parent:GetFrameLevel() or 1) + 10)
+    -- Above the Journal's content, below its tab column. EncounterTabTemplate
+    -- pins itself at frame level 510, so anything at or over that would cover
+    -- the tabs and strand the player on the card with no way back. The cap
+    -- leaves headroom rather than sitting just under it: the card stacks a
+    -- canvas, a map layer, a plate and the tokens on top of itself, and those
+    -- would climb over 510 from a tighter ceiling.
+    f:SetFrameLevel(math.min((parent:GetFrameLevel() or 1) + 10, CARD_LEVEL_CAP))
     f:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -2)
     f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -2, 2)
     f:EnableMouse(true)
@@ -413,6 +448,24 @@ function bc:BuildFrame()
     f.closeButton:SetPoint("TOPRIGHT", 1, 1)
     f.closeButton:SetScript("OnClick", function() bc:Hide() end)
 
+    -- Floor plan on or off. The ticket asks for the plain background to be
+    -- judged first rather than assumed worse, which needs both to be one click
+    -- apart on the same boss.
+    f.mapToggle = CreateFrame("Button", nil, f)
+    f.mapToggle:SetSize(46, 18)
+    f.mapToggle:SetPoint("TOPRIGHT", f.closeButton, "TOPLEFT", -2, -6)
+    f.mapToggle.label = f.mapToggle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.mapToggle.label:SetPoint("CENTER")
+    f.mapToggle.label:SetText("Map")
+    f.mapToggle:SetScript("OnClick", function() bc:SetMapShown(not bc:MapWanted()) end)
+    f.mapToggle:SetScript("OnEnter", function(self_)
+        GameTooltip:SetOwner(self_, "ANCHOR_LEFT")
+        GameTooltip:SetText("Dungeon floor plan")
+        GameTooltip:AddLine("The real room behind the diagram.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    f.mapToggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     ------------------------------------------------------------------
     -- Ability strip: one button per ability the Journal knows about.
     -- Dimmed until a card has been authored for it.
@@ -440,17 +493,34 @@ function bc:BuildFrame()
     canvas:SetClipsChildren(true)
     f.canvas = canvas
 
-    -- Dungeon art. The sublevel matters: a backdrop's fill is an opaque texture
-    -- in the BACKGROUND layer, so anything below it is painted over and never
-    -- seen at all. Above the fill, below the grid, is the only place it shows.
-    canvas.background = canvas:CreateTexture(nil, "BACKGROUND", nil, 2)
+    -- Two child frames, at explicit levels, because draw layers do not order
+    -- anything across frames -- only frame level does, and siblings that share
+    -- a level fall back to creation order. The dungeon floor plan lives in a
+    -- frame, so it can be scaled and panned as one piece; that means every
+    -- part of the diagram has to live in a frame above it, or the tiles bury
+    -- the lot. Sublevels order things *within* each of these, nothing more.
+    local canvasLevel = canvas:GetFrameLevel() or 1
+
+    local mapLayer = CreateFrame("Frame", nil, canvas)
+    mapLayer:SetAllPoints(canvas)
+    mapLayer:SetFrameLevel(canvasLevel + 1)
+    canvas.mapLayer = mapLayer
+
+    local plate = CreateFrame("Frame", nil, canvas)
+    plate:SetAllPoints(canvas)
+    plate:SetFrameLevel(canvasLevel + 4)
+    canvas.plate = plate
+
+    -- Lore art, used only when there is no floor plan to be had. It sits on the
+    -- plate rather than the canvas so that it and the tiles never compete.
+    canvas.background = plate:CreateTexture(nil, "BACKGROUND", nil, 2)
     canvas.background:SetAllPoints(canvas)
     canvas.background:SetAlpha(0.38)
 
     canvas.grid = {}
     for i = 1, 7 do
         for _, orient in ipairs({ "H", "V" }) do
-            local line = canvas:CreateLine(nil, "BACKGROUND", nil, 5)
+            local line = plate:CreateLine(nil, "BACKGROUND", nil, 5)
             line:SetThickness(1)
             line:SetColorTexture(unpack(COLOR.grid))
             line.gridFraction = i / 8
@@ -460,26 +530,26 @@ function bc:BuildFrame()
     end
 
     canvas.walls = {}
-    canvas.cone = canvas:CreateTexture(nil, "ARTWORK", nil, -2)
+    canvas.cone = plate:CreateTexture(nil, "ARTWORK", nil, -2)
 
-    canvas.boss = newToken(canvas, 44)
+    canvas.boss = newToken(plate, 44)
     setColor(canvas.boss.halo, COLOR.boss, 0.30)
     setColor(canvas.boss.ring, COLOR.boss)
 
-    canvas.bossArrow = canvas:CreateTexture(nil, "OVERLAY")
+    canvas.bossArrow = plate:CreateTexture(nil, "OVERLAY")
     canvas.bossArrow:SetTexture(TEX.arrow)
     setColor(canvas.bossArrow, COLOR.boss)
 
-    canvas.tank = newToken(canvas, 32)
+    canvas.tank = newToken(plate, 32)
     setColor(canvas.tank.halo, COLOR.tank, 0.30)
     setColor(canvas.tank.ring, COLOR.tank)
 
-    canvas.busterGlyph = canvas:CreateTexture(nil, "OVERLAY", nil, 2)
+    canvas.busterGlyph = plate:CreateTexture(nil, "OVERLAY", nil, 2)
     canvas.busterGlyph:SetTexture(BUSTER_ICON)
 
     canvas.group = {}
     for i = 1, 4 do
-        canvas.group[i] = newToken(canvas, 25)
+        canvas.group[i] = newToken(plate, 25)
     end
 
     ------------------------------------------------------------------
@@ -510,6 +580,17 @@ function bc:BuildFrame()
     end
 
     return f
+end
+
+function bc:RefreshMapToggle()
+    local f = self.frame
+    if not f or not f.mapToggle then return end
+
+    local wanted = self:MapWanted()
+    local available = state.mapID ~= nil
+    f.mapToggle:SetEnabled(available)
+    f.mapToggle.label:SetTextColor(unpack(
+        (not available) and COLOR.dim or (wanted and COLOR.accent or COLOR.border)))
 end
 
 -- The canvas is square and takes whatever room is left, so the card fits the
@@ -694,9 +775,9 @@ function bc:Render(card)
     -- floor plan to be had. A room you recognise beats a mood painting.
     local cardmap = TankAssist.BossCardMap
     self.mapActive = false
-    if state.mapID then
-        cardmap:Build(canvas)
-        if cardmap:SetMap(canvas, state.mapID) then
+    if state.mapID and self:MapWanted() then
+        cardmap:Build(canvas.mapLayer)
+        if cardmap:SetMap(canvas.mapLayer, state.mapID) then
             card.map = card.map or cardmap:DefaultView(state.bossMapX, state.bossMapY)
             cardmap:Apply(size, card.map)
             self.mapActive = true
@@ -724,7 +805,7 @@ function bc:Render(card)
     for index, wall in ipairs(card.walls or {}) do
         local line = canvas.walls[index]
         if not line then
-            line = canvas:CreateLine(nil, "ARTWORK", nil, -4)
+            line = canvas.plate:CreateLine(nil, "ARTWORK", nil, -4)
             line:SetThickness(5)
             canvas.walls[index] = line
         end
@@ -931,93 +1012,159 @@ end
 -- Encounter Journal integration
 ----------------------------------------------------------------------------
 
--- The toggle is drawn rather than textured. An "i" glyph on our own ring means
--- it always renders, at any UI scale, without depending on a Blizzard art path
--- that may or may not exist on this build.
-local function buildInfoButton()
+-- The way in is a fifth tab on the Journal's boss page, below Overview, Loot,
+-- Abilities and Model.
+--
+-- The first attempt was an "i" button beside the portrait, and it was invisible
+-- in game for a reason worth recording: `EncounterJournal.PortraitContainer` is
+-- a 1x1 frame pinned to the very corner of the window at frame level 400 -- the
+-- 62x62 portrait is a *texture inside it*, offset (-5, 7). Anchoring to that
+-- container's TOPRIGHT put a 24x24 button underneath the portrait art, not
+-- beside it. (`EncounterJournalPortrait` is not a global either: the container
+-- has no name, so `$parentPortrait` never resolves.)
+--
+-- A tab is the better answer regardless. It is Blizzard's own template, so it
+-- gets the right art, the right frame level and tooltip behaviour for free, and
+-- it sits where a player already looks for another view of this boss.
+local TANK_TAB_ID = 5
+
+local function journalInfoPanel()
     local ej = _G.EncounterJournal
-    local button = CreateFrame("Button", "TankAssistBossCardInfoButton", ej)
-    button:SetSize(24, 24)
-
-    button.disc = button:CreateTexture(nil, "BACKGROUND")
-    button.disc:SetTexture(TEX.disc)
-    button.disc:SetAllPoints(button)
-    button.disc:SetVertexColor(0.05, 0.06, 0.08, 0.85)
-
-    button.ring = button:CreateTexture(nil, "ARTWORK")
-    button.ring:SetTexture(TEX.ring)
-    button.ring:SetAllPoints(button)
-    setColor(button.ring, COLOR.accent)
-
-    button.glyph = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    button.glyph:SetPoint("CENTER", 0, 0)
-    button.glyph:SetText("i")
-    button.glyph:SetTextColor(unpack(COLOR.accent))
-
-    -- Beside the Journal's portrait, top left, so it reads as part of the frame
-    -- rather than something bolted on.
-    local portrait = ej.PortraitContainer or _G.EncounterJournalPortrait
-    if portrait then
-        button:SetPoint("TOPLEFT", portrait, "TOPRIGHT", 2, -6)
-    else
-        button:SetPoint("TOPLEFT", ej, "TOPLEFT", 62, -30)
-    end
-
-    button:SetScript("OnEnter", function(self_)
-        setColor(self_.ring, COLOR.text)
-        GameTooltip:SetOwner(self_, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Tank card")
-        if bc:HasCardForSelection() then
-            GameTooltip:AddLine("Tanking diagram for this boss.", 1, 1, 1, true)
-        else
-            GameTooltip:AddLine("No tank card for this boss yet.", 0.7, 0.7, 0.7, true)
-        end
-        GameTooltip:Show()
-    end)
-    button:SetScript("OnLeave", function(self_)
-        setColor(self_.ring, COLOR.accent)
-        GameTooltip:Hide()
-    end)
-    button:SetScript("OnClick", function() bc:Toggle() end)
-
-    return button
+    return ej and ej.encounter and ej.encounter.info
 end
 
--- The button only appears where there is something to show, so it is never a
--- dead control -- except in designer mode, where the point is to author the
--- thing that does not exist yet.
-function bc:RefreshInfoButton()
-    if not self.infoButton then return end
+-- Blizzard's four tabs, so ours can deselect them and they can dismiss ours.
+local BLIZZARD_TABS = { "overviewTab", "lootTab", "bossTab", "modelTab" }
+
+local function eachBlizzardTab(fn)
+    local info = journalInfoPanel()
+    if not info then return end
+    for _, key in ipairs(BLIZZARD_TABS) do
+        local tab = info[key]
+        if tab then fn(tab) end
+    end
+end
+
+local function buildTankTab()
+    local info = journalInfoPanel()
+    if not info or not info.modelTab then return nil end
+
+    local tab = CreateFrame("Button", "TankAssistBossCardTab", info, "EncounterTabTemplate")
+    tab:SetID(TANK_TAB_ID)
+    tab:SetPoint("TOP", info.modelTab, "BOTTOM", 0, 2)
+    tab.tooltip = "Tank card"
+
+    -- Blizzard builds each tab's selected/unselected glyphs in XML rather than
+    -- in the template, so ours are ours to make. A shield on our own ring keeps
+    -- it recognisable without depending on an art path that may not survive a
+    -- patch.
+    tab.unselected = tab:CreateTexture(nil, "OVERLAY")
+    tab.unselected:SetTexture(BUSTER_ICON)
+    tab.unselected:SetSize(26, 26)
+    tab.unselected:SetPoint("RIGHT", -12, 0)
+    tab.unselected:SetVertexColor(0.75, 0.75, 0.75, 1)
+
+    tab.selected = tab:CreateTexture(nil, "OVERLAY")
+    tab.selected:SetTexture(BUSTER_ICON)
+    tab.selected:SetSize(26, 26)
+    tab.selected:SetPoint("CENTER", tab.unselected, "CENTER")
+    tab.selected:SetVertexColor(unpack(COLOR.accent))
+    tab.selected:Hide()
+
+    -- Deliberately not EncounterJournal_SetTab / _SetTabEnabled. `EJ_Tabs` is a
+    -- file-local, so a fifth entry cannot be registered in it, and handing it a
+    -- tab index it does not know about sets `info.tab = 5` -- which makes the
+    -- next boss selection throw inside EncounterJournal_ValidateSelectedTab,
+    -- where `EJ_Tabs[info.tab].button` indexes nil. Selection stays ours;
+    -- `info.tab` stays on a value Blizzard put there.
+    tab:SetScript("OnClick", function()
+        if PlaySound and SOUNDKIT then
+            pcall(PlaySound, SOUNDKIT.IG_ABILITY_PAGE_TURN)
+        end
+        bc:Show()
+    end)
+
+    eachBlizzardTab(function(blizzardTab)
+        blizzardTab:HookScript("OnClick", function() bc:Hide() end)
+    end)
+
+    return tab
+end
+
+-- Ours selected means Blizzard's are not, and the card is covering their
+-- content anyway. Nothing here writes to `info.tab`, so Blizzard's own
+-- SetTab restores its highlight the moment one of its tabs is clicked.
+function bc:RefreshTabSelection()
+    local tab = self.tab
+    if not tab then return end
+
+    local shown = self.frame and self.frame:IsShown()
+    tab.selected:SetShown(shown)
+    tab.unselected:SetShown(not shown)
+    if shown then
+        tab:LockHighlight()
+        eachBlizzardTab(function(blizzardTab)
+            if blizzardTab.selected then blizzardTab.selected:Hide() end
+            if blizzardTab.unselected then blizzardTab.unselected:Show() end
+            blizzardTab:UnlockHighlight()
+        end)
+    else
+        tab:UnlockHighlight()
+    end
+end
+
+-- The tab is always there for a selected boss, so there is always a way in, but
+-- it greys out when nothing has been authored -- which makes it a readout of
+-- which bosses have a card rather than a control that lies.
+function bc:RefreshTab()
+    if not self.tab then return end
 
     local designing = TankAssist.BossCardDesigner and TankAssist.BossCardDesigner:IsActive()
     local selected = state.encounterID ~= nil
     local authored = self:HasCardForSelection()
+    local usable = selected and (authored or designing)
 
-    -- Shown for any boss, so there is always a way in. Dimmed when nothing has
-    -- been authored for it, so the button still says which bosses have a card
-    -- without being invisible on the ones that do not.
-    self.infoButton:SetShown(selected)
-    self.infoButton:SetAlpha((authored or designing) and 1 or 0.45)
+    self.tab:SetShown(selected)
+    self.tab:SetEnabled(usable)
+    self.tab.unselected:SetDesaturated(not usable)
+    self.tab:SetAlpha(usable and 1 or 0.5)
 
     if not selected and self.frame and self.frame:IsShown() then
         self:Hide()
     end
+    self:RefreshMapToggle()
+    self:RefreshTabSelection()
+end
+
+-- Building the tab needs the Journal's boss page to exist, which it does not
+-- on every path into here (a card opened before the player has ever viewed an
+-- encounter, for one). Kept separate from the hooks so it can be retried
+-- without double-hooking anything.
+function bc:EnsureTab()
+    if not self.tab then
+        self.tab = buildTankTab()
+    end
+    probe["tank tab"] = self.tab and "ok" or "no boss page yet"
+    return self.tab ~= nil
 end
 
 function bc:AttachToJournal()
-    if self.attached then return true end
+    if self.attached then
+        self:EnsureTab()
+        return true
+    end
     if not _G.EncounterJournal then return false end
 
     probe["journal anchor"] = (contentAnchor() and (contentAnchor():GetName() or "unnamed")) or "none"
 
     self:BuildFrame()
-    self.infoButton = buildInfoButton()
+    self:EnsureTab()
 
     if EJ_SelectEncounter then
         hooksecurefunc("EJ_SelectEncounter", function()
             state.encounterID = nil
             bc:ReadJournal()
-            bc:RefreshInfoButton()
+            bc:RefreshTab()
             if bc.frame and bc.frame:IsShown() then
                 bc:RefreshStrip()
                 bc:SelectAbility(1)
@@ -1028,7 +1175,7 @@ function bc:AttachToJournal()
     _G.EncounterJournal:HookScript("OnHide", function() bc:Hide() end)
     _G.EncounterJournal:HookScript("OnShow", function()
         bc:ReadJournal()
-        bc:RefreshInfoButton()
+        bc:RefreshTab()
     end)
 
     -- The Journal has changed which function selects an encounter more than
@@ -1047,7 +1194,7 @@ function bc:AttachToJournal()
 
         state.encounterID = nil
         bc:ReadJournal()
-        bc:RefreshInfoButton()
+        bc:RefreshTab()
         if bc.frame and bc.frame:IsShown() then
             bc:RefreshStrip()
             bc:SelectAbility(1)
@@ -1055,7 +1202,7 @@ function bc:AttachToJournal()
     end)
 
     self:ReadJournal()
-    self:RefreshInfoButton()
+    self:RefreshTab()
     self.attached = true
     return true
 end
@@ -1097,7 +1244,7 @@ function bc:Show()
 
     if not self:ReadJournal() then
         self:Say("Open a dungeon in the Adventure Guide and click a boss, then use the "
-            .. "|cff00bfffi|r button next to the portrait.")
+            .. "|cff00bfffTank|r tab under the Model tab.")
         return
     end
 
@@ -1107,16 +1254,116 @@ function bc:Show()
 
     self.frame:Show()
     self:Relayout()
+    self:RefreshMapToggle()
     self:RefreshStrip()
     self:SelectAbility(state.selectedIndex or 1)
+    self:RefreshTabSelection()
 end
 
 function bc:Hide()
     if self.frame then self.frame:Hide() end
+    self:RefreshTabSelection()
 end
 
 function bc:Toggle()
     if self.frame and self.frame:IsShown() then self:Hide() else self:Show() end
+end
+
+-- The season in one command.
+--
+-- The ticket has been blocked on "which of these APIs actually answer on a real
+-- client" since it was opened, and answering it a boss at a time -- click, run
+-- debug, paste -- is why it stayed blocked. This walks every dungeon in the
+-- current tier and reports what came back, so the decision it gates (can the
+-- boss skeleton be built from the Journal, or does every boss get typed in by
+-- hand) can be made from one paste.
+--
+-- Enumeration follows Blizzard's own: EJ_GetInstanceByIndex over the tier, then
+-- EJ_GetEncounterInfoByIndex over the selected instance. The player's selection
+-- is captured and put back, and no display function is called, so an open
+-- Journal does not move.
+function bc:Scan()
+    if not self:EnsureJournalLoaded() then
+        self:Say("The Encounter Journal could not be loaded.")
+        return
+    end
+
+    local addon = TankAssist.Addon
+    local function say(line) if addon then addon:Print(line) else print(line) end end
+
+    if not EJ_GetInstanceByIndex or not EJ_GetEncounterInfoByIndex or not EJ_SelectInstance then
+        say("This client does not expose the Journal enumeration API.")
+        return
+    end
+
+    local ej = _G.EncounterJournal
+    local restoreInstance = ej and ej.instanceID
+    local restoreEncounter = ej and ej.encounterID
+
+    local tier = EJ_GetCurrentTier and EJ_GetCurrentTier() or nil
+    local tierName = (tier and EJ_GetTierInfo) and EJ_GetTierInfo(tier) or "current tier"
+
+    say(("Journal scan -- %s"):format(tostring(tierName)))
+    print(("  %-30s %5s %5s %5s %6s"):format("dungeon", "boss", "abil", "map", "floor"))
+
+    local totals = { instances = 0, bosses = 0, abilities = 0, portraits = 0, floors = 0 }
+
+    local index = 1
+    while true do
+        local instanceID, instanceName, _, _, _, _, _, _, _, _, _ = EJ_GetInstanceByIndex(index, false)
+        if not instanceID then break end
+        index = index + 1
+        totals.instances = totals.instances + 1
+
+        pcall(EJ_SelectInstance, instanceID)
+
+        local dungeonAreaMapID = select(7, EJ_GetInstanceInfo(instanceID))
+
+        local bosses, abilities, portraits, floors = 0, 0, 0, 0
+        local bossIndex = 1
+        while true do
+            local _, _, encounterID, rootSectionID = EJ_GetEncounterInfoByIndex(bossIndex, instanceID)
+            if not encounterID or encounterID <= 0 then break end
+            bossIndex = bossIndex + 1
+            bosses = bosses + 1
+
+            if rootSectionID and rootSectionID > 0 then
+                local ok, found = pcall(collectAbilities, rootSectionID)
+                if ok and found then abilities = abilities + #found end
+            end
+
+            if EJ_GetCreatureInfo then
+                local ok, _, _, _, displayInfo = pcall(EJ_GetCreatureInfo, 1, encounterID)
+                if ok and displayInfo then portraits = portraits + 1 end
+            end
+
+            if TankAssist.BossCardMap:FindFloorFor(encounterID, dungeonAreaMapID) then
+                floors = floors + 1
+            end
+        end
+
+        totals.bosses = totals.bosses + bosses
+        totals.abilities = totals.abilities + abilities
+        totals.portraits = totals.portraits + portraits
+        totals.floors = totals.floors + floors
+
+        print(("  %-30s %5d %5d %5s %6d"):format(
+            tostring(instanceName):sub(1, 30), bosses, abilities,
+            dungeonAreaMapID and tostring(dungeonAreaMapID) or "-", floors))
+    end
+
+    if restoreInstance then pcall(EJ_SelectInstance, restoreInstance) end
+    if restoreEncounter and EJ_SelectEncounter then pcall(EJ_SelectEncounter, restoreEncounter) end
+
+    say(("%d dungeons, %d bosses, %d abilities, %d portraits, %d with a floor plan.")
+        :format(totals.instances, totals.bosses, totals.abilities, totals.portraits, totals.floors))
+
+    -- The verdict this scan exists to produce.
+    if totals.bosses > 0 and totals.abilities >= totals.bosses then
+        say("|cff40d040Skeleton can be auto-built|r -- only the verdicts need authoring.")
+    else
+        say("|cffe85050The Journal did not answer|r -- bosses would have to be entered by hand.")
+    end
 end
 
 function bc:Debug()

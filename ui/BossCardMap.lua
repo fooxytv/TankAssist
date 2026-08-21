@@ -16,6 +16,12 @@
 --     order, indexed (row - 1) * cols + col.
 --   * C_EncounterJournal.GetEncountersOnMap(mapID) returns entries carrying
 --     .encounterID, .mapX and .mapY -- normalised 0..1 across the map.
+--   * A multi-floor dungeon's floors are a *map group*, not a parent's
+--     children, so C_Map.GetMapGroupID / GetMapGroupMembersInfo is what
+--     enumerates them -- the same pair the World Map's floor dropdown uses.
+--   * Tiles load asynchronously. Blizzard holds the whole layer at alpha 0
+--     until every tile reports IsObjectLoaded(), then reveals it, so a first
+--     open does not flash a half-drawn room.
 --
 -- With a map attached, everything on the card is stored in *map* coordinates
 -- rather than canvas coordinates, so zooming and panning move the tokens with
@@ -36,22 +42,55 @@ local LAYER_INDEX = 1     -- layer 1 is the overview; higher layers are zoom det
 -- A dungeon is usually several floors, each its own uiMapID, and only one of
 -- them has our boss on it. Rather than guess, ask each candidate which
 -- encounters it holds and take the one that answers.
-function cardmap:FindFloorFor(encounterID, dungeonAreaMapID)
-    if not encounterID or not dungeonAreaMapID then return nil end
-    if not C_EncounterJournal or not C_EncounterJournal.GetEncountersOnMap then return nil end
+--
+-- The candidate list matters more than it looks. `dungeonAreaMapID` is what the
+-- Journal's own map button hands to OpenWorldMap, and for most dungeons that is
+-- *a floor*, not a container -- so asking it for children returns nothing and
+-- every boss above the ground floor silently loses its map. Floors are a map
+-- group; that is what GetMapGroupMembersInfo enumerates, and it is what the
+-- World Map's own floor dropdown reads.
+local function addCandidate(list, seen, mapID)
+    if not mapID or seen[mapID] then return end
+    seen[mapID] = true
+    list[#list + 1] = mapID
+end
 
-    local candidates = { dungeonAreaMapID }
+function cardmap:Candidates(dungeonAreaMapID)
+    local list, seen = {}, {}
+    addCandidate(list, seen, dungeonAreaMapID)
+    if not dungeonAreaMapID or not C_Map then return list end
 
-    if C_Map and C_Map.GetMapChildrenInfo then
-        local ok, children = pcall(C_Map.GetMapChildrenInfo, dungeonAreaMapID, nil, true)
-        if ok and type(children) == "table" then
-            for _, child in ipairs(children) do
-                if child.mapID then candidates[#candidates + 1] = child.mapID end
+    -- The floors of this dungeon, whichever floor we were handed.
+    if C_Map.GetMapGroupID and C_Map.GetMapGroupMembersInfo then
+        local ok, groupID = pcall(C_Map.GetMapGroupID, dungeonAreaMapID)
+        if ok and groupID then
+            local gotMembers, members = pcall(C_Map.GetMapGroupMembersInfo, groupID)
+            if gotMembers and type(members) == "table" then
+                for _, member in ipairs(members) do
+                    addCandidate(list, seen, member.mapID)
+                end
             end
         end
     end
 
-    for _, mapID in ipairs(candidates) do
+    -- Single-map dungeons that do nest their detail maps as children.
+    if C_Map.GetMapChildrenInfo then
+        local ok, children = pcall(C_Map.GetMapChildrenInfo, dungeonAreaMapID, nil, true)
+        if ok and type(children) == "table" then
+            for _, child in ipairs(children) do
+                addCandidate(list, seen, child.mapID)
+            end
+        end
+    end
+
+    return list
+end
+
+function cardmap:FindFloorFor(encounterID, dungeonAreaMapID)
+    if not encounterID or not dungeonAreaMapID then return nil end
+    if not C_EncounterJournal or not C_EncounterJournal.GetEncountersOnMap then return nil end
+
+    for _, mapID in ipairs(self:Candidates(dungeonAreaMapID)) do
         local ok, encounters = pcall(C_EncounterJournal.GetEncountersOnMap, mapID)
         if ok and type(encounters) == "table" then
             for _, entry in ipairs(encounters) do
@@ -79,12 +118,28 @@ end
 -- The tile frame is built at the map's true pixel size and then scaled, which
 -- is how the World Map does it too. Scaling one frame keeps every tile and
 -- every token in lockstep, so zoom cannot pull the diagram apart.
-function cardmap:Build(canvas)
-    if self.frame then return self.frame end
+--
+-- It is parented to the card's dedicated map layer rather than to the canvas.
+-- That is not tidiness: a child frame draws above every region its parent owns,
+-- and above sibling frames created before it, so tiles parented straight onto
+-- the canvas paint over the cone, the walls and every token -- the whole
+-- diagram -- the moment a floor plan resolves. Draw layers do not cross frames;
+-- only frame level does.
+function cardmap:Build(layer)
+    if self.frame then
+        -- Re-parent rather than build a second one: a stray tile frame left on
+        -- the old parent would keep drawing.
+        if self.frame:GetParent() ~= layer then
+            self.frame:SetParent(layer)
+            self.frame:SetFrameLevel(layer:GetFrameLevel() or 1)
+        end
+        return self.frame
+    end
 
-    local frame = CreateFrame("Frame", nil, canvas)
+    local frame = CreateFrame("Frame", nil, layer)
     frame:SetPoint("CENTER")
     frame:SetSize(256, 256)
+    frame:SetFrameLevel(layer:GetFrameLevel() or 1)
     frame.tiles = {}
     frame:Hide()
 
@@ -92,8 +147,8 @@ function cardmap:Build(canvas)
     return frame
 end
 
-function cardmap:SetMap(canvas, mapID)
-    local frame = self:Build(canvas)
+function cardmap:SetMap(layer, mapID)
+    local frame = self:Build(layer)
 
     if self.mapID == mapID and self.loaded then return true end
 
@@ -101,6 +156,7 @@ function cardmap:SetMap(canvas, mapID)
 
     self.mapID = mapID
     self.loaded = false
+    self.tileCount = 0
     self.layerWidth, self.layerHeight = nil, nil
 
     local layerInfo = self:GetLayerInfo(mapID)
@@ -151,9 +207,61 @@ function cardmap:SetMap(canvas, mapID)
 
     self.layerWidth = layerInfo.layerWidth
     self.layerHeight = layerInfo.layerHeight
+    self.tileCount = index
     self.loaded = true
     frame:Show()
+    self:BeginReveal()
     return true
+end
+
+----------------------------------------------------------------------------
+-- Reveal
+--
+-- SetTexture on a fileDataID starts a load; it does not finish one. Blizzard
+-- keeps its detail layer at alpha 0 until every tile answers IsObjectLoaded(),
+-- and so does this -- otherwise the first open of a boss shows an empty or
+-- half-drawn room and reads as "the map does not work".
+----------------------------------------------------------------------------
+
+local REVEAL_TIMEOUT = 3
+
+function cardmap:TilesLoaded()
+    local frame = self.frame
+    if not frame then return true end
+    for index = 1, self.tileCount or 0 do
+        local tile = frame.tiles[index]
+        -- Only a definite `false` counts as pending. A client without the
+        -- method, or a headless stub, should reveal rather than stay blank.
+        if tile and tile.IsObjectLoaded then
+            local ok, loaded = pcall(tile.IsObjectLoaded, tile)
+            if ok and loaded == false then return false end
+        end
+    end
+    return true
+end
+
+function cardmap:BeginReveal()
+    local frame = self.frame
+    if not frame then return end
+
+    if self:TilesLoaded() then
+        frame:SetAlpha(1)
+        frame:SetScript("OnUpdate", nil)
+        return
+    end
+
+    frame:SetAlpha(0)
+    frame.revealWaited = 0
+    frame:SetScript("OnUpdate", function(self_, elapsed)
+        self_.revealWaited = (self_.revealWaited or 0) + elapsed
+        -- The timeout is a backstop, not the normal path: a tile that never
+        -- reports loaded should still end up on screen rather than hiding the
+        -- floor plan forever.
+        if cardmap:TilesLoaded() or self_.revealWaited > REVEAL_TIMEOUT then
+            self_:SetAlpha(1)
+            self_:SetScript("OnUpdate", nil)
+        end
+    end)
 end
 
 function cardmap:IsLoaded()
@@ -213,7 +321,10 @@ function cardmap:CanvasToMap(cx, cy, canvasSize, view)
 end
 
 function cardmap:Hide()
-    if self.frame then self.frame:Hide() end
+    if self.frame then
+        self.frame:SetScript("OnUpdate", nil)
+        self.frame:Hide()
+    end
     self.loaded = false
     self.mapID = nil
 end

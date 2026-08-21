@@ -38,8 +38,17 @@ local function newWidget(kind, name, parent)
     self.__shown = true
     self.__points = {}
     self.__width, self.__height = 40, 40
-    frameLevelSeed = frameLevelSeed + 1
-    self.__level = frameLevelSeed
+    -- Frame levels the way the client assigns them: a child sits one above its
+    -- parent, and siblings that were never given an explicit level therefore
+    -- tie. That tie is not a detail -- it is what decides draw order between
+    -- sibling frames, and getting it wrong is how the boss card's floor plan
+    -- ended up painted over the diagram it was meant to sit behind.
+    if type(parent) == "table" and parent.__level then
+        self.__level = parent.__level + 1
+    else
+        frameLevelSeed = frameLevelSeed + 1
+        self.__level = frameLevelSeed
+    end
     self.__min, self.__max, self.__value = 0, 1, 0
     self.__text = ""
     return self
@@ -101,6 +110,14 @@ function Widget:GetName() return self.__name end
 function Widget:CreateTexture(name, layer)
     record("CreateTexture")
     return newWidget("Texture", name, self)
+end
+
+-- Lines are their own widget kind in the client, and the boss card's walls and
+-- grid are drawn with them. Without this they come back nil from the catch-all
+-- metatable and the first SetThickness blows up.
+function Widget:CreateLine(name)
+    record("CreateLine")
+    return newWidget("Line", name, self)
 end
 
 function Widget:CreateMaskTexture(name)
