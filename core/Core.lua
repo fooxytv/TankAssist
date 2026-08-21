@@ -758,6 +758,17 @@ function addon:HandleSlashCommand(msg)
             self:Print(C_OFF .. "Gear Advisor not loaded" .. C_END)
         end
 
+    elseif cmd == "bosscard" then
+        if TankAssist.BossCard then
+            if args[2] == "debug" then
+                TankAssist.BossCard:Debug()
+            else
+                TankAssist.BossCard:Toggle()
+            end
+        else
+            self:Print(C_OFF .. "Boss Card not loaded" .. C_END)
+        end
+
     elseif cmd == "test" then
         self:RunTestMode()
 
@@ -784,6 +795,7 @@ function addon:PrintHelp()
     line("/ta toggle",   "Enable / disable the addon")
     line("/ta gear",     "Gear Advisor status & sample verdicts")
     line("/ta test",     "Run test mode")
+    line("/ta bosscard", "Boss tank card prototype (add 'debug' for an API probe)")
     line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
     print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")

@@ -45,6 +45,7 @@ ui\CooldownAlerts.lua
 ui\ConsumableCheck.lua
 ui\ConfigPanel.lua
 ui\GearAdvisor.lua
+ui\BossCard.lua
 
 # Tank Spec Modules
 specs\SpecBase.lua

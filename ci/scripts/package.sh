@@ -31,7 +31,7 @@ mkdir -p "$staging_dir"
 echo "Copying addon files to staging directory.."
 rsync -a --exclude='.git' --exclude='.github' --exclude='ci' --exclude='.vscode' \
     --exclude='.env*' --exclude='.claude' --exclude='CLAUDE.md' --exclude='README.md' \
-    --exclude='CHANGELOG.md' --exclude='.luacheckrc' --exclude='code' \
+    --exclude='CHANGELOG.md' --exclude='.luacheckrc' --exclude='code' --exclude='tools' --exclude='__pycache__' \
     --exclude='.gitignore' --exclude='.gitattributes' --exclude='LICENSE' \
     ./ "$staging_dir/"
 

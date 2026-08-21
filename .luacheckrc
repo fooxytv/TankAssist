@@ -78,6 +78,20 @@ globals = {
     "GetItemStats",
     "GetDetailedItemLevelInfo",
 
+    -- Encounter Journal / Mythic+ / map API, used by the boss card
+    "C_ChallengeMode",
+    "C_EncounterJournal",
+    "C_Map",
+    "EJ_GetCreatureInfo",
+    "EJ_GetCurrentTier",
+    "EJ_GetEncounterInfoByIndex",
+    "EJ_GetInstanceByIndex",
+    "EJ_GetInstanceInfo",
+    "EJ_GetNumTiers",
+    "EJ_SelectInstance",
+    "EJ_SelectTier",
+    "GetTexCoordsForRoleSmallCircle",
+
     -- Sound API
     "PlaySound",
     "PlaySoundFile",
