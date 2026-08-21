@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6-alpha.4f7eaab] - 2026-08-21
+
+### Fixed
+- The GCD sweep on the Assisted Combat and Tank Actions buttons now matches Blizzard's action bars and Cooldown Manager: a dark swipe instead of a half-transparent white one, with the spinning edge line and the end-of-GCD "bling" flash removed.
+- The GCD sweep no longer stacks on top of a spell's own cooldown swipe. As on the action bars, the longer cooldown wins and each button shows a single swipe; the GCD only animates when no spell cooldown is running.
+- Spell cooldown swipes animate again instead of freezing at a fixed fraction. The swipe was being restarted on every 0.1s update; it now uses the real start time and duration and is only re-applied when those values actually change.
+
+### Fixed
+- The GCD sweep on the primary and secondary Assisted Combat buttons now matches Blizzard's action bars and the Cooldown Manager: a dark swipe instead of a half-transparent white one, no spinning edge line, and no "bling" flash at the end of every global.
+- The GCD sweep no longer stacks on top of a spell's own cooldown sweep. Action bars draw a single swipe per button with the longer cooldown winning; the buttons now do the same.
+- Spell cooldown swipes animate again. `SetCooldown` was re-applied on every 0.1s ticker pass with freshly computed values, which restarted the swipe each time and pinned it at a fixed fraction; the real start time and duration are now used, and only re-applied when they change.
+
+## [0.4.5-alpha.9fe43fd] - 2026-08-20
+
+### Added
+- Proc glow support: the LibCustomGlow library and a new ProcRules data module are now loaded by the addon, enabling glow highlights on abilities when their procs are active.
+
+### Changed
+- Updated supported game version to 12.1 (from 12.0.7) across publishing workflows.
+
+### Fixed
+- Proc glow now functions correctly — LibCustomGlow and ProcRules were previously not loaded in the .toc, so the feature had no effect until this fix.
+
+### Fixed
+- The proc/activation-overlay glow feature was inert in 0.4.4-alpha: `TankAssist.toc` did not load `libs/LibCustomGlow-1.0` or `data/ProcRules.lua` (the load lines were lost in a merge), so the glow library never registered and no glow could appear. Both are now loaded. A smoke-test guard asserts the proc-rules table loads so this cannot silently regress.
+
+## [0.4.4-alpha.2a7596f] - 2026-08-13
+
+### Added
+- Proc and activation-overlay glow on the Assisted Combat display: the recommended ability now glows when a relevant proc is active (e.g. Crimson Scourge, Revenge!, Grand Crusader, Gore/Galactic Guardian), with a new data-driven proc-rules table covering Blood DK, Protection Warrior, Protection Paladin, and Guardian Druid.
+- Glow settings with an on/off toggle (off by default) and a selectable glow style — Action Button Glow, Pixel Glow, Autocast Shine, or Proc Glow — backed by the bundled LibCustomGlow-1.0 library.
+
+### Changed
+- Consolidated version stamping and changelog generation into shared `ci/scripts` used by the main, beta, and release publish workflows, so the `.toc` stamping loop and changelog format each live in a single place.
+
+### Added
+- Proc / activation-overlay glow on the Assisted Combat display. When enabled, the recommended and secondary icons glow with the Blizzard proc look while Blizzard is overlaying that spell (Revenge!, Grand Crusader, ...) or a curated tank proc rule for the active spec is active (Blood Crimson Scourge → Death and Decay, Prot Warrior Revenge! → Revenge, Prot Paladin Grand Crusader → Avenger's Shield, Guardian Gore/Galactic Guardian → Mangle). Opt-in per the Assisted Combat Edit Mode options, with a selectable glow style (Action Button / Pixel / Autocast Shine / Proc Glow), defaulting off. Read-and-highlight only — never queues or casts. Bundles LibCustomGlow-1.0 and drives the glow from it; proc rules read aura *presence*, which is not a Secret Value, so they keep working when stacks/duration are hidden. A spec with no matching rule glows nothing.
+
+## [0.4.3-alpha.fddb0c8] - 2026-08-13
+
+### Added
+- Continuous integration that lints and smoke-tests every push, running the addon's load path through a minimal WoW client stub to catch load-order mistakes, nil child widgets, and untaken API branches before they surface in-game.
+- Beta release channel that publishes to CurseForge as a pre-release when develop is merged into a release branch, alongside the existing alpha and stable paths.
+
+### Changed
+- Linting is now strict: undefined-global warnings fail the build, so any mistyped API name is caught in CI rather than in-game, and all warnings (including shadowed upvalues and unused loop variables) are surfaced.
+- Stable releases are now gated behind a `release/*` branch merge, preventing an accidental develop-to-main merge from cutting a stable build.
+
+### Fixed
+- Action titles no longer include the run name, keeping them consistent with companion addons.
+
+The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
+
 ## [0.4.2] - 2026-08-03
 
 ### Changed

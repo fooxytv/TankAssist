@@ -1,7 +1,4 @@
 name: "Beta - TankAssist"
-# The release branch carries the version, so name the run after it rather than
-# after the develop branch being merged in.
-run-name: "Beta ${{ github.event.pull_request.base.ref }}"
 
 # Publishes a beta to CurseForge when a PR is merged into a release branch.
 #
@@ -53,25 +50,14 @@ jobs:
 
           # Stamped for the packaged zip only - not committed. The release
           # branch keeps its own version; release.yaml sets the final one.
-          for toc_file in *.toc; do
-            if [ -f "$toc_file" ]; then
-              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
-              echo "Updated $toc_file with version: $VERSION"
-            fi
-          done
+          bash ci/scripts/version.sh stamp "$VERSION"
 
       - name: Generate changelog
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          if [ -n "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG"..HEAD --no-merges)
-          else
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
-          fi
-
-          CHANGELOG="## ${VERSION}"$'\n\n'"$COMMITS"
+          CHANGELOG=$(bash ci/scripts/changelog.sh "$PREVIOUS_TAG" "HEAD" "## ${VERSION}")
           {
             echo 'CHANGELOG<<EOF'
             echo "$CHANGELOG"
@@ -101,4 +87,4 @@ jobs:
           release_type: beta
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          game_versions: "12.0.7"
+          game_versions: "12.1"

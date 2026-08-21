@@ -1,8 +1,8 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.4.2
+## Version: 0.4.6-alpha.4f7eaab
 ## SavedVariables: TankAssistDB
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
@@ -10,6 +10,7 @@
 libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
 libs\AceAddon-3.0\AceAddon-3.0.lua
 libs\AceEvent-3.0\AceEvent-3.0.lua
 libs\AceDB-3.0\AceDB-3.0.lua
@@ -54,3 +55,4 @@ specs\Druid\Guardian.lua
 data\ClassCooldowns.lua
 data\RotationData.lua
 data\Consumables.lua
+data\ProcRules.lua

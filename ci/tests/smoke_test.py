@@ -145,6 +145,46 @@ R.pathUsedPlaySoundFile = __calls.PlaySoundFile
 return R
 """
 
+# Proc glow ships opt-in and data-driven. `procRulesLoaded` is the load-bearing
+# check: the proc-rule table (and LibCustomGlow) only work if the .toc actually
+# lists data/ProcRules.lua and libs/LibCustomGlow-1.0. A merge once dropped those
+# .toc lines while keeping the files, so the feature shipped inert -- this guards
+# that exact regression. The rest confirm the rule table reads aura presence
+# (not a Secret Value) and that the whole feature degrades to a no-op when the
+# glow library is absent, as it is in this headless run.
+GLOW_SCRIPT = """
+local ns = __ns
+local R = {}
+
+R.procRulesLoaded = ns.ProcRules ~= nil
+R.glowDefaultOff = ns.Addon.db.profile.assistedCombat.glowEnabled
+
+-- Drive a single Guardian proc aura (Gore) as present; everything else absent.
+C_UnitAuras.GetPlayerAuraBySpellID = function(id)
+    if id == 93622 then
+        return { applications = 1, duration = 10, expirationTime = 1010 }
+    end
+    return nil
+end
+ns.SecretValues.buffCache = {}
+
+R.guardianMangleGlows = ns.ProcRules:IsProcActive(104, 33917)
+C_UnitAuras.GetPlayerAuraBySpellID = function() return nil end
+ns.SecretValues.buffCache = {}
+R.guardianMangleQuiet = ns.ProcRules:IsProcActive(104, 33917)
+
+R.unknownSpecQuiet = ns.ProcRules:IsProcActive(577, 33917)
+R.unruledSpellQuiet = ns.ProcRules:IsProcActive(104, 12345)
+
+R.glowUnavailable = ns.Utils:IsGlowAvailable()
+local fakeIcon = {}
+ns.Utils:SetGlow(fakeIcon, true, "Action Button Glow")
+ns.Utils:SetGlow(fakeIcon, false)
+R.noGlowNoError = true
+
+return R
+"""
+
 
 def run():
     print("\nsmoke_test [load]")
@@ -190,6 +230,16 @@ if lua is not None:
         ("SOUNDKIT id uses PlaySound", "numericUsedPlaySound", 1),
         ("SOUNDKIT id never hits PlaySoundFile", "numericAvoidedPlaySoundFile", 0),
         ("file path uses PlaySoundFile", "pathUsedPlaySoundFile", 1),
+    ])
+    run_script(lua, "proc glow", GLOW_SCRIPT, [
+        ("proc rules loaded from .toc", "procRulesLoaded", True),
+        ("proc glow ships off", "glowDefaultOff", False),
+        ("proc aura up -> glow", "guardianMangleGlows", True),
+        ("proc aura gone -> quiet", "guardianMangleQuiet", False),
+        ("unknown spec stays quiet", "unknownSpecQuiet", False),
+        ("unruled spell stays quiet", "unruledSpellQuiet", False),
+        ("glow lib absent in headless", "glowUnavailable", False),
+        ("no-lib glow is a no-op", "noGlowNoError", True),
     ])
 
 print()

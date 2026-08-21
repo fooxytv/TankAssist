@@ -1,7 +1,4 @@
 name: "Build and Publish - TankAssist"
-# The version, not just the branch: on a tag push ref_name is the tag itself,
-# which is what makes the run list readable at a glance.
-run-name: "Publish ${{ github.ref_type == 'tag' && github.ref_name || format('{0} from {1}', inputs.release_type, github.ref_name) }}"
 
 on:
   push:
@@ -16,7 +13,7 @@ on:
       game_versions:
         description: "Game Version(s)"
         required: false
-        default: 12.0.7
+        default: 12.1
 
 jobs:
   publish-addon:
@@ -44,12 +41,8 @@ jobs:
 
           echo "Syncing version: $VERSION"
 
-          for toc_file in *.toc; do
-            if [ -f "$toc_file" ]; then
-              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
-              echo "Updated $toc_file with version: $VERSION"
-            fi
-          done
+          # Stamp every .toc via the shared script (single definition of the loop).
+          bash ci/scripts/version.sh stamp "$VERSION"
 
       - name: Detect release type from tag
         id: detect_type
@@ -73,17 +66,8 @@ jobs:
           echo "Current tag: $CURRENT_TAG"
           echo "Previous tag: $PREVIOUS_TAG"
 
-          if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG"
-            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG".."$CURRENT_TAG" --no-merges)
-          else
-            echo "No previous tag found, generating changelog from all commits"
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
-          fi
-
-          CHANGELOG="## $CURRENT_TAG"$'\n\n'"$COMMITS"
-
           mkdir -p ci/dist
+          CHANGELOG=$(bash ci/scripts/changelog.sh "$PREVIOUS_TAG" "$CURRENT_TAG" "## $CURRENT_TAG")
           echo "$CHANGELOG" > ci/dist/changelog.md
 
           {
@@ -126,4 +110,4 @@ jobs:
           # github.event.inputs only exists for workflow_dispatch. On a tag push
           # it resolves to empty and the input is dropped entirely, leaving the
           # action to pick its own game version on CurseForge - hence the fallback.
-          game_versions: ${{ github.event.inputs.game_versions || '12.0.7' }}
+          game_versions: ${{ github.event.inputs.game_versions || '12.1' }}

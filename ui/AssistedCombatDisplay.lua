@@ -150,10 +150,7 @@ function acd:CreateIcon(parent, size)
     frame.gcdCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.gcdCooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.gcdCooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
-    frame.gcdCooldown:SetDrawEdge(true)
-    frame.gcdCooldown:SetDrawSwipe(true)
-    frame.gcdCooldown:SetSwipeColor(1, 1, 1, 0.5)
-    frame.gcdCooldown:SetHideCountdownNumbers(true)
+    TankAssist.Utils:StyleGCDCooldown(frame.gcdCooldown)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
     frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 12 or 10, "OUTLINE")
@@ -180,6 +177,24 @@ function acd:CreateIcon(parent, size)
     end)
     frame.spellId = nil
     return frame
+end
+
+-- Friendly labels for the Edit Mode dropdown, mapped to LibCustomGlow style names.
+local glowStyleLabels = {
+    { text = "Action Button (Blizzard)" },
+    { text = "Pixel" },
+    { text = "Autocast Shine" },
+    { text = "Proc Glow" },
+}
+local glowLabelToStyle = {
+    ["Action Button (Blizzard)"] = "Action Button Glow",
+    ["Pixel"] = "Pixel Glow",
+    ["Autocast Shine"] = "Autocast Shine",
+    ["Proc Glow"] = "Proc Glow",
+}
+local glowStyleToLabel = {}
+for label, style in pairs(glowLabelToStyle) do
+    glowStyleToLabel[style] = label
 end
 
 function acd:BuildLEMSettings()
@@ -306,6 +321,33 @@ function acd:BuildLEMSettings()
             set = function(layoutName, value)
                 TankAssist.Addon.db.profile.assistedCombat.hideInPetBattles = value
                 self_ref:UpdateVisibility()
+            end,
+        },
+        {
+            order = 108,
+            name = "Glow Procs",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.glowEnabled or false
+            end,
+            set = function(layoutName, value)
+                self_ref:SetGlowEnabled(value)
+            end,
+        },
+        {
+            order = 109,
+            name = "Glow Style",
+            kind = lem.SettingType.Dropdown,
+            default = glowStyleLabels[1].text,
+            values = glowStyleLabels,
+            get = function(layoutName)
+                local style = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+                return glowStyleToLabel[style] or glowStyleLabels[1].text
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.glowStyle = glowLabelToStyle[value] or "Action Button Glow"
+                self_ref:RefreshGlow()
             end,
         },
     }
@@ -605,18 +647,24 @@ function acd:UpdateIcon(icon, spellId, spellType, priority)
     end
 
     local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
-    if cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5 then
-        local cdStart = GetTime() - cdInfo.remaining
-        icon.cooldown:SetCooldown(cdStart, cdInfo.remaining + (GetTime() - cdStart))
+    local onSpellCooldown = cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5
+    if onSpellCooldown then
+        if cdInfo.startTime and cdInfo.duration and cdInfo.duration > 0 then
+            TankAssist.Utils:SetCooldownSwipe(icon.cooldown, cdInfo.startTime, cdInfo.duration)
+        else
+            TankAssist.Utils:SetCooldownSwipeFromRemaining(icon.cooldown, cdInfo.remaining)
+        end
     else
-        icon.cooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
     end
 
-    local gcdInfo = C_Spell.GetSpellCooldown(61304)
-    if gcdInfo and gcdInfo.startTime and gcdInfo.duration and gcdInfo.duration > 0 then
-        icon.gcdCooldown:SetCooldown(gcdInfo.startTime, gcdInfo.duration)
+    -- Action bars draw one swipe per button: the spell's own cooldown wins over
+    -- the GCD, so only sweep the GCD when nothing longer is already running.
+    local gcdInfo = not onSpellCooldown and C_Spell.GetSpellCooldown(61304) or nil
+    if gcdInfo and gcdInfo.duration and gcdInfo.duration > 0 then
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, gcdInfo.startTime, gcdInfo.duration)
     else
-        icon.gcdCooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     end
 
     if cdInfo.charges and cdInfo.maxCharges and cdInfo.maxCharges > 1 then
@@ -665,6 +713,50 @@ function acd:UpdateIcon(icon, spellId, spellType, priority)
     icon.icon:SetDesaturated(false)
     icon.icon:SetVertexColor(1, 1, 1, 1)
     icon:SetAlpha(1.0)
+
+    local glowStyle = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+    TankAssist.Utils:SetGlow(icon, self:ShouldGlowSpell(spellId), glowStyle)
+end
+
+-- True when the proc glow feature is on and this spell is currently a "press
+-- now" cue: either Blizzard is overlaying it (Revenge!, Grand Crusader, ...) or a
+-- curated proc rule for the active spec has one of its auras up.
+function acd:ShouldGlowSpell(spellId)
+    if not spellId then return false end
+    if not TankAssist.Addon.db.profile.assistedCombat.glowEnabled then return false end
+    if not TankAssist.Utils:IsGlowAvailable() then return false end
+    if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed
+        and C_SpellActivationOverlay.IsSpellOverlayed(spellId) then
+        return true
+    end
+    if TankAssist.ProcRules then
+        return TankAssist.ProcRules:IsProcActive(TankAssist.Addon.activeSpec, spellId)
+    end
+    return false
+end
+
+-- Re-evaluate glow on both icons immediately (used when the style changes or the
+-- feature is toggled on, without waiting for the next update tick).
+function acd:RefreshGlow()
+    local glowStyle = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+    for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+        if icon then
+            TankAssist.Utils:SetGlow(icon, self:ShouldGlowSpell(icon.spellId), glowStyle)
+        end
+    end
+end
+
+function acd:SetGlowEnabled(value)
+    TankAssist.Addon.db.profile.assistedCombat.glowEnabled = value
+    if value then
+        self:RefreshGlow()
+    else
+        for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+            if icon then
+                TankAssist.Utils:SetGlow(icon, false)
+            end
+        end
+    end
 end
 
 function acd:ClearIcon(icon)
@@ -672,9 +764,10 @@ function acd:ClearIcon(icon)
     icon.icon:SetTexture(nil)
     icon.keybind:SetText("")
     icon.count:SetText("")
-    icon.cooldown:Clear()
-    icon.gcdCooldown:Clear()
+    TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
+    TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     icon.unusable:Hide()
+    TankAssist.Utils:SetGlow(icon, false)
     if icon.border then
         local r, g, b, a = 0.3, 0.3, 0.3, 1
         if icon.border.top then
