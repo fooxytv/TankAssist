@@ -60,6 +60,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
 
+## [0.4.2] - 2026-08-03
+
+### Changed
+- Added lint and smoke-test CI (ported from CooldownManagerClassic) with a hardened luacheck config, a WoW API stub, and a global-usage checker, plus a release-branch stage in the publish workflow.
+
+### Fixed
+- Rotation condition parsing no longer reassigns a read-only loop variable, so priority conditions parse correctly under Lua 5.4.
+- Sound playback for LibSharedMedia SOUNDKIT ids now uses `PlaySound` only, removing an invalid `PlaySoundFile` fallback that was handed a numeric id.
+- Cleaned up empty conditional branches in the cooldown alert updater, external cooldown edit-mode preview, and rotation buff-condition parsing to prevent unintended no-op behavior.
+
+The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
+
 ## [0.4.1-alpha.8eccc46] - 2026-08-03
 
 _No user-facing changes; release cut from the same commit as the previous version._
