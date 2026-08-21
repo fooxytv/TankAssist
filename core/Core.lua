@@ -762,6 +762,11 @@ function addon:HandleSlashCommand(msg)
         if TankAssist.BossCard then
             if args[2] == "debug" then
                 TankAssist.BossCard:Debug()
+            elseif args[2] == "design" or args[2] == "designer" then
+                if TankAssist.BossCardDesigner then
+                    TankAssist.BossCardDesigner:Toggle()
+                    TankAssist.BossCard:Show()
+                end
             else
                 TankAssist.BossCard:Toggle()
             end
@@ -795,7 +800,7 @@ function addon:PrintHelp()
     line("/ta toggle",   "Enable / disable the addon")
     line("/ta gear",     "Gear Advisor status & sample verdicts")
     line("/ta test",     "Run test mode")
-    line("/ta bosscard", "Boss tank card prototype (add 'debug' for an API probe)")
+    line("/ta bosscard", "Tank card in the Adventure Guide ('design', 'debug')")
     line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
     print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")

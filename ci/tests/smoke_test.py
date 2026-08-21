@@ -75,6 +75,7 @@ R.fileCount = __fileCount
 -- dropped from the .toc shows up here rather than as a missing frame in game.
 local expected = {
     "Addon", "SecretValues", "Utils", "Sounds", "Constants",
+    "BossCard", "BossCards", "BossCardDesigner",
     "CooldownAlerts", "ExternalCooldowns", "ConfigPanel", "CastBar",
     "GearAdvisor", "GearData",
 }
@@ -101,6 +102,50 @@ R.noVaultGlow = ns.GearAdvisor.RefreshVaultGlow == nil
 
 return R
 """
+
+# The boss card designer's export is the entire authoring path: you position a
+# diagram in game, hit Export, and paste the result into data/BossCards.lua. If
+# that text is not loadable Lua then a session of positioning work cannot be
+# saved, and the failure would only surface when someone tried to use it.
+BOSS_CARD_SCRIPT = """
+local ns = __ns
+local R = {}
+
+R.templateCount = #ns.BossCards.TEMPLATES
+
+local designer = ns.BossCardDesigner
+local card = designer:NewCardFor({ spellID = 12345, name = "Test Ability" })
+R.newCardPositioned = (card.boss ~= nil) and (card.tank ~= nil)
+R.newCardGroupSize = #card.group
+
+ns.BossCard.state.encounterID = 999
+ns.BossCard.state.bossName = "Test Boss"
+ns.BossCard.state.ability = card
+ns.BossCard.state.abilities = { { spellID = 12345, name = "Test Ability" } }
+
+local text = designer:Serialise()
+R.exportNotEmpty = #text > 40
+
+-- Wrapped in braces because the export is a table *entry*, meant to be pasted
+-- into the data table rather than to stand alone.
+local chunk = load("return {" .. text .. "}")
+R.exportParses = chunk ~= nil
+
+R.exportRoundTrips = false
+if chunk then
+    local ok, tbl = pcall(chunk)
+    if ok and tbl and tbl[999] and tbl[999].abilities and tbl[999].abilities[1] then
+        R.exportRoundTrips = tbl[999].abilities[1].spellID == 12345
+    end
+end
+
+-- An unauthored encounter must not claim to have a card, or the info button
+-- would offer an empty diagram.
+R.noCardWhenEmpty = not ns.BossCards:HasCard(4242)
+
+return R
+"""
+
 
 # Cooldown tracking is pure arithmetic by design: the update loop must never
 # call a C_Spell API, because a secret value tainting that path silently kills
@@ -271,6 +316,15 @@ if lua is not None:
         ("counts down by the clock", "afterTwenty", 40),
         ("expired reads zero", "afterExpiry", 0),
         ("expired entry is dropped", "entryCleared", True),
+    ])
+    run_script(lua, "boss card", BOSS_CARD_SCRIPT, [
+        ("designer has starting templates", "templateCount", 2),
+        ("new card starts positioned", "newCardPositioned", True),
+        ("new card seeds a group", "newCardGroupSize", 4),
+        ("export produces text", "exportNotEmpty", True),
+        ("export is loadable lua", "exportParses", True),
+        ("export round-trips", "exportRoundTrips", True),
+        ("unauthored boss offers no card", "noCardWhenEmpty", True),
     ])
     run_script(lua, "sounds", SOUND_SCRIPT, [
         ("SOUNDKIT id uses PlaySound", "numericUsedPlaySound", 1),
