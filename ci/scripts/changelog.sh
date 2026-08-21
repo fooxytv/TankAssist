@@ -19,10 +19,14 @@ previous_ref="${1:-}"
 current_ref="${2:-HEAD}"
 heading="${3:-}"
 
+# The CI bot's version-stamp commits are noise in a user-facing changelog -
+# a reader wants the fixes, not "Bump version to 0.4.6-alpha.4f7eaab".
+exclude_bumps=(--invert-grep --grep="^Bump version to ")
+
 if [[ -n "$previous_ref" ]]; then
-    commits=$(git log --pretty=format:"- %s" "${previous_ref}..${current_ref}" --no-merges)
+    commits=$(git log --pretty=format:"- %s" "${previous_ref}..${current_ref}" --no-merges "${exclude_bumps[@]}")
 else
-    commits=$(git log --pretty=format:"- %s" --no-merges -20)
+    commits=$(git log --pretty=format:"- %s" --no-merges "${exclude_bumps[@]}" -20)
 fi
 
 if [[ -n "$heading" ]]; then
