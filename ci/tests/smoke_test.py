@@ -103,16 +103,13 @@ R.noVaultGlow = ns.GearAdvisor.RefreshVaultGlow == nil
 return R
 """
 
-# The boss card designer's export is the entire authoring path: you position a
-# diagram in game, hit Export, and paste the result into data/BossCards.lua. If
-# that text is not loadable Lua then a session of positioning work cannot be
-# saved, and the failure would only surface when someone tried to use it.
 # A child frame draws above every region its parent owns, and above siblings
 # that share its level -- so parenting the dungeon tiles straight onto the
 # canvas buried the cone, the walls and every token the moment a floor plan
 # resolved. Nothing about that is visible in the Lua; it needs either a
-# screenshot or this. The stub hands out increasing frame levels in creation
-# order, exactly as the client does, so the original bug fails these.
+# screenshot or this. The stub models frame levels the way the client does --
+# a child one above its parent, unset siblings tying -- so the shipped bug
+# fails these.
 BOSS_CARD_LAYER_SCRIPT = """
 local ns = __ns
 local R = {}
@@ -165,6 +162,10 @@ R.foundGroupFloor = ns.BossCardMap:FindFloorFor(7, 2000)
 return R
 """
 
+# The boss card designer's export is the entire authoring path: you position a
+# diagram in game, hit Export, and paste the result into data/BossCards.lua. If
+# that text is not loadable Lua then a session of positioning work cannot be
+# saved, and the failure would only surface when someone tried to use it.
 BOSS_CARD_SCRIPT = """
 local ns = __ns
 local R = {}
@@ -292,6 +293,43 @@ return R
 
 
 
+def check_textures(lua):
+    """Every texture path the boss card ships must resolve to a real file.
+
+    An extensionless path resolves to .blp and nothing else, so shipping PNGs
+    and referencing them without ".png" drew the entire diagram as nothing --
+    tokens, rings, cones, arrow, all of it -- and did so silently, on every
+    commit, because a texture that fails to load raises no error. Neither
+    luacheck nor a headless load can see that; only comparing the paths against
+    the files on disk can.
+    """
+    print("\nsmoke_test [diagram textures]")
+
+    tex = lua.eval("__ns.BossCard.TEX")
+    if tex is None:
+        failures.append("[diagram textures] BossCard.TEX is missing")
+        print("  FAIL BossCard.TEX is missing")
+        return
+
+    loadable = (".png", ".tga", ".blp", ".jpg", ".jpeg")
+    prefix = "interface\\addons\\tankassist\\"
+
+    for key in tex:
+        path = tex[key]
+        lowered = str(path).lower()
+
+        if not lowered.endswith(loadable):
+            check(f"{key} names a loadable format", False, True)
+            continue
+
+        if not lowered.startswith(prefix):
+            check(f"{key} lives under the addon", False, True)
+            continue
+
+        relative = str(path)[len(prefix):].replace("\\", "/")
+        check(f"{key} -> {relative}", (ROOT / relative).is_file(), True)
+
+
 def check_bindings(lua):
     """Bindings.xml is loaded by the client straight out of the addon folder and
     is never listed in the .toc, so nothing else in CI would notice it going
@@ -407,6 +445,7 @@ if lua is not None:
         ("glow lib absent in headless", "glowUnavailable", False),
         ("no-lib glow is a no-op", "noGlowNoError", True),
     ])
+    check_textures(lua)
     check_bindings(lua)
 
 print()

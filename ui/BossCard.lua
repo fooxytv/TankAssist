@@ -24,13 +24,17 @@ local bc = TankAssist.BossCard
 
 local MEDIA = "Interface\\AddOns\\TankAssist\\media\\diagram\\"
 
+-- The ".png" is not decoration. An extensionless texture path resolves to .blp
+-- and nothing else, so every one of these silently failed to load and the whole
+-- diagram -- tokens, rings, cones, arrow -- drew as nothing. PNG has been a
+-- valid texture format since 10.0.7, but only when the path says so.
 bc.TEX = {
-    cone60  = MEDIA .. "cone60",
-    cone90  = MEDIA .. "cone90",
-    cone120 = MEDIA .. "cone120",
-    arrow   = MEDIA .. "arrow",
-    ring    = MEDIA .. "ring",
-    disc    = MEDIA .. "disc",
+    cone60  = MEDIA .. "cone60.png",
+    cone90  = MEDIA .. "cone90.png",
+    cone120 = MEDIA .. "cone120.png",
+    arrow   = MEDIA .. "arrow.png",
+    ring    = MEDIA .. "ring.png",
+    disc    = MEDIA .. "disc.png",
 }
 local TEX = bc.TEX
 
