@@ -2,13 +2,28 @@
 -- to read. See https://github.com/fooxytv/TankAssist/issues/38 for context on
 -- the secret-values regime generally.
 --
--- Since 12.0, aura data on a unit comes back *secret* in restricted content --
--- which is precisely Mythic+, the place a tank wants it. A secret value can be
--- passed onwards and rendered, but not read, compared or branched on. Blizzard's
--- own UI reads `auraData.applications` directly (Blizzard_CustomAuraButton.lua
--- does `applications > 1`), because untainted code has access. Addon code does
--- not, and 12.1 tightened this rather than loosening it: `RequiresUnitAuraAccess`
--- went from 0 aura functions to 16 between 12.0.0 and 12.1.0.
+-- Since 12.0 some aura data comes back *secret*: it can be passed onwards and
+-- rendered, but not read, compared or branched on.
+--
+-- The exact rule matters, and it is easy to get wrong. From Blizzard's own
+-- SecretPredicatesDocumentation.lua, `SecretWhenUnitAuraRestricted` reads:
+--
+--     "Guarded APIs and events produce secret values when combat, encounter,
+--      challenge mode, or PvP match addon restrictions are in effect.
+--      Individual spells may be flagged as never or always secret, which takes
+--      priority over restrictions."
+--
+-- Two consequences, both load-bearing:
+--
+--   * The axis is *combat*, not Mythic+. A target dummy is enough to trigger it.
+--   * Per-spell flags override the blanket rule. A spell Blizzard has marked
+--     never-secret stays readable in a key, and there is no API to ask which --
+--     it is data on the spell, not something the UI source exposes. So whether
+--     Ironfur specifically is readable can only be answered by the client.
+--
+-- That is what `/ta aura` is for. Everything here is written to work either
+-- way: if the count is readable it is used directly, and if it is not, the
+-- display path below still puts the true number on screen.
 --
 -- What is still allowed is display and alerting, and 12.1 added more of it:
 --
@@ -19,10 +34,11 @@
 --     the aura at all. That is a real "Ironfur just dropped" alert.
 --
 -- The distinction this module exists to hold: showing a player their own stack
--- count is allowed and accurate; *deciding* something from it is not. Anything
--- that needs a decision has to say so rather than quietly substituting a zero,
--- which is what the addon did before and why it recommended Ironfur on every
--- pull regardless of stacks.
+-- count is always allowed and always accurate, whether or not the addon may
+-- read it. Deciding from it is only sound when the value is genuinely readable.
+-- A caller that cannot tell the difference has to say so rather than quietly
+-- substituting a zero, which is what the addon did before and why it
+-- recommended Ironfur on every pull regardless of stacks.
 
 local ADDON_NAME, TankAssist = ...
 
@@ -205,6 +221,9 @@ function auraDisplay:Probe(spellID)
         spellID = spellID,
         canShowCount = self:CanShowCount(),
         canPlaySounds = self:CanPlaySounds(),
+        -- The restriction keys off combat, so a probe run standing still in a
+        -- city proves nothing. Report it rather than let it be assumed.
+        inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or false,
         restrictedApi = (C_CombatLog and C_CombatLog.IsCombatLogRestricted
             and select(2, pcall(C_CombatLog.IsCombatLogRestricted))) or "unknown",
     }
@@ -294,6 +313,11 @@ local PROBE_SOUNDS = {
 function auraDisplay:Report(addon, arg, extra)
     local function say(line) if addon then addon:Print(line) else print(line) end end
 
+    if arg == "all" then
+        self:ReportAll(addon)
+        return
+    end
+
     if arg == "off" then
         self:RemoveAllSounds()
         say("Aura sounds removed.")
@@ -333,6 +357,7 @@ function auraDisplay:Report(addon, arg, extra)
         print(("  %-26s %s%s|r"):format(label, colour, text))
     end
 
+    line("in combat", report.inCombat)
     line("GetAuraApplicationDisplayCount", report.canShowCount)
     line("AddAuraSound (12.1)", report.canPlaySounds)
     line("combat log restricted", report.restrictedApi)
@@ -353,9 +378,44 @@ function auraDisplay:Report(addon, arg, extra)
     else
         say("|cffe85050No display count|r -- the icon falls back to the estimate.")
     end
-    if report.applicationsReadable then
-        say("|cff40d040Stacks are readable here|r, so decisions on them are sound.")
+    -- Readable out of combat proves nothing: the restriction only applies in
+    -- combat, so an unrestricted answer there is the expected result either way.
+    if report.applicationsReadable and report.inCombat then
+        say("|cff40d040Stacks are readable in combat|r -- this spell is flagged "
+            .. "never-secret, so decisions on it are sound.")
+    elseif report.applicationsReadable then
+        say("|cffe8b040Stacks readable, but out of combat|r -- inconclusive. "
+            .. "Re-run at a target dummy while attacking it.")
     else
-        say("|cffe85050Stacks are not readable|r -- anything branching on them is guessing.")
+        say("|cffe85050Stacks are not readable here|r -- anything branching on "
+            .. "them is guessing, and the display path above is the honest answer.")
+    end
+end
+
+-- Every buff the active spec tracks, so the per-spell flags are visible side by
+-- side. One spell being readable and another not is the expected shape, and it
+-- is the only way to tell a whitelisted spell from an unrestricted client.
+function auraDisplay:ReportAll(addon)
+    local function say(line) if addon then addon:Print(line) else print(line) end end
+
+    local module = addon and addon.activeSpecModule
+    local tracked = module and module.buffsToTrack
+    if not tracked then
+        say("No active spec module with tracked buffs.")
+        return
+    end
+
+    say(("Aura probe -- %s, %s combat"):format(
+        tostring(module.name or "active spec"),
+        (UnitAffectingCombat and UnitAffectingCombat("player")) and "in" or "out of"))
+    print(("  %-24s %-10s %-10s %s"):format("buff", "readable", "secret", "display count"))
+
+    for _, buffData in ipairs(tracked) do
+        local report = self:Probe(buffData.spellId)
+        print(("  %-24s %-10s %-10s %s"):format(
+            tostring(buffData.name):sub(1, 24),
+            tostring(report.applicationsReadable),
+            tostring(report.applicationsSecret),
+            report.countReturned and (report.countText or "(secret)") or "-"))
     end
 end
