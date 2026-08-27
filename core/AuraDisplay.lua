@@ -349,6 +349,10 @@ function auraDisplay:Report(addon, arg, extra)
     local report = self:Probe(spellID)
 
     say(("Aura probe -- %s (%d)"):format(spellName, spellID))
+    if not report.auraFound then
+        say("|cff808080Cast it first -- an absent buff and a secret one look "
+            .. "identical from here.|r")
+    end
     local function line(label, value)
         local text = tostring(value)
         local colour = (value == true) and "|cff40d040"
@@ -378,17 +382,22 @@ function auraDisplay:Report(addon, arg, extra)
     else
         say("|cffe85050No display count|r -- the icon falls back to the estimate.")
     end
-    -- Readable out of combat proves nothing: the restriction only applies in
-    -- combat, so an unrestricted answer there is the expected result either way.
-    if report.applicationsReadable and report.inCombat then
-        say("|cff40d040Stacks are readable in combat|r -- this spell is flagged "
-            .. "never-secret, so decisions on it are sound.")
-    elseif report.applicationsReadable then
-        say("|cffe8b040Stacks readable, but out of combat|r -- inconclusive. "
-            .. "Re-run at a target dummy while attacking it.")
+    -- GetPlayerAuraBySpellID carries RequiresNonSecretAura, whose documented
+    -- failure mode is to return *no values* rather than a secret one. So a
+    -- secret aura does not come back as an unreadable table -- it does not come
+    -- back at all. "Was the aura found while it was definitely up" is therefore
+    -- the whole test, and it is sharper than inspecting the fields.
+    if not report.inCombat then
+        say("|cffe8b040Out of combat -- inconclusive.|r The restriction only "
+            .. "applies in combat. Cast it at a target dummy, attack, re-run.")
+    elseif report.auraFound and report.applicationsReadable then
+        say("|cff40d040Readable in combat|r -- this spell is not secret for us, "
+            .. "so reading its stacks is sound and the estimate is dead weight.")
+    elseif not report.auraFound then
+        say("|cffe85050The aura did not come back at all.|r If it was up, it is "
+            .. "secret here: the API returns nothing rather than a hidden value.")
     else
-        say("|cffe85050Stacks are not readable here|r -- anything branching on "
-            .. "them is guessing, and the display path above is the honest answer.")
+        say("|cffe85050Found but not readable|r -- show it, do not branch on it.")
     end
 end
 
