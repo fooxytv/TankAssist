@@ -72,6 +72,7 @@ globals = {
     "issecretvalue",
     "canaccesssecrets",
     "canaccessvalue",
+    "canaccesstable",
 
     -- Item API. The C_Item namespace is preferred, but the addon falls back to
     -- these globals when a client does not expose it.
@@ -81,6 +82,7 @@ globals = {
 
     -- Encounter Journal / Mythic+ / map API, used by the boss card
     "C_ChallengeMode",
+    "C_CombatLog",
     "C_EncounterJournal",
     "C_Map",
     "EJ_GetCreatureInfo",

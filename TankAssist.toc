@@ -31,6 +31,7 @@ core\GearData.lua
 core\Utils.lua
 core\Sounds.lua
 core\SecretValues.lua
+core\AuraDisplay.lua
 core\Core.lua
 core\Bindings.lua
 

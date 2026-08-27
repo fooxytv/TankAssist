@@ -370,9 +370,14 @@ function secretValues:GetBuffInfo(unit, spellId)
         local auraData = C_UnitAuras.GetPlayerAuraBySpellID(spellId)
         if auraData then
             result.exists = true
-            result.stacks = self:SafeNumber(auraData.applications, 0)
-            result.duration = self:SafeNumber(auraData.duration, 0)
-            result.expirationTime = self:SafeNumber(auraData.expirationTime, 0)
+            -- nil, not 0. A secret stack count that reads as zero is worse than
+            -- no answer: every "stacks < N" test then passes, so the addon
+            -- recommended Ironfur on every pull and showed LOW_STACKS forever,
+            -- silently, in exactly the content where it matters. Callers must
+            -- handle nil rather than be handed a confident wrong number.
+            result.stacks = self:SafeNumber(auraData.applications, nil)
+            result.duration = self:SafeNumber(auraData.duration, nil)
+            result.expirationTime = self:SafeNumber(auraData.expirationTime, nil)
             if self:IsSecret(auraData.applications) or
                self:IsSecret(auraData.duration) or
                self:IsSecret(auraData.expirationTime) then
@@ -387,9 +392,9 @@ function secretValues:GetBuffInfo(unit, spellId)
         )
         if name then
             result.exists = true
-            result.stacks = self:SafeNumber(count, 0)
-            result.duration = self:SafeNumber(duration, 0)
-            result.expirationTime = self:SafeNumber(expirationTime, 0)
+            result.stacks = self:SafeNumber(count, nil)
+            result.duration = self:SafeNumber(duration, nil)
+            result.expirationTime = self:SafeNumber(expirationTime, nil)
             if self:IsSecret(count) or self:IsSecret(duration) then
                 result.isSecret = true
             end

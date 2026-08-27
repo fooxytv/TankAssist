@@ -784,6 +784,9 @@ function addon:HandleSlashCommand(msg)
             self:Print(C_OFF .. "Boss Card not loaded" .. C_END)
         end
 
+    elseif cmd == "aura" then
+        TankAssist.AuraDisplay:Report(self, args[2], args[3])
+
     elseif cmd == "test" then
         self:RunTestMode()
 
@@ -811,6 +814,7 @@ function addon:PrintHelp()
     line("/ta gear",     "Gear Advisor status & sample verdicts")
     line("/ta test",     "Run test mode")
     line("/ta bosscard", "Tank card in the Adventure Guide ('design', 'scan', 'debug')")
+    line("/ta aura",     "Aura read/display capability probe ('sound', 'off')")
     line("/ta debug",    "Diagnostics: on/off, utility, stagger, health, rage,")
     print("                  " .. C_DIM .. "tracking, combat, settings, secondary" .. C_END)
     print("")

@@ -162,6 +162,63 @@ R.foundGroupFloor = ns.BossCardMap:FindFloorFor(7, 2000)
 return R
 """
 
+# A secret stack count that reads as zero is worse than no answer: every
+# "stacks < N" test passes, so the addon recommended Ironfur on every pull and
+# reported LOW_STACKS forever -- silently, and only in the restricted content
+# where it matters. Nothing errors, so only asserting the shape catches it.
+AURA_SECRET_SCRIPT = """
+local ns = __ns
+local R = {}
+
+local IRONFUR = 192081
+
+-- Pretend we are in restricted content: the aura exists, but its numbers are
+-- secret, exactly as C_UnitAuras reports them inside a key.
+local secrets = {}
+local realIsSecret = issecretvalue
+issecretvalue = function(v) return secrets[v] == true end
+canaccessvalue = function(v) return secrets[v] ~= true end
+
+local applications, duration, expiry = "S_app", "S_dur", "S_exp"
+secrets[applications] = true
+secrets[duration] = true
+secrets[expiry] = true
+
+C_UnitAuras.GetPlayerAuraBySpellID = function(spellID)
+    if spellID ~= IRONFUR then return nil end
+    return {
+        spellId = spellID,
+        auraInstanceID = 4242,
+        applications = applications,
+        duration = duration,
+        expirationTime = expiry,
+    }
+end
+
+local info = ns.SecretValues:GetBuffInfo("player", IRONFUR)
+R.auraExists = info.exists
+R.flaggedSecret = info.isSecret
+-- The assertion that matters. Zero here is a confident lie.
+R.stacksNotFabricated = info.stacks == nil
+
+-- The display path must degrade rather than error when the client offers no
+-- formatter, which is the headless case and also any pre-10.x client.
+R.cannotShowCount = ns.AuraDisplay:CanShowCount() == false
+R.setCountIsSafe = ns.AuraDisplay:SetCountOn({ SetText = function() end }, IRONFUR) == false
+R.soundsUnavailable = ns.AuraDisplay:CanPlaySounds() == false
+
+-- The instance id is cached off the aura even though the counts are not
+-- readable, since it is only ever handed back to the client.
+R.instanceResolved = ns.AuraDisplay:InstanceFor(IRONFUR) == 4242
+
+local ok = pcall(function() return ns.AuraDisplay:Probe(IRONFUR) end)
+R.probeSurvives = ok
+
+issecretvalue = realIsSecret
+return R
+"""
+
+
 # The boss card designer's export is the entire authoring path: you position a
 # diagram in game, hit Export, and paste the result into data/BossCards.lua. If
 # that text is not loadable Lua then a session of positioning work cannot be
@@ -412,6 +469,16 @@ if lua is not None:
         ("counts down by the clock", "afterTwenty", 40),
         ("expired reads zero", "afterExpiry", 0),
         ("expired entry is dropped", "entryCleared", True),
+    ])
+    run_script(lua, "secret auras", AURA_SECRET_SCRIPT, [
+        ("secret aura is still seen", "auraExists", True),
+        ("secret aura is flagged", "flaggedSecret", True),
+        ("secret stacks are not faked as 0", "stacksNotFabricated", True),
+        ("no formatter -> reports so", "cannotShowCount", True),
+        ("no formatter -> SetCountOn is safe", "setCountIsSafe", True),
+        ("no AddAuraSound -> reports so", "soundsUnavailable", True),
+        ("aura instance still resolves", "instanceResolved", True),
+        ("probe survives restriction", "probeSurvives", True),
     ])
     run_script(lua, "boss card layering", BOSS_CARD_LAYER_SCRIPT, [
         ("card frame builds headless", "built", True),

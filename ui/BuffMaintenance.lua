@@ -159,6 +159,11 @@ function bm:UpdateBuffIcon(icon, buffData)
 
     if info.isSecret then
         self:SetIconState(icon, "UNKNOWN", buffData)
+        -- Unreadable is not the same as unshowable. The client will format the
+        -- stack count for display even when the addon may not look at it, so
+        -- the player still gets the real number on the icon -- which beats the
+        -- "?" that used to be the whole answer here.
+        TankAssist.AuraDisplay:SetCountOn(icon.stacks, buffData.spellId)
         return
     end
 
@@ -175,7 +180,13 @@ function bm:UpdateBuffIcon(icon, buffData)
     local remaining = (info.expirationTime or 0) - GetTime()
     local stacks = info.stacks or 0
 
-    icon.stacks:SetText(stacks > 0 and stacks or "")
+    -- Real count first, whatever we think we know. `info.stacks` here is either
+    -- a value we were allowed to read or a dead-reckoned estimate from cast
+    -- times, and the estimate does not announce itself -- so prefer the number
+    -- the client is willing to format for us over both.
+    if not TankAssist.AuraDisplay:SetCountOn(icon.stacks, buffData.spellId) then
+        icon.stacks:SetText(stacks > 0 and stacks or "")
+    end
 
     if remaining > 0 then
         icon.timer:SetText(TankAssist.Utils:FormatDuration(remaining))
