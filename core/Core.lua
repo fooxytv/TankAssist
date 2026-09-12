@@ -70,7 +70,11 @@ local defaults = {
             outOfCombatAlpha = 0.5,
             showKeybinds = true,
             hideWhenMounted = false,
-            iconZoom = 0,
+            -- Defaults chosen to sit alongside a skinned action bar rather than
+            -- against it: art edge to edge, no border, and the same 5.5% crop
+            -- EllesmereUI and friends use.
+            iconZoomPercent = 5.5,
+            showBorder = false,
             fontFace = "Friz Quadrata",
             fontFlag = "Outline",
             fontSizeOffset = 0,
