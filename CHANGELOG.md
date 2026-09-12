@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Font and bar texture lists now come from LibSharedMedia-3.0, the same way sounds already did. Install any media addon (SharedMediaAdditionalFonts, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically. Nothing is bundled, and TankAssist's own built-ins are registered back into LibSharedMedia so other addons gain them too.
-- Icon Crop slider for the Assisted Combat primary and secondary buttons (Edit Mode). Crops the spell art the way action-bar skins such as ElleremereUI do, from the stock trim through to a full-bleed look. The crop is computed per axis, so a non-square button crops rather than stretches.
-- Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list.
+- The Assisted Combat primary and secondary buttons now match a skinned action bar. The spell art fills the button edge to edge instead of sitting inset inside a dark frame, the border is off by default, and the keybind sits where an action button puts its hotkey.
+- Icon Zoom % slider for those buttons (Edit Mode), in the same units action-bar skins use for the same setting. It defaults to 5.5, which is EllesmereUI's default, so the same number in both places gives the same crop. The crop is computed per axis, so a non-square button crops rather than stretches.
+- Show Border toggle for those buttons (Edit Mode), off by default.
+- Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list. A UI that registers its font with LibSharedMedia -- EllesmereUI registers Expressway and twenty others -- can be matched exactly by picking the same face.
 
 ### Fixed
 - Choosing a font that this client cannot load no longer breaks the text. `SetFont` declines such a face rather than raising, which left the font string with no font at all and surfaced the error later on an unrelated update. Faces are now validated before being offered and again as they are applied, with anything that fails falling back to Friz Quadrata. This affected the cast bar font picker, where several of the offered faces (2002, Express Way) are absent on some locales.

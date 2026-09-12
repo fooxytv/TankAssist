@@ -111,10 +111,12 @@ function acd:CreateIcon(parent, size)
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
     frame.bg:SetColorTexture(0.12, 0.12, 0.12, 1)
+    -- Edge to edge, the way an action button does it. The old 2px inset left
+    -- the background showing as a dark frame around every icon, which is the
+    -- single thing that made these read as "not action bars".
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
-    frame.icon:SetPoint("TOPLEFT", 2, -2)
-    frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconZoom(), size - 4, size - 4)
+    frame.icon:SetAllPoints()
+    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconTrim(), size, size)
     local borderColor = {0.3, 0.3, 0.3, 1}
     frame.borderTop = frame:CreateTexture(nil, "OVERLAY")
     frame.borderTop:SetPoint("TOPLEFT", 0, 0)
@@ -142,6 +144,9 @@ function acd:CreateIcon(parent, size)
         left = frame.borderLeft,
         right = frame.borderRight,
     }
+    -- Off unless asked for: action buttons draw no border of their own, and
+    -- these sit on top of the icon now that it fills the button.
+    self:ApplyBorderVisibility(frame)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.cooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
@@ -154,11 +159,12 @@ function acd:CreateIcon(parent, size)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
     self:ApplyTextFont(frame.keybind, self:KeybindFontSize(size))
-    frame.keybind:SetPoint("TOPLEFT", 4, -4)
+    -- Same corner and inset an action button uses for its hotkey.
+    frame.keybind:SetPoint("TOPLEFT", 4, -3)
     frame.keybind:SetTextColor(1, 1, 1, 1)
     frame.count = frame:CreateFontString(nil, "OVERLAY")
     self:ApplyTextFont(frame.count, self:CountFontSize(size))
-    frame.count:SetPoint("BOTTOMRIGHT", -4, 4)
+    frame.count:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.count:SetTextColor(1, 1, 1, 1)
     frame.unusable = frame:CreateTexture(nil, "OVERLAY", nil, 1)
     frame.unusable:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
@@ -250,19 +256,36 @@ function acd:BuildLEMSettings()
             end,
         },
         {
+            -- Percent, matching what action-bar skins call Icon Zoom, so the
+            -- number you already use there produces the same crop here.
             order = 101.5,
-            name = "Icon Crop",
+            name = "Icon Zoom %",
             kind = lem.SettingType.Slider,
-            default = 0,
+            default = 5.5,
             minValue = 0,
-            maxValue = 1.0,
-            valueStep = 0.1,
+            maxValue = 25,
+            valueStep = 0.5,
             get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.iconZoom or 0
+                local percent = TankAssist.Addon.db.profile.assistedCombat.iconZoomPercent
+                if percent == nil then return 5.5 end
+                return percent
             end,
             set = function(layoutName, value)
-                value = math.floor(value * 10 + 0.5) / 10
-                TankAssist.Addon.db.profile.assistedCombat.iconZoom = value
+                value = math.floor(value * 2 + 0.5) / 2
+                TankAssist.Addon.db.profile.assistedCombat.iconZoomPercent = value
+                self_ref:ApplyIconAppearance()
+            end,
+        },
+        {
+            order = 101.55,
+            name = "Show Border",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.showBorder == true
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.showBorder = value
                 self_ref:ApplyIconAppearance()
             end,
         },
@@ -934,14 +957,36 @@ function acd:GetAppearanceSettings()
         and TankAssist.Addon.db.profile.assistedCombat or {}
 end
 
-function acd:GetIconZoom()
-    return self:GetAppearanceSettings().iconZoom or 0
+--- The icon crop, as the fraction of the art trimmed off each edge.
+-- Stored as a percentage because that is the unit action-bar skins use for the
+-- same setting -- EllesmereUI calls it Icon Zoom and defaults to 5.5 -- so the
+-- same number in both places gives the same picture.
+function acd:GetIconTrim()
+    local percent = self:GetAppearanceSettings().iconZoomPercent
+    if percent == nil then percent = 5.5 end
+    return percent / 100
+end
+
+function acd:ShowBorder()
+    return self:GetAppearanceSettings().showBorder == true
+end
+
+function acd:ApplyBorderVisibility(icon)
+    local show = self:ShowBorder()
+    for _, edge in pairs(icon.border) do
+        edge:SetShown(show)
+    end
+    -- The background only ever peeked through the old inset. With the icon
+    -- filling the button it is hidden anyway, but an icon that fails to load
+    -- should show something deliberate rather than the frame behind.
+    icon.bg:SetShown(true)
 end
 
 function acd:KeybindFontSize(size)
     local settings = self:GetAppearanceSettings()
     size = size or settings.iconSize or 50
-    return (size > 50 and 12 or 10) + (settings.fontSizeOffset or 0)
+    -- 12 is what an action button uses for its hotkey.
+    return (size > 50 and 12 or 11) + (settings.fontSizeOffset or 0)
 end
 
 function acd:CountFontSize(size)
@@ -962,14 +1007,14 @@ end
 function acd:ApplyIconAppearance()
     if not self.frame then return end
 
-    local zoom = self:GetIconZoom()
+    local trim = self:GetIconTrim()
     for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
         if icon then
+            -- The icon fills the button, so the button's own size is the
+            -- aspect to crop against.
             local width, height = icon:GetSize()
-            -- The art inset is 2px on every side (see CreateIcon), so the
-            -- cropped region has to be measured against the texture, not the
-            -- button, or a non-square button crops on the wrong aspect.
-            TankAssist.Utils:ApplyIconZoom(icon.icon, zoom, (width or 0) - 4, (height or 0) - 4)
+            TankAssist.Utils:ApplyIconZoom(icon.icon, trim, width, height)
+            self:ApplyBorderVisibility(icon)
             self:ApplyTextFont(icon.keybind, self:KeybindFontSize(width))
             self:ApplyTextFont(icon.count, self:CountFontSize(width))
         end

@@ -78,7 +78,7 @@ R.fileCount = __fileCount
 local expected = {
     "Addon", "SecretValues", "Utils", "Sounds", "Media", "Constants",
     "CooldownAlerts", "ExternalCooldowns", "ConfigPanel", "CastBar",
-    "GearAdvisor", "GearData", "Media",
+    "GearAdvisor", "GearData",
 }
 local missing = {}
 for _, name in ipairs(expected) do
@@ -268,37 +268,44 @@ R.flagFallback = ns.Media:ResolveFontFlag("Nonsense")
 return R
 """
 
-# The crop replaces a single hardcoded square texcoord. The aspect correction is
-# the part worth pinning: a square trim on a non-square button stretches the art
-# rather than cropping it.
+# The crop takes the fraction trimmed off each edge, the same quantity action-bar
+# skins expose as a percentage -- so 0.055 here has to mean exactly what Icon
+# Zoom 5.5 means there, or "set both to the same number" stops being true. The
+# aspect correction is the other half: a square trim on a non-square button
+# stretches the art rather than cropping it.
 CROP_SCRIPT = """
 local ns = __ns
 local R = {}
 
-local l, r, t, b = ns.Utils:GetIconTexCoords(0, 50, 50)
-R.defaultLeft = l
-R.defaultRight = r
+-- EllesmereUI's default, the number this is meant to line up with.
+local l, r, t, b = ns.Utils:GetIconTexCoords(0.055, 50, 50)
+R.skinDefaultLeft = l
+R.skinDefaultRight = r
 
-local zl = ns.Utils:GetIconTexCoords(1, 50, 50)
-R.zoomCropsFurther = zl > l
+local deep = ns.Utils:GetIconTexCoords(0.2, 50, 50)
+R.moreTrimCropsFurther = deep > l
 
 -- A wide button crops vertically, so the visible region is wider than tall by
 -- exactly the button's own ratio.
-local wl, wr, wt, wb = ns.Utils:GetIconTexCoords(0, 100, 50)
+local wl, wr, wt, wb = ns.Utils:GetIconTexCoords(0.055, 100, 50)
 R.wideKeepsWidth = wl == l
 R.wideAspect = math.floor(((wr - wl) / (wb - wt)) * 100 + 0.5) / 100
 
-local tl, tr, tt, tb = ns.Utils:GetIconTexCoords(0, 50, 100)
+local tl, tr, tt, tb = ns.Utils:GetIconTexCoords(0.055, 50, 100)
 R.tallAspect = math.floor(((tr - tl) / (tb - tt)) * 100 + 0.5) / 100
 
--- Out-of-range and junk zooms clamp instead of inverting the texcoords.
-local cl = ns.Utils:GetIconTexCoords(5, 50, 50)
-R.clampsHigh = cl == zl
-R.clampsLow = ns.Utils:GetIconTexCoords(-3, 50, 50) == l
-R.junkZoom = ns.Utils:GetIconTexCoords("x", 50, 50) == l
+-- No trim at all is a legitimate setting (Icon Zoom 0) and must be the whole
+-- texture, not silently floored to some minimum.
+R.zeroIsUncropped = ns.Utils:GetIconTexCoords(0, 50, 50)
+
+-- Out of range and junk clamp instead of inverting the texcoords.
+R.clampsHigh = ns.Utils:GetIconTexCoords(5, 50, 50)
+R.clampsLow = ns.Utils:GetIconTexCoords(-3, 50, 50)
+-- Junk is not zero: it means "unspecified", which falls back to the stock trim.
+R.junkTrim = ns.Utils:GetIconTexCoords("x", 50, 50)
 
 -- No size given: fall back to a square crop rather than dividing by zero.
-R.noSizeSquare = ns.Utils:GetIconTexCoords(0) == l
+R.noSizeSquare = ns.Utils:GetIconTexCoords(0.055) == l
 
 return R
 """
@@ -316,28 +323,39 @@ acd:Create()
 R.created = acd.frame ~= nil and acd.mainIcon ~= nil and acd.aoeIcon ~= nil
 
 local profile = ns.Addon.db.profile.assistedCombat
-R.shipsUncropped = profile.iconZoom
+R.shipsAtSkinDefault = profile.iconZoomPercent
+R.shipsBorderless = profile.showBorder
 R.shipsStockFont = profile.fontFace
 
--- Crop, an unloadable font face and a text-size bump, all at once.
-profile.iconZoom = 1
+-- The art fills the button. This is the one that made these read as "not an
+-- action bar": a 2px inset let the background show as a frame around every icon.
+R.iconFillsButton = acd.mainIcon.icon:IsFillingParent()
+R.borderHidden = acd.mainIcon.border.top:IsShown() ~= true
+
+-- The shipped crop has to be the skin's number, not near it.
+R.shippedTrim = acd.mainIcon.icon:GetTexCoord()[1]
+
+-- A deeper crop, an unloadable font face and a text-size bump, all at once.
+profile.iconZoomPercent = 20
+profile.showBorder = true
 profile.fontFace = "2002"
 profile.fontSizeOffset = 3
 acd:SetIconSize(60)
 
 local main = acd.mainIcon.icon:GetTexCoord()
 local aoe = acd.aoeIcon.icon:GetTexCoord()
-R.mainCropped = main ~= nil and main[1] > 0.08
+R.mainCropped = main ~= nil and main[1] == 0.2
 R.bothIconsMatch = aoe ~= nil and aoe[1] == main[1]
--- 60px button, 4px of inset: still square, so the crop stays square too.
 R.stillSquare = main ~= nil and main[1] == main[3]
+R.borderTurnsOn = acd.mainIcon.border.top:IsShown() == true
 
 R.keybindFellBack = acd.mainIcon.keybind:GetFontPath() == FRIZ
 R.keybindSize = acd.mainIcon.keybind.__fontSize
 R.countSize = acd.mainIcon.count.__fontSize
 
 -- Back to the shipped look.
-profile.iconZoom = 0
+profile.iconZoomPercent = 5.5
+profile.showBorder = false
 profile.fontFace = "Friz Quadrata"
 profile.fontSizeOffset = 0
 acd:SetIconSize(50)
@@ -515,29 +533,35 @@ if lua is not None:
         ("unknown flag falls back", "flagFallback", "OUTLINE"),
     ])
     run_script(lua, "icon crop", CROP_SCRIPT, [
-        ("default crop matches the old literal", "defaultLeft", 0.08),
-        ("default crop matches the old literal", "defaultRight", 0.92),
-        ("full zoom crops further in", "zoomCropsFurther", True),
+        ("5.5% trims exactly 0.055 a side", "skinDefaultLeft", 0.055),
+        ("5.5% trims exactly 0.055 a side", "skinDefaultRight", 0.945),
+        ("a bigger trim crops further in", "moreTrimCropsFurther", True),
         ("wide button keeps its width", "wideKeepsWidth", True),
         ("wide button crops to 2:1", "wideAspect", 2.0),
         ("tall button crops to 1:2", "tallAspect", 0.5),
-        ("zoom clamps at 1", "clampsHigh", True),
-        ("zoom clamps at 0", "clampsLow", True),
-        ("junk zoom reads as 0", "junkZoom", True),
+        ("zero trim is the whole texture", "zeroIsUncropped", 0.0),
+        ("trim clamps at the top", "clampsHigh", 0.45),
+        ("trim clamps at zero", "clampsLow", 0.0),
+        ("junk falls back to the stock trim", "junkTrim", 0.08),
         ("no size given stays square", "noSizeSquare", True),
     ])
     run_script(lua, "button appearance", BUTTON_SCRIPT, [
         ("display builds both buttons", "created", True),
-        ("crop ships off", "shipsUncropped", 0),
+        ("ships at the skin's 5.5% crop", "shipsAtSkinDefault", 5.5),
+        ("ships with no border", "shipsBorderless", False),
         ("font ships as the stock face", "shipsStockFont", "Friz Quadrata"),
+        ("the art fills the button", "iconFillsButton", True),
+        ("the border is hidden by default", "borderHidden", True),
+        ("the shipped crop is the skin's number", "shippedTrim", 0.055),
         ("crop reaches the primary button", "mainCropped", True),
         ("both buttons crop alike", "bothIconsMatch", True),
         ("a square button crops square", "stillSquare", True),
+        ("the border can be turned on", "borderTurnsOn", True),
         ("an unloadable face falls back on the button", "keybindFellBack", True),
         ("text size offset applies", "keybindSize", 15),
         ("count text scales with the icon", "countSize", 17),
-        ("clearing the crop restores the old look", "backToDefault", 0.08),
-        ("clearing the offset restores the old size", "defaultKeybindSize", 10),
+        ("restoring the default restores the crop", "backToDefault", 0.055),
+        ("clearing the offset restores the size", "defaultKeybindSize", 11),
     ])
     check_bindings(lua)
 

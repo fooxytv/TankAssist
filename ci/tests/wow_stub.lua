@@ -65,9 +65,13 @@ setmetatable(Widget, {
     end,
 })
 
-function Widget:SetPoint(point, ...) record("SetPoint") self.__points[#self.__points + 1] = { point, ... } end
+function Widget:SetPoint(point, ...) record("SetPoint") self.__allPoints = false; self.__points[#self.__points + 1] = { point, ... } end
 function Widget:ClearAllPoints() record("ClearAllPoints") self.__points = {} end
-function Widget:SetAllPoints() record("SetAllPoints") end
+-- Recorded, not just counted: "does this region fill its parent, or is it
+-- inset by explicit points" is a real question about how a button looks, and
+-- SetPoint vs SetAllPoints is the only thing that distinguishes them.
+function Widget:SetAllPoints() record("SetAllPoints") self.__allPoints = true end
+function Widget:IsFillingParent() return self.__allPoints == true and #self.__points == 0 end
 function Widget:GetPoint() return self.__points[1] and self.__points[1][1] or "CENTER", nil, "CENTER", 0, 0 end
 function Widget:GetNumPoints() return #self.__points end
 
