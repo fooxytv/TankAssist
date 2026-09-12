@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STUB = Path(__file__).with_name("wow_stub.lua")
 BINDINGS_XML = ROOT / "Bindings.xml"
 PACKAGE_SH = ROOT / "ci" / "scripts" / "package.sh"
-INSTALLER = ROOT / "install-TankAssist.ps1"
+INSTALLER = ROOT / "ci" / "scripts" / "Install-TankAssist.ps1"
 
 failures = []
 
@@ -399,9 +399,13 @@ def check_packaging():
     """
     print("\nsmoke_test [packaging]")
 
+    # The path is load-bearing, not incidental: it is what the documented
+    # one-liner fetches, so moving the file breaks every copy of that command
+    # already pasted into a notes file.
     if not INSTALLER.exists():
-        failures.append("[packaging] install-TankAssist.ps1 is missing from the repo root")
-        print("  FAIL install-TankAssist.ps1 is missing from the repo root")
+        where = INSTALLER.relative_to(ROOT).as_posix()
+        failures.append(f"[packaging] the installer is not at {where}")
+        print(f"  FAIL the installer is not at {where}")
         return
 
     sh = PACKAGE_SH.read_text(encoding="utf-8")
@@ -423,9 +427,10 @@ def check_packaging():
     check("installer excludes everything the zip does", ", ".join(missing), "")
     check("installer excludes nothing extra", ", ".join(extra), "")
 
-    # The one file that must never reach a player: the installer itself.
+    # The installer lives under ci/, which package.sh excludes wholesale, so it
+    # cannot reach a player by name or by accident.
     check("the installer is kept out of the shipped zip",
-          "install-TankAssist.ps1" in shipped, True)
+          INSTALLER.relative_to(ROOT).parts[0] in shipped, True)
 
 
 def run():

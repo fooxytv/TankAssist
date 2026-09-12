@@ -29,19 +29,19 @@
     List the branches available on GitHub and exit without installing.
 
 .EXAMPLE
-    .\install-TankAssist.ps1
+    .\Install-TankAssist.ps1
     Installs the tip of develop.
 
 .EXAMPLE
-    .\install-TankAssist.ps1 -Branch claude/icon-zoom-fonts
+    .\Install-TankAssist.ps1 -Branch claude/icon-zoom-fonts
     Installs a feature branch.
 
 .EXAMPLE
-    .\install-TankAssist.ps1 -List
+    .\Install-TankAssist.ps1 -List
     Shows what branches are available.
 
 .EXAMPLE
-    .\install-TankAssist.ps1 -Branch v0.4.6 -WowPath 'D:\Games\World of Warcraft'
+    .\Install-TankAssist.ps1 -Branch v0.4.6 -WowPath 'D:\Games\World of Warcraft'
     Installs a release tag into a WoW folder that is not where it is normally found.
 
 .NOTES
@@ -71,8 +71,7 @@ $ExcludeFromInstall = @(
     '.git', '.github', 'ci', '.vscode', '.claude', 'code',
     '.env', '.env.example',
     'CLAUDE.md', 'README.md', 'CHANGELOG.md', 'LICENSE',
-    '.luacheckrc', '.gitignore', '.gitattributes',
-    'install-TankAssist.ps1'
+    '.luacheckrc', '.gitignore', '.gitattributes'
 )
 
 #--------------------------------------------------------------------------------
@@ -201,7 +200,7 @@ function Show-Branches {
     }
 
     Write-Host ""
-    Write-Host "  Install one with: .\install-TankAssist.ps1 -Branch <name>"
+    Write-Host "  Install one with: .\Install-TankAssist.ps1 -Branch <name>"
     Write-Host ""
 }
 
@@ -320,7 +319,7 @@ if (-not $wowRoot) {
     Write-Host "  Could not find a World of Warcraft install with a $Flavor folder." -ForegroundColor Red
     Write-Host ""
     Write-Host "  Point at it explicitly:"
-    Write-Host "    .\install-TankAssist.ps1 -WowPath 'D:\Games\World of Warcraft'"
+    Write-Host "    .\Install-TankAssist.ps1 -WowPath 'D:\Games\World of Warcraft'"
     Write-Host ""
     Write-Host "  Or set it once for this machine:"
     Write-Host "    setx TANKASSIST_WOW_PATH 'D:\Games\World of Warcraft'"

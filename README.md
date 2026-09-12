@@ -94,16 +94,22 @@ All UI components integrate with WoW's Edit Mode via LibEQOL:
 
 ### Installing a development branch
 
-`install-TankAssist.ps1` pulls any branch, tag or commit straight into your
-AddOns folder. Nothing needs to be installed on the machine you run it on --
-no git, no clone, no GitHub account -- so copying that one file to a gaming
-machine is enough.
+`ci/scripts/Install-TankAssist.ps1` pulls any branch, tag or commit straight
+into your AddOns folder. Nothing needs to be installed on the machine you run
+it on -- no git, no clone, no GitHub account -- so fetching that one file onto
+a gaming machine is enough:
 
 ```powershell
-.\install-TankAssist.ps1                              # tip of develop
-.\install-TankAssist.ps1 -Branch feature/my-branch    # a feature branch
-.\install-TankAssist.ps1 -Branch v0.4.6               # a release tag
-.\install-TankAssist.ps1 -List                        # what branches exist
+irm "https://raw.githubusercontent.com/fooxytv/TankAssist/develop/ci/scripts/Install-TankAssist.ps1" -OutFile Install-TankAssist.ps1
+```
+
+Then:
+
+```powershell
+.\Install-TankAssist.ps1                              # tip of develop
+.\Install-TankAssist.ps1 -Branch feature/my-branch    # a feature branch
+.\Install-TankAssist.ps1 -Branch v0.4.6               # a release tag
+.\Install-TankAssist.ps1 -List                        # what branches exist
 ```
 
 The WoW folder is found from the registry and the usual install locations.
