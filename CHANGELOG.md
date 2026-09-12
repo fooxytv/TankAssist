@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Icon Crop slider for the Assisted Combat primary and secondary buttons (Edit Mode). Crops the spell art the way action-bar skins such as ElleremereUI do, from the stock trim through to a full-bleed look. The crop is computed per axis, so a non-square button crops rather than stretches.
+- Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode). Faces registered by other addons through LibSharedMedia are offered alongside the built-in ones.
+
+### Fixed
+- Choosing a font that this client cannot load no longer breaks the text. `SetFont` declines such a face rather than raising, which left the font string with no font at all and surfaced the error later on an unrelated update; fonts are now probed up front, unavailable faces are not offered, and anything that still fails falls back to Friz Quadrata. This affected the cast bar font picker, where several of the offered faces (2002, Express Way) are absent on some locales.
+
 ## [0.4.6-alpha.4f7eaab] - 2026-08-21
 
 ### Fixed

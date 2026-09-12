@@ -241,12 +241,47 @@ function utils:GetSpecName(specId)
     return "Unknown"
 end
 
+-- Icon art cropping, the way action-bar skins (ElleremereUI, Masque and the
+-- rest) do it. `zoom` is 0..1: 0 keeps the stock trim that only hides the
+-- vanilla border ring, 1 crops hard into the art. The crop is computed per
+-- axis from the button's own aspect, because trimming a square region on a
+-- non-square button stretches the art instead of cropping it.
+local ICON_BASE_TRIM = 0.08
+local ICON_MAX_TRIM = 0.24
+
+function utils:GetIconTexCoords(zoom, width, height)
+    zoom = tonumber(zoom) or 0
+    if zoom < 0 then zoom = 0 elseif zoom > 1 then zoom = 1 end
+
+    local trim = ICON_BASE_TRIM + (ICON_MAX_TRIM - ICON_BASE_TRIM) * zoom
+    local left, right, top, bottom = trim, 1 - trim, trim, 1 - trim
+
+    width = tonumber(width) or 0
+    height = tonumber(height) or 0
+    if width > 0 and height > 0 then
+        if width > height then
+            local dy = (1 - height / width) * (bottom - top) / 2
+            top, bottom = top + dy, bottom - dy
+        elseif height > width then
+            local dx = (1 - width / height) * (right - left) / 2
+            left, right = left + dx, right - dx
+        end
+    end
+
+    return left, right, top, bottom
+end
+
+function utils:ApplyIconZoom(texture, zoom, width, height)
+    if not texture or not texture.SetTexCoord then return end
+    texture:SetTexCoord(self:GetIconTexCoords(zoom, width, height))
+end
+
 function utils:CreateIcon(parent, size, template)
     local frame = CreateFrame("Frame", nil, parent, template)
     frame:SetSize(size, size)
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetAllPoints()
-    frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    utils:ApplyIconZoom(frame.icon, 0, size, size)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints()
     frame.cooldown:SetDrawSwipe(true)

@@ -142,10 +142,8 @@ function CastBar:ApplySettings()
     local bc = settings.borderColor or { 0.3, 0.3, 0.3 }
     self:SetBorderColor(bc[1], bc[2], bc[3], 1)
     local fontSize = settings.fontSize or 11
-    local fontPath = self:ResolveFontPath(settings.fontFace)
-    local fontFlag = self:ResolveFontFlag(settings.fontFlag)
-    self.spellName:SetFont(fontPath, fontSize, fontFlag)
-    self.castTime:SetFont(fontPath, fontSize, fontFlag)
+    TankAssist.Media:SetFont(self.spellName, settings.fontFace, fontSize, settings.fontFlag)
+    TankAssist.Media:SetFont(self.castTime, settings.fontFace, fontSize, settings.fontFlag)
     if settings.showSpellName == false then
         self.spellName:Hide()
     else
@@ -165,17 +163,11 @@ function CastBar:ApplySettings()
 end
 
 function CastBar:ResolveFontPath(name)
-    for _, entry in ipairs(TankAssist.Constants.Fonts) do
-        if entry.name == name then return entry.path end
-    end
-    return "Fonts\\FRIZQT__.TTF"
+    return TankAssist.Media:GetFontPath(name)
 end
 
 function CastBar:ResolveFontFlag(name)
-    for _, entry in ipairs(TankAssist.Constants.FontFlags) do
-        if entry.name == name then return entry.flag end
-    end
-    return "OUTLINE"
+    return TankAssist.Media:ResolveFlag(name)
 end
 
 function CastBar:ResolveBarTexture(name)
@@ -906,13 +898,7 @@ function CastBar:BuildLEMSettings()
             name = "Font Face",
             kind = lem.SettingType.Dropdown,
             default = "Friz Quadrata",
-            values = (function()
-                local v = {}
-                for _, entry in ipairs(TankAssist.Constants.Fonts) do
-                    table.insert(v, { text = entry.name })
-                end
-                return v
-            end)(),
+            values = TankAssist.Media:GetFontDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().fontFace or "Friz Quadrata"
             end,
@@ -926,13 +912,7 @@ function CastBar:BuildLEMSettings()
             name = "Font Style",
             kind = lem.SettingType.Dropdown,
             default = "Outline",
-            values = (function()
-                local v = {}
-                for _, entry in ipairs(TankAssist.Constants.FontFlags) do
-                    table.insert(v, { text = entry.name })
-                end
-                return v
-            end)(),
+            values = TankAssist.Media:GetFontFlagDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().fontFlag or "Outline"
             end,

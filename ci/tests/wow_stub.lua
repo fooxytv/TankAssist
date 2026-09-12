@@ -119,7 +119,16 @@ end
 function Widget:SetText(text) self.__text = text end
 function Widget:GetText() return self.__text end
 function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
-function Widget:SetFont(file, size, flags) self.__fontSize = size end
+-- SetFont answers like the real client: false for a face this "client" cannot
+-- load, and the font string is left as it was. 2002 stands in for the faces
+-- that are genuinely absent on some locales.
+_G.__unloadableFonts = { ["Fonts\\2002.TTF"] = true }
+function Widget:SetFont(file, size, flags)
+    if _G.__unloadableFonts[file] then return false end
+    self.__fontPath, self.__fontSize, self.__fontFlags = file, size, flags
+    return true
+end
+function Widget:GetFontPath() return self.__fontPath end
 function Widget:SetFontObject(object) self.__font = object end
 
 -- StatusBar
@@ -137,6 +146,8 @@ function Widget:SetStatusBarColor(r, g, b, a) self.__barColor = { r, g, b, a } e
 -- Texture
 function Widget:SetAtlas(atlas, useSize) record("SetAtlas") self.__atlas = atlas end
 function Widget:SetTexture(file) self.__texture = file end
+function Widget:SetTexCoord(l, r, t, b) self.__texCoord = { l, r, t, b } end
+function Widget:GetTexCoord() return self.__texCoord end
 function Widget:GetTexture() return self.__texture end
 function Widget:SetColorTexture(r, g, b, a) self.__color = { r, g, b, a } end
 function Widget:SetVertexColor(r, g, b, a) self.__vertex = { r, g, b, a } end

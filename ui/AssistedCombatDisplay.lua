@@ -114,7 +114,7 @@ function acd:CreateIcon(parent, size)
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetPoint("TOPLEFT", 2, -2)
     frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconZoom(), size - 4, size - 4)
     local borderColor = {0.3, 0.3, 0.3, 1}
     frame.borderTop = frame:CreateTexture(nil, "OVERLAY")
     frame.borderTop:SetPoint("TOPLEFT", 0, 0)
@@ -153,11 +153,11 @@ function acd:CreateIcon(parent, size)
     TankAssist.Utils:StyleGCDCooldown(frame.gcdCooldown)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
-    frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 12 or 10, "OUTLINE")
+    self:ApplyTextFont(frame.keybind, self:KeybindFontSize(size))
     frame.keybind:SetPoint("TOPLEFT", 4, -4)
     frame.keybind:SetTextColor(1, 1, 1, 1)
     frame.count = frame:CreateFontString(nil, "OVERLAY")
-    frame.count:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 14 or 11, "OUTLINE")
+    self:ApplyTextFont(frame.count, self:CountFontSize(size))
     frame.count:SetPoint("BOTTOMRIGHT", -4, 4)
     frame.count:SetTextColor(1, 1, 1, 1)
     frame.unusable = frame:CreateTexture(nil, "OVERLAY", nil, 1)
@@ -247,6 +247,69 @@ function acd:BuildLEMSettings()
             set = function(layoutName, value)
                 value = math.floor(value / 5 + 0.5) * 5
                 self_ref:SetIconSize(value)
+            end,
+        },
+        {
+            order = 101.5,
+            name = "Icon Crop",
+            kind = lem.SettingType.Slider,
+            default = 0,
+            minValue = 0,
+            maxValue = 1.0,
+            valueStep = 0.1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.iconZoom or 0
+            end,
+            set = function(layoutName, value)
+                value = math.floor(value * 10 + 0.5) / 10
+                TankAssist.Addon.db.profile.assistedCombat.iconZoom = value
+                self_ref:ApplyIconAppearance()
+            end,
+        },
+        {
+            order = 101.6,
+            name = "Font Face",
+            kind = lem.SettingType.Dropdown,
+            default = TankAssist.Media.DefaultFontName(),
+            values = TankAssist.Media:GetFontDropdownValues(),
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.fontFace
+                    or TankAssist.Media.DefaultFontName()
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.fontFace = value
+                self_ref:ApplyIconAppearance()
+            end,
+        },
+        {
+            order = 101.7,
+            name = "Font Style",
+            kind = lem.SettingType.Dropdown,
+            default = TankAssist.Media.DefaultFlagName(),
+            values = TankAssist.Media:GetFontFlagDropdownValues(),
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.fontFlag
+                    or TankAssist.Media.DefaultFlagName()
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.fontFlag = value
+                self_ref:ApplyIconAppearance()
+            end,
+        },
+        {
+            order = 101.8,
+            name = "Text Size Adjust",
+            kind = lem.SettingType.Slider,
+            default = 0,
+            minValue = -4,
+            maxValue = 8,
+            valueStep = 1,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.fontSizeOffset or 0
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.fontSizeOffset = math.floor(value + 0.5)
+                self_ref:ApplyIconAppearance()
             end,
         },
         {
@@ -863,6 +926,56 @@ function acd:SetScale(scale)
     end
 end
 
+-- Appearance helpers. Both buttons are built before the saved variables are
+-- necessarily loaded, so every one of these has to answer sensibly with no db
+-- behind it -- hence the defaults inline rather than a hard index.
+function acd:GetAppearanceSettings()
+    return TankAssist.Addon and TankAssist.Addon.db
+        and TankAssist.Addon.db.profile.assistedCombat or {}
+end
+
+function acd:GetIconZoom()
+    return self:GetAppearanceSettings().iconZoom or 0
+end
+
+function acd:KeybindFontSize(size)
+    local settings = self:GetAppearanceSettings()
+    size = size or settings.iconSize or 50
+    return (size > 50 and 12 or 10) + (settings.fontSizeOffset or 0)
+end
+
+function acd:CountFontSize(size)
+    local settings = self:GetAppearanceSettings()
+    size = size or settings.iconSize or 50
+    return (size > 50 and 14 or 11) + (settings.fontSizeOffset or 0)
+end
+
+function acd:ApplyTextFont(fontString, size)
+    local settings = self:GetAppearanceSettings()
+    TankAssist.Media:SetFont(fontString, settings.fontFace, size, settings.fontFlag)
+end
+
+--- Re-apply crop and fonts to both buttons. Called whenever icon size, zoom or
+-- font settings change; the cooldown, GCD and unusable overlays are anchored to
+-- the icon texture rather than the button, so they follow the crop by
+-- themselves and need nothing here.
+function acd:ApplyIconAppearance()
+    if not self.frame then return end
+
+    local zoom = self:GetIconZoom()
+    for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+        if icon then
+            local width, height = icon:GetSize()
+            -- The art inset is 2px on every side (see CreateIcon), so the
+            -- cropped region has to be measured against the texture, not the
+            -- button, or a non-square button crops on the wrong aspect.
+            TankAssist.Utils:ApplyIconZoom(icon.icon, zoom, (width or 0) - 4, (height or 0) - 4)
+            self:ApplyTextFont(icon.keybind, self:KeybindFontSize(width))
+            self:ApplyTextFont(icon.count, self:CountFontSize(width))
+        end
+    end
+end
+
 function acd:SetIconSize(size)
     if not self.frame then return end
 
@@ -872,9 +985,7 @@ function acd:SetIconSize(size)
     self.aoeIcon:SetSize(size, size)
     self.frame:SetSize(size * 2 + 4, size + 2)
 
-    local fontSize = size > 50 and 12 or 10
-    self.mainIcon.keybind:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "OUTLINE")
-    self.aoeIcon.keybind:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "OUTLINE")
+    self:ApplyIconAppearance()
 end
 
 function acd:ResetPosition()

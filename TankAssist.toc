@@ -29,6 +29,7 @@ libs\LibEQOL\LibEQOL.lua
 core\Constants.lua
 core\GearData.lua
 core\Utils.lua
+core\Media.lua
 core\Sounds.lua
 core\SecretValues.lua
 core\Core.lua
