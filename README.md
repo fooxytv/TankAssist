@@ -86,6 +86,32 @@ All UI components integrate with WoW's Edit Mode via LibEQOL:
 3. Ensure the folder is named `TankAssist`
 4. Restart WoW or `/reload`
 
+### Installing a development branch
+
+`install-TankAssist.ps1` pulls any branch, tag or commit straight into your
+AddOns folder. Nothing needs to be installed on the machine you run it on --
+no git, no clone, no GitHub account -- so copying that one file to a gaming
+machine is enough.
+
+```powershell
+.\install-TankAssist.ps1                              # tip of develop
+.\install-TankAssist.ps1 -Branch feature/my-branch    # a feature branch
+.\install-TankAssist.ps1 -Branch v0.4.6               # a release tag
+.\install-TankAssist.ps1 -List                        # what branches exist
+```
+
+The WoW folder is found from the registry and the usual install locations.
+Point at it explicitly with `-WowPath 'D:\Games\World of Warcraft'` if it lives
+somewhere unusual, or set `TANKASSIST_WOW_PATH` once to stop passing it.
+
+Each run replaces the installed copy outright, so switching branches leaves
+nothing behind from the last one. Your settings and Edit Mode layouts live in
+`WTF\` and are never touched. Add `-WhatIf` to see what would happen without
+writing anything.
+
+Restart the client afterwards rather than using `/reload` -- the `.toc` is only
+read at launch, so a reload will not pick up a version with new files in it.
+
 ## Slash Commands
 
 The slash surface is intentionally small. Almost all user-facing settings live in the in-game config panel (`/ta`).

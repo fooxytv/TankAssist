@@ -33,6 +33,7 @@ rsync -a --exclude='.git' --exclude='.github' --exclude='ci' --exclude='.vscode'
     --exclude='.env*' --exclude='.claude' --exclude='CLAUDE.md' --exclude='README.md' \
     --exclude='CHANGELOG.md' --exclude='.luacheckrc' --exclude='code' \
     --exclude='.gitignore' --exclude='.gitattributes' --exclude='LICENSE' \
+    --exclude='install-TankAssist.ps1' \
     ./ "$staging_dir/"
 
 zip_file="ci/dist/${addon_name}-${version}.zip"

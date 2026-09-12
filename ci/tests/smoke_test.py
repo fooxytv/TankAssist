@@ -27,6 +27,8 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[2]
 STUB = Path(__file__).with_name("wow_stub.lua")
 BINDINGS_XML = ROOT / "Bindings.xml"
+PACKAGE_SH = ROOT / "ci" / "scripts" / "package.sh"
+INSTALLER = ROOT / "install-TankAssist.ps1"
 
 failures = []
 
@@ -349,6 +351,43 @@ def check_bindings(lua):
     check("binding header has a label", results.get("header"), True)
 
 
+def check_packaging():
+    """The installer copies a branch into AddOns; package.sh builds the zip that
+    ships. Both work by excluding the same development files, in two languages
+    that cannot share a list. Let them drift and you get the worst kind of
+    report -- works from the repo, broken from CurseForge, or the reverse.
+    """
+    print("\nsmoke_test [packaging]")
+
+    if not INSTALLER.exists():
+        failures.append("[packaging] install-TankAssist.ps1 is missing from the repo root")
+        print("  FAIL install-TankAssist.ps1 is missing from the repo root")
+        return
+
+    sh = PACKAGE_SH.read_text(encoding="utf-8")
+    # rsync's --exclude='.env*' is a glob; the installer matches literal names,
+    # so it spells out the files that glob covers instead.
+    shipped = {e.rstrip("*") for e in re.findall(r"--exclude='([^']+)'", sh)}
+
+    ps = INSTALLER.read_text(encoding="utf-8")
+    block = re.search(r"\$ExcludeFromInstall = @\((.*?)\)", ps, re.S)
+    if not block:
+        failures.append("[packaging] the installer has no $ExcludeFromInstall list")
+        print("  FAIL the installer has no $ExcludeFromInstall list")
+        return
+    installed = {e.rstrip("*") for e in re.findall(r"'([^']+)'", block.group(1))}
+
+    missing = sorted(n for n in shipped if not any(i == n or i.startswith(n) for i in installed))
+    extra = sorted(n for n in installed if not any(n == s or n.startswith(s) for s in shipped))
+
+    check("installer excludes everything the zip does", ", ".join(missing), "")
+    check("installer excludes nothing extra", ", ".join(extra), "")
+
+    # The one file that must never reach a player: the installer itself.
+    check("the installer is kept out of the shipped zip",
+          "install-TankAssist.ps1" in shipped, True)
+
+
 def run():
     print("\nsmoke_test [load]")
     try:
@@ -444,6 +483,8 @@ if lua is not None:
         ("clearing the offset restores the old size", "defaultKeybindSize", 10),
     ])
     check_bindings(lua)
+
+check_packaging()
 
 print()
 if failures:
