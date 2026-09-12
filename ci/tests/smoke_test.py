@@ -353,12 +353,30 @@ R.keybindFellBack = acd.mainIcon.keybind:GetFontPath() == FRIZ
 R.keybindSize = acd.mainIcon.keybind.__fontSize
 R.countSize = acd.mainIcon.count.__fontSize
 
--- Back to the shipped look.
+-- Cropped: the squat action-bar button. Full width, 80% height, and the art
+-- cropped to suit rather than squashed into it -- the visible region has to end
+-- up at the button's own aspect, or every icon is subtly stretched.
 profile.iconZoomPercent = 5.5
 profile.showBorder = false
+profile.iconShape = "Cropped"
+acd:SetIconSize(50)
+R.croppedWidth = acd.mainIcon.__width
+R.croppedHeight = acd.mainIcon.__height
+local c = acd.mainIcon.icon:GetTexCoord()
+R.croppedArtAspect = math.floor(((c[2] - c[1]) / (c[4] - c[3])) * 1000 + 0.5) / 1000
+R.croppedButtonAspect = math.floor((acd.mainIcon.__width / acd.mainIcon.__height) * 1000 + 0.5) / 1000
+-- Width is untouched by the shape; only the vertical crop deepens.
+R.croppedKeepsWidthTrim = c[1] == 0.055
+R.croppedTrimsMoreVertically = c[3] > c[1]
+-- The frame follows the shorter button rather than leaving a gap.
+R.frameHeight = acd.frame.__height
+
+-- Back to the shipped look.
+profile.iconShape = "Square"
 profile.fontFace = "Friz Quadrata"
 profile.fontSizeOffset = 0
 acd:SetIconSize(50)
+R.squareAgain = acd.mainIcon.__height
 R.backToDefault = acd.mainIcon.icon:GetTexCoord()[1]
 R.defaultKeybindSize = acd.mainIcon.keybind.__fontSize
 
@@ -560,6 +578,14 @@ if lua is not None:
         ("an unloadable face falls back on the button", "keybindFellBack", True),
         ("text size offset applies", "keybindSize", 15),
         ("count text scales with the icon", "countSize", 17),
+        ("cropped keeps the full width", "croppedWidth", 50),
+        ("cropped takes 80% of the height", "croppedHeight", 40),
+        ("cropped art is not stretched", "croppedArtAspect", 1.25),
+        ("cropped art matches the button aspect", "croppedButtonAspect", 1.25),
+        ("cropped leaves the side trim alone", "croppedKeepsWidthTrim", True),
+        ("cropped trims more off top and bottom", "croppedTrimsMoreVertically", True),
+        ("the frame follows the shorter button", "frameHeight", 42),
+        ("square restores the full height", "squareAgain", 50),
         ("restoring the default restores the crop", "backToDefault", 0.055),
         ("clearing the offset restores the size", "defaultKeybindSize", 11),
     ])

@@ -74,6 +74,7 @@ local defaults = {
             -- against it: art edge to edge, no border, and the same 5.5% crop
             -- EllesmereUI and friends use.
             iconZoomPercent = 5.5,
+            iconShape = "Square",
             showBorder = false,
             fontFace = "Friz Quadrata",
             fontFlag = "Outline",
