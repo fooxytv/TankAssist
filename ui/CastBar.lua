@@ -163,18 +163,15 @@ function CastBar:ApplySettings()
 end
 
 function CastBar:ResolveFontPath(name)
-    return TankAssist.Media:GetFontPath(name)
+    return TankAssist.Media:FetchFont(name)
 end
 
 function CastBar:ResolveFontFlag(name)
-    return TankAssist.Media:ResolveFlag(name)
+    return TankAssist.Media:ResolveFontFlag(name)
 end
 
 function CastBar:ResolveBarTexture(name)
-    for _, entry in ipairs(TankAssist.Constants.BarTextures) do
-        if entry.name == name then return entry.path end
-    end
-    return "Interface\\Buttons\\WHITE8x8"
+    return TankAssist.Media:FetchStatusBar(name)
 end
 
 function CastBar:ApplyTextPosition()
@@ -898,7 +895,9 @@ function CastBar:BuildLEMSettings()
             name = "Font Face",
             kind = lem.SettingType.Dropdown,
             default = "Friz Quadrata",
-            values = TankAssist.Media:GetFontDropdownValues(),
+            -- Built when Edit Mode registers, by which point every media
+            -- addon has loaded and registered with LibSharedMedia.
+            values = TankAssist.Media:FontDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().fontFace or "Friz Quadrata"
             end,
@@ -912,7 +911,7 @@ function CastBar:BuildLEMSettings()
             name = "Font Style",
             kind = lem.SettingType.Dropdown,
             default = "Outline",
-            values = TankAssist.Media:GetFontFlagDropdownValues(),
+            values = TankAssist.Media:FontFlagDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().fontFlag or "Outline"
             end,
@@ -926,13 +925,7 @@ function CastBar:BuildLEMSettings()
             name = "Bar Texture",
             kind = lem.SettingType.Dropdown,
             default = "Solid",
-            values = (function()
-                local v = {}
-                for _, entry in ipairs(TankAssist.Constants.BarTextures) do
-                    table.insert(v, { text = entry.name })
-                end
-                return v
-            end)(),
+            values = TankAssist.Media:StatusBarDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().barTexture or "Solid"
             end,

@@ -271,7 +271,7 @@ function acd:BuildLEMSettings()
             name = "Font Face",
             kind = lem.SettingType.Dropdown,
             default = TankAssist.Media.DefaultFontName(),
-            values = TankAssist.Media:GetFontDropdownValues(),
+            values = TankAssist.Media:FontDropdownValues(),
             get = function(layoutName)
                 return TankAssist.Addon.db.profile.assistedCombat.fontFace
                     or TankAssist.Media.DefaultFontName()
@@ -285,11 +285,11 @@ function acd:BuildLEMSettings()
             order = 101.7,
             name = "Font Style",
             kind = lem.SettingType.Dropdown,
-            default = TankAssist.Media.DefaultFlagName(),
-            values = TankAssist.Media:GetFontFlagDropdownValues(),
+            default = TankAssist.Media.DefaultFontFlagName(),
+            values = TankAssist.Media:FontFlagDropdownValues(),
             get = function(layoutName)
                 return TankAssist.Addon.db.profile.assistedCombat.fontFlag
-                    or TankAssist.Media.DefaultFlagName()
+                    or TankAssist.Media.DefaultFontFlagName()
             end,
             set = function(layoutName, value)
                 TankAssist.Addon.db.profile.assistedCombat.fontFlag = value

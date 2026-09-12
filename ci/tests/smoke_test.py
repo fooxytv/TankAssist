@@ -76,7 +76,7 @@ R.fileCount = __fileCount
 -- The modules the .toc is expected to have populated. A rename or a file
 -- dropped from the .toc shows up here rather than as a missing frame in game.
 local expected = {
-    "Addon", "SecretValues", "Utils", "Sounds", "Constants",
+    "Addon", "SecretValues", "Utils", "Sounds", "Media", "Constants",
     "CooldownAlerts", "ExternalCooldowns", "ConfigPanel", "CastBar",
     "GearAdvisor", "GearData", "Media",
 }
@@ -103,6 +103,46 @@ R.noVaultGlow = ns.GearAdvisor.RefreshVaultGlow == nil
 
 return R
 """
+
+# Fonts and bar textures come from LibSharedMedia so that any font pack the
+# player already has fills the dropdowns. Two things have to hold: a pack
+# registered by another addon must appear, and the list must never come back
+# empty -- an empty font dropdown is worse than an unverified one, and the
+# validation that keeps a broken font out could otherwise reject everything.
+MEDIA_SCRIPT = """
+local ns = __ns
+local R = {}
+
+-- Six of the seven built-ins, not seven: the stub declines Fonts\\\\2002.TTF the
+-- way a locale that does not ship it would, and validation is supposed to drop
+-- it rather than offer a face that blanks the text it is applied to.
+R.fontCount = #ns.Media:ListFonts()
+R.offersUsable = false
+R.offersUnusable = false
+for _, name in ipairs(ns.Media:ListFonts()) do
+    if name == "Friz Quadrata" then R.offersUsable = true end
+    if name == "2002" then R.offersUnusable = true end
+end
+
+R.barCount  = #ns.Media:ListStatusBars()
+
+-- Headless has no LibSharedMedia, so this exercises the built-in fallback.
+R.noLSM = not ns.Media:HasLibSharedMedia()
+
+-- A name that was saved before any of this existed still has to resolve.
+R.knownFont = ns.Media:FetchFont("Friz Quadrata")
+
+-- And one that does not exist has to land on the Blizzard default rather than
+-- returning nil into SetFont.
+R.unknownFont = ns.Media:FetchFont("No Such Font At All")
+R.nilFont = ns.Media:FetchFont(nil)
+
+R.knownBar = ns.Media:FetchStatusBar("Solid")
+R.unknownBar = ns.Media:FetchStatusBar("No Such Texture")
+
+return R
+"""
+
 
 # Cooldown tracking is pure arithmetic by design: the update loop must never
 # call a C_Spell API, because a secret value tainting that path silently kills
@@ -205,16 +245,16 @@ local offered = {}
 for _, name in ipairs(ns.Media:ListFonts()) do offered[name] = true end
 R.missingFaceHidden = offered["2002"] == nil
 R.friznOffered = offered["Friz Quadrata"] == true
-R.missingFaceFallsBack = ns.Media:GetFontPath("2002") == FRIZ
-R.unknownNameFallsBack = ns.Media:GetFontPath("No Such Font") == FRIZ
-R.nilNameFallsBack = ns.Media:GetFontPath(nil) == FRIZ
+R.missingFaceFallsBack = ns.Media:FetchFont("2002") == FRIZ
+R.unknownNameFallsBack = ns.Media:FetchFont("No Such Font") == FRIZ
+R.nilNameFallsBack = ns.Media:FetchFont(nil) == FRIZ
 
 local fs = CreateFrame("Frame"):CreateFontString(nil, "OVERLAY")
 R.appliedMissing = ns.Media:SetFont(fs, "2002", 12, "Outline") == FRIZ
 
 -- Morpheus probed fine above; break it only now, so SetFont hits the branch
 -- where the probe passed and the apply still fails.
-R.probedGood = ns.Media:GetFontPath("Morpheus") ~= FRIZ
+R.probedGood = ns.Media:FetchFont("Morpheus") ~= FRIZ
 __unloadableFonts["Fonts\\\\MORPHEUS.TTF"] = true
 R.brokenOnApply = ns.Media:SetFont(fs, "Morpheus", 12, "Outline") == FRIZ
 R.stillHasAFont = fs:GetFontPath() == FRIZ
@@ -222,8 +262,8 @@ R.stillHasAFont = fs:GetFontPath() == FRIZ
 -- A junk size must not reach SetFont as junk.
 R.junkSize = ns.Media:SetFont(fs, "Friz Quadrata", "not a number", "Outline") == FRIZ
 
-R.flagResolved = ns.Media:ResolveFlag("Thick Outline")
-R.flagFallback = ns.Media:ResolveFlag("Nonsense")
+R.flagResolved = ns.Media:ResolveFontFlag("Thick Outline")
+R.flagFallback = ns.Media:ResolveFontFlag("Nonsense")
 
 return R
 """
@@ -427,6 +467,18 @@ if lua is not None:
         ("counts down by the clock", "afterTwenty", 40),
         ("expired reads zero", "afterExpiry", 0),
         ("expired entry is dropped", "entryCleared", True),
+    ])
+    run_script(lua, "shared media", MEDIA_SCRIPT, [
+        ("built-in fonts still offered", "fontCount", 6),
+        ("a usable built-in is offered", "offersUsable", True),
+        ("an unusable built-in is filtered out", "offersUnusable", False),
+        ("built-in bar textures still offered", "barCount", 4),
+        ("headless has no LibSharedMedia", "noLSM", True),
+        ("saved font name resolves", "knownFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),
+        ("unknown font falls back", "unknownFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),
+        ("nil font falls back", "nilFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),
+        ("saved bar name resolves", "knownBar", "Interface" + chr(92) + "Buttons" + chr(92) + "WHITE8x8"),
+        ("unknown bar falls back", "unknownBar", "Interface" + chr(92) + "TargetingFrame" + chr(92) + "UI-StatusBar"),
     ])
     run_script(lua, "sounds", SOUND_SCRIPT, [
         ("SOUNDKIT id uses PlaySound", "numericUsedPlaySound", 1),
