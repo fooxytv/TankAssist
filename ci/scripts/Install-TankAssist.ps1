@@ -97,9 +97,62 @@ function Write-Warn {
 # Locating WoW
 #--------------------------------------------------------------------------------
 
-function Get-WowPathFromRegistry {
-    # Blizzard's key points at the flavor folder on some installs and at the
-    # parent on others, so normalise by looking for the flavor on the end.
+function Get-LocalDriveRoots {
+    # The real drive letters, not a guessed range. A hardcoded C..F list is
+    # wrong in both directions: it misses a G: install and wastes time on
+    # letters that do not exist.
+    #
+    # Network drives are skipped deliberately -- Test-Path against a
+    # disconnected mapping blocks for seconds each, and a WoW install on a
+    # network share is rare enough to be worth a -WowPath.
+    $roots = @()
+    try {
+        foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
+            if (-not $drive.IsReady) { continue }
+            if ($drive.DriveType -ne 'Fixed' -and $drive.DriveType -ne 'Removable') { continue }
+            $roots += $drive.RootDirectory.FullName.TrimEnd('\')
+        }
+    } catch {
+        Write-Verbose "Could not enumerate drives: $($_.Exception.Message)"
+        $roots = @('C:')
+    }
+    return $roots
+}
+
+function Get-WowPathsFromUninstallEntries {
+    # The Blizzard installer records where it actually put each client. This is
+    # the reliable source: it survives a custom install location, and it is
+    # per-flavor rather than one value for the whole machine.
+    $keys = @(
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $found = @()
+    foreach ($key in $keys) {
+        try {
+            $entries = Get-ChildItem -Path $key -ErrorAction Stop
+        } catch {
+            continue
+        }
+        foreach ($entry in $entries) {
+            try {
+                $props = Get-ItemProperty -Path $entry.PSPath -ErrorAction Stop
+            } catch {
+                continue
+            }
+            if ($props.DisplayName -notlike '*World of Warcraft*') { continue }
+            if ([string]::IsNullOrWhiteSpace($props.InstallLocation)) { continue }
+            $found += $props.InstallLocation
+        }
+    }
+    return $found
+}
+
+function Get-WowPathFromBlizzardKey {
+    # Kept as a late fallback rather than a primary source: this key is shared
+    # with any client that has ever registered itself, so on a machine that has
+    # run a private-server or older build it points at that instead. Harmless,
+    # because a candidate only wins if it actually contains the flavor folder.
     $keys = @(
         'HKLM:\SOFTWARE\WOW6432Node\Blizzard Entertainment\World of Warcraft',
         'HKLM:\SOFTWARE\Blizzard Entertainment\World of Warcraft'
@@ -110,13 +163,7 @@ function Get-WowPathFromRegistry {
         } catch {
             continue
         }
-        if ([string]::IsNullOrWhiteSpace($value)) { continue }
-
-        $candidate = $value.TrimEnd('\')
-        if ((Split-Path $candidate -Leaf) -match '^_[a-z]+_$') {
-            $candidate = Split-Path $candidate -Parent
-        }
-        if (Test-Path $candidate) { return $candidate }
+        if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
     }
     return $null
 }
@@ -133,16 +180,27 @@ function Resolve-WowPath {
         [void]$candidates.Add($env:TANKASSIST_WOW_PATH)
     }
 
-    $fromRegistry = Get-WowPathFromRegistry
-    if ($fromRegistry) { [void]$candidates.Add($fromRegistry) }
-
-    foreach ($drive in @('C', 'D', 'E', 'F')) {
-        [void]$candidates.Add("${drive}:\Program Files (x86)\World of Warcraft")
-        [void]$candidates.Add("${drive}:\Program Files\World of Warcraft")
-        [void]$candidates.Add("${drive}:\World of Warcraft")
-        [void]$candidates.Add("${drive}:\Games\World of Warcraft")
+    foreach ($path in (Get-WowPathsFromUninstallEntries)) {
+        [void]$candidates.Add($path)
     }
 
+    $fromKey = Get-WowPathFromBlizzardKey
+    if ($fromKey) { [void]$candidates.Add($fromKey) }
+
+    foreach ($root in (Get-LocalDriveRoots)) {
+        [void]$candidates.Add("$root\World of Warcraft")
+        [void]$candidates.Add("$root\Program Files (x86)\World of Warcraft")
+        [void]$candidates.Add("$root\Program Files\World of Warcraft")
+        [void]$candidates.Add("$root\Games\World of Warcraft")
+        [void]$candidates.Add("$root\Battle.net\World of Warcraft")
+        [void]$candidates.Add("$root\Blizzard\World of Warcraft")
+    }
+
+    # Every candidate that actually holds the flavor, in priority order and
+    # de-duplicated. More than one is common -- a retail install on a data drive
+    # and a Classic install under Program Files -- and picking silently is how
+    # you install into the client you are not playing.
+    $matched = New-Object System.Collections.ArrayList
     foreach ($candidate in $candidates) {
         # [IO.Path]::Combine rather than Join-Path: Join-Path resolves the drive
         # and throws on a machine without an E:, which is most of them, and
@@ -154,13 +212,37 @@ function Resolve-WowPath {
             if ((Split-Path $root -Leaf) -match '^_[a-z]+_$') {
                 $root = Split-Path $root -Parent
             }
-            if (Test-Path ([System.IO.Path]::Combine($root, $Flavor))) { return $root }
+            if ((Test-Path ([System.IO.Path]::Combine($root, $Flavor))) -and
+                ($matched -notcontains $root)) {
+                [void]$matched.Add($root)
+            }
         } catch {
             Write-Verbose "Skipping ${candidate}: $($_.Exception.Message)"
         }
     }
+    if ($matched.Count -gt 0) { return $matched }
 
-    return $null
+    # Last resort: an install somewhere the guesses do not cover, such as
+    # G:\Blizzard Games\World of Warcraft. Two levels down from each drive root
+    # catches those without walking whole disks -- deeper than that and a large
+    # drive takes long enough that -WowPath is the better answer.
+    Write-Step "Not in the usual places -- scanning drives ..."
+    foreach ($root in (Get-LocalDriveRoots)) {
+        try {
+            $hits = Get-ChildItem -Path "$root\" -Directory -Depth 2 -Filter 'World of Warcraft' `
+                -ErrorAction SilentlyContinue
+        } catch {
+            continue
+        }
+        foreach ($hit in $hits) {
+            if ((Test-Path ([System.IO.Path]::Combine($hit.FullName, $Flavor))) -and
+                ($matched -notcontains $hit.FullName)) {
+                [void]$matched.Add($hit.FullName)
+            }
+        }
+    }
+
+    return $matched
 }
 
 #--------------------------------------------------------------------------------
@@ -314,18 +396,20 @@ Write-Host ""
 Write-Host "TankAssist installer" -ForegroundColor Cyan
 Write-Host ""
 
-$wowRoot = Resolve-WowPath -Explicit $WowPath -Flavor $Flavor
-if (-not $wowRoot) {
+$found = @(Resolve-WowPath -Explicit $WowPath -Flavor $Flavor)
+if ($found.Count -eq 0) {
     Write-Host "  Could not find a World of Warcraft install with a $Flavor folder." -ForegroundColor Red
     Write-Host ""
-    Write-Host "  Point at it explicitly:"
-    Write-Host "    .\Install-TankAssist.ps1 -WowPath 'D:\Games\World of Warcraft'"
+    Write-Host "  Looked in the uninstall entries, the Blizzard registry key, and the"
+    Write-Host "  usual folders on every fixed drive. Point at it explicitly:"
+    Write-Host "    .\Install-TankAssist.ps1 -WowPath 'G:\World of Warcraft'"
     Write-Host ""
     Write-Host "  Or set it once for this machine:"
-    Write-Host "    setx TANKASSIST_WOW_PATH 'D:\Games\World of Warcraft'"
+    Write-Host "    setx TANKASSIST_WOW_PATH 'G:\World of Warcraft'"
     Write-Host ""
     exit 1
 }
+$wowRoot = $found[0]
 
 $addonsPath = Join-Path (Join-Path $wowRoot $Flavor) 'Interface\AddOns'
 if (-not (Test-Path $addonsPath)) {
@@ -348,6 +432,23 @@ if (-not (Test-SafeToReplace -TargetPath $targetPath)) {
 
 Write-Step "WoW      $wowRoot ($Flavor)"
 Write-Step "Ref      $Branch"
+
+# Only when we chose for you. If -WowPath or TANKASSIST_WOW_PATH named one,
+# the choice is already made and listing the others is noise.
+$autoChosen = [string]::IsNullOrWhiteSpace($WowPath) -and
+              [string]::IsNullOrWhiteSpace($env:TANKASSIST_WOW_PATH)
+
+if ($found.Count -gt 1 -and $autoChosen) {
+    # Say so rather than pick quietly. Installing into the client you are not
+    # playing looks exactly like the addon silently not working.
+    Write-Host ""
+    Write-Warn "More than one $Flavor install found. Using the first:"
+    foreach ($other in $found) {
+        $mark = if ($other -eq $wowRoot) { '->' } else { '  ' }
+        Write-Warn "    $mark $other"
+    }
+    Write-Warn "  Pass -WowPath to choose a different one."
+}
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("TankAssist-install-" + [Guid]::NewGuid().ToString('N'))
 # -WhatIf:$false throughout the scratch directory: -WhatIf is about what lands

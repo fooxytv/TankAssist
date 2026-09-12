@@ -112,9 +112,18 @@ Then:
 .\Install-TankAssist.ps1 -List                        # what branches exist
 ```
 
-The WoW folder is found from the registry and the usual install locations.
-Point at it explicitly with `-WowPath 'D:\Games\World of Warcraft'` if it lives
-somewhere unusual, or set `TANKASSIST_WOW_PATH` once to stop passing it.
+The WoW folder is found from the Blizzard uninstall entries first, then the
+registry, then the usual folders on every fixed drive, and failing all of that
+a shallow scan of each drive. If more than one install turns up, the chosen one
+and the alternatives are both printed.
+
+Point at it explicitly if it lives somewhere unusual, or set
+`TANKASSIST_WOW_PATH` once to stop passing it:
+
+```powershell
+.\Install-TankAssist.ps1 -WowPath 'G:\World of Warcraft'
+setx TANKASSIST_WOW_PATH 'G:\World of Warcraft'
+```
 
 Each run replaces the installed copy outright, so switching branches leaves
 nothing behind from the last one. Your settings and Edit Mode layouts live in
