@@ -61,7 +61,8 @@ end
 function acd:Create()
     local settings = TankAssist.Addon.db.profile.assistedCombat
     self.frame = CreateFrame("Frame", "TankAssistRotationFrame", UIParent, "BackdropTemplate")
-    self.frame:SetSize(settings.iconSize * 2 + 4, settings.iconSize + 2)
+    local iconW, iconH = self:GetIconDimensions(settings.iconSize)
+    self.frame:SetSize(iconW * 2 + 4, iconH + 2)
     self.frame.editModeName = "TankAssist"
 
     local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
@@ -85,10 +86,10 @@ function acd:Create()
     })
     self.frame:SetBackdropColor(0, 0, 0, 0.2)
 
-    self.mainIcon = self:CreateIcon(self.frame, settings.iconSize)
+    self.mainIcon = self:CreateIcon(self.frame, iconW, iconH)
     self.mainIcon:SetPoint("LEFT", self.frame, "LEFT", 1, 0)
 
-    self.aoeIcon = self:CreateIcon(self.frame, settings.iconSize)
+    self.aoeIcon = self:CreateIcon(self.frame, iconW, iconH)
     self.aoeIcon:SetPoint("LEFT", self.mainIcon, "RIGHT", 2, 0)
 
     self.apiAvailable = assistedCombatAPI:IsAvailable()
@@ -105,9 +106,10 @@ function acd:Create()
     return self.frame
 end
 
-function acd:CreateIcon(parent, size)
+function acd:CreateIcon(parent, size, height)
+    height = height or size
     local frame = CreateFrame("Button", nil, parent)
-    frame:SetSize(size, size)
+    frame:SetSize(size, height)
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
     frame.bg:SetColorTexture(0.12, 0.12, 0.12, 1)
@@ -116,7 +118,7 @@ function acd:CreateIcon(parent, size)
     -- single thing that made these read as "not action bars".
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetAllPoints()
-    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconTrim(), size, size)
+    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconTrim(), size, height)
     local borderColor = {0.3, 0.3, 0.3, 1}
     frame.borderTop = frame:CreateTexture(nil, "OVERLAY")
     frame.borderTop:SetPoint("TOPLEFT", 0, 0)
@@ -274,6 +276,24 @@ function acd:BuildLEMSettings()
                 value = math.floor(value * 2 + 0.5) / 2
                 TankAssist.Addon.db.profile.assistedCombat.iconZoomPercent = value
                 self_ref:ApplyIconAppearance()
+            end,
+        },
+        {
+            -- The skins' Button Shape, under their own names. "Cropped" is the
+            -- squat button: full width, 80% height, art cropped to suit.
+            order = 101.52,
+            name = "Icon Shape",
+            kind = lem.SettingType.Dropdown,
+            default = "Square",
+            values = { { text = "Square" }, { text = "Cropped" } },
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.iconShape or "Square"
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.iconShape =
+                    (value == "Cropped") and "Cropped" or "Square"
+                -- Re-run the size path: shape changes the button, not just the art.
+                self_ref:SetIconSize(TankAssist.Addon.db.profile.assistedCombat.iconSize or 50)
             end,
         },
         {
@@ -967,6 +987,26 @@ function acd:GetIconTrim()
     return percent / 100
 end
 
+--- Button dimensions for an icon size, honouring the shape.
+-- "Cropped" is the action-bar skins' squat button: the same width, 80% of the
+-- height. The art then crops to suit, because GetIconTexCoords derives the
+-- vertical trim from the button's own aspect -- so unlike the fixed extra 10%
+-- the skins take off top and bottom, the art is never stretched to fit.
+local CROPPED_HEIGHT_RATIO = 0.80
+
+function acd:GetIconShape()
+    return self:GetAppearanceSettings().iconShape or "Square"
+end
+
+function acd:GetIconDimensions(size)
+    local settings = self:GetAppearanceSettings()
+    size = size or settings.iconSize or 50
+    if self:GetIconShape() == "Cropped" then
+        return size, math.floor(size * CROPPED_HEIGHT_RATIO + 0.5)
+    end
+    return size, size
+end
+
 function acd:ShowBorder()
     return self:GetAppearanceSettings().showBorder == true
 end
@@ -1026,9 +1066,10 @@ function acd:SetIconSize(size)
 
     TankAssist.Addon.db.profile.assistedCombat.iconSize = size
 
-    self.mainIcon:SetSize(size, size)
-    self.aoeIcon:SetSize(size, size)
-    self.frame:SetSize(size * 2 + 4, size + 2)
+    local width, height = self:GetIconDimensions(size)
+    self.mainIcon:SetSize(width, height)
+    self.aoeIcon:SetSize(width, height)
+    self.frame:SetSize(width * 2 + 4, height + 2)
 
     self:ApplyIconAppearance()
 end
