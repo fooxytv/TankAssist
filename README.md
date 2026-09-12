@@ -55,6 +55,12 @@ The intent is to feel like a streamlined two-button rotation helper (in the spir
 - Six bundled Blizzard SOUNDKIT entries shipped under TankAssist names (Ready Ding, Raid Siren, Alarm, Boss Whisper, Soft Click, Quest Done)
 - Per-spell sound overrides — set a unique sound on individual tracked cooldowns, or fall back to a global default
 
+### Fonts & Bar Textures
+- Font and bar texture lists come from LibSharedMedia-3.0, the same way sounds do — install any media addon (**SharedMediaAdditionalFonts**, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically
+- Nothing is bundled, so the addon stays small and redistributes no font licences
+- TankAssist's own built-ins are registered back into LibSharedMedia, so they are selectable from any other LSM-aware addon too
+- Fonts are validated before being offered: a pack that registers a file it no longer ships is filtered out rather than blanking the text it is applied to
+
 ### Shared Display Options
 The following settings are available for External Cooldowns and Cooldown Alerts:
 - **Display Mode**: Icon Only, Icon + Name, Name Only
