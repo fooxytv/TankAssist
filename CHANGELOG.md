@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list. A UI that registers its font with LibSharedMedia -- EllesmereUI registers Expressway and twenty others -- can be matched exactly by picking the same face.
 
 ### Fixed
+- Keybinds now show for abilities bound behind a macro. `GetActionInfo` does not return a macro index -- for a single-spell macro it returns the spell itself, and for any other macro an opaque id -- but that value was being used as one, so the lookup asked about whichever unrelated macro sat at that index. Macros are now resolved by the name on the button, and where the id happened to collide with a real macro the button could show another ability's key rather than none at all.
+- A macro with conditional branches (`/cast [mod:shift] A; B`) now shows its keybind for every branch, not just whichever one would fire at the moment the button was drawn.
 - Choosing a font that this client cannot load no longer breaks the text. `SetFont` declines such a face rather than raising, which left the font string with no font at all and surfaced the error later on an unrelated update. Faces are now validated before being offered and again as they are applied, with anything that fails falling back to Friz Quadrata. This affected the cast bar font picker, where several of the offered faces (2002, Express Way) are absent on some locales.
 
 ## [0.4.6-alpha.4f7eaab] - 2026-08-21

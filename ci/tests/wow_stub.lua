@@ -246,9 +246,39 @@ _G.GetInstanceInfo = function() return "Test", "none" end
 _G.GetWeaponEnchantInfo = function() return false end
 _G.GetInventoryItemLink = function() return nil end
 _G.GetLootRollItemLink = function() return nil end
-_G.GetActionInfo = function() return nil end
-_G.GetBindingKey = function() return nil end
-_G.GetMacroSpell = function() return nil end
+-- Action bars and macros. __actionSlots is keyed by slot and holds what
+-- GetActionInfo returns; __macros is keyed by macro index. The distinction that
+-- matters, and that the real API makes: for a "smart" single-spell macro the
+-- second return of GetActionInfo is the *spellID*, while for any other macro it
+-- is an opaque id that must not be used as a macro index.
+_G.__actionSlots = {}
+_G.__macros = {}
+_G.__bindings = {}
+
+_G.GetActionInfo = function(slot)
+    local entry = _G.__actionSlots[slot]
+    if not entry then return nil end
+    return entry.actionType, entry.id, entry.subType
+end
+_G.GetActionText = function(slot)
+    local entry = _G.__actionSlots[slot]
+    return entry and entry.macroName or nil
+end
+_G.GetBindingKey = function(command) return _G.__bindings[command] end
+_G.GetMacroIndexByName = function(name)
+    for index, macro in pairs(_G.__macros) do
+        if macro.name == name then return index end
+    end
+    return 0
+end
+_G.GetMacroSpell = function(index)
+    local macro = _G.__macros[index]
+    return macro and macro.liveSpell or nil
+end
+_G.GetMacroBody = function(index)
+    local macro = _G.__macros[index]
+    return macro and macro.body or nil
+end
 _G.GetRuneCooldown = function() return 0, 10, true end
 
 -- Guardian Druid: the spec the addon is primarily developed against.
