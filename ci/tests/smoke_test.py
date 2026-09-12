@@ -27,6 +27,8 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[2]
 STUB = Path(__file__).with_name("wow_stub.lua")
 BINDINGS_XML = ROOT / "Bindings.xml"
+PACKAGE_SH = ROOT / "ci" / "scripts" / "package.sh"
+INSTALLER = ROOT / "install-TankAssist.ps1"
 
 failures = []
 
@@ -76,7 +78,7 @@ R.fileCount = __fileCount
 local expected = {
     "Addon", "SecretValues", "Utils", "Sounds", "Media", "Constants",
     "CooldownAlerts", "ExternalCooldowns", "ConfigPanel", "CastBar",
-    "GearAdvisor", "GearData",
+    "GearAdvisor", "GearData", "Media",
 }
 local missing = {}
 for _, name in ipairs(expected) do
@@ -111,7 +113,17 @@ MEDIA_SCRIPT = """
 local ns = __ns
 local R = {}
 
+-- Six of the seven built-ins, not seven: the stub declines Fonts\\\\2002.TTF the
+-- way a locale that does not ship it would, and validation is supposed to drop
+-- it rather than offer a face that blanks the text it is applied to.
 R.fontCount = #ns.Media:ListFonts()
+R.offersUsable = false
+R.offersUnusable = false
+for _, name in ipairs(ns.Media:ListFonts()) do
+    if name == "Friz Quadrata" then R.offersUsable = true end
+    if name == "2002" then R.offersUnusable = true end
+end
+
 R.barCount  = #ns.Media:ListStatusBars()
 
 -- Headless has no LibSharedMedia, so this exercises the built-in fallback.
@@ -218,6 +230,123 @@ return R
 """
 
 
+# Font selection used to hand SetFont a path straight out of a hardcoded table.
+# SetFont returns false rather than raising for a face the client lacks, so the
+# font string was left with no font at all and the error surfaced later, on the
+# next SetText. These assert the two ways that happens: a face that fails the
+# up-front probe, and one that passes the probe but fails on apply anyway.
+FONT_SCRIPT = """
+local ns = __ns
+local R = {}
+local FRIZ = "Fonts\\\\FRIZQT__.TTF"
+
+-- A face the client cannot load is not offered, and never resolves to itself.
+local offered = {}
+for _, name in ipairs(ns.Media:ListFonts()) do offered[name] = true end
+R.missingFaceHidden = offered["2002"] == nil
+R.friznOffered = offered["Friz Quadrata"] == true
+R.missingFaceFallsBack = ns.Media:FetchFont("2002") == FRIZ
+R.unknownNameFallsBack = ns.Media:FetchFont("No Such Font") == FRIZ
+R.nilNameFallsBack = ns.Media:FetchFont(nil) == FRIZ
+
+local fs = CreateFrame("Frame"):CreateFontString(nil, "OVERLAY")
+R.appliedMissing = ns.Media:SetFont(fs, "2002", 12, "Outline") == FRIZ
+
+-- Morpheus probed fine above; break it only now, so SetFont hits the branch
+-- where the probe passed and the apply still fails.
+R.probedGood = ns.Media:FetchFont("Morpheus") ~= FRIZ
+__unloadableFonts["Fonts\\\\MORPHEUS.TTF"] = true
+R.brokenOnApply = ns.Media:SetFont(fs, "Morpheus", 12, "Outline") == FRIZ
+R.stillHasAFont = fs:GetFontPath() == FRIZ
+
+-- A junk size must not reach SetFont as junk.
+R.junkSize = ns.Media:SetFont(fs, "Friz Quadrata", "not a number", "Outline") == FRIZ
+
+R.flagResolved = ns.Media:ResolveFontFlag("Thick Outline")
+R.flagFallback = ns.Media:ResolveFontFlag("Nonsense")
+
+return R
+"""
+
+# The crop replaces a single hardcoded square texcoord. The aspect correction is
+# the part worth pinning: a square trim on a non-square button stretches the art
+# rather than cropping it.
+CROP_SCRIPT = """
+local ns = __ns
+local R = {}
+
+local l, r, t, b = ns.Utils:GetIconTexCoords(0, 50, 50)
+R.defaultLeft = l
+R.defaultRight = r
+
+local zl = ns.Utils:GetIconTexCoords(1, 50, 50)
+R.zoomCropsFurther = zl > l
+
+-- A wide button crops vertically, so the visible region is wider than tall by
+-- exactly the button's own ratio.
+local wl, wr, wt, wb = ns.Utils:GetIconTexCoords(0, 100, 50)
+R.wideKeepsWidth = wl == l
+R.wideAspect = math.floor(((wr - wl) / (wb - wt)) * 100 + 0.5) / 100
+
+local tl, tr, tt, tb = ns.Utils:GetIconTexCoords(0, 50, 100)
+R.tallAspect = math.floor(((tr - tl) / (tb - tt)) * 100 + 0.5) / 100
+
+-- Out-of-range and junk zooms clamp instead of inverting the texcoords.
+local cl = ns.Utils:GetIconTexCoords(5, 50, 50)
+R.clampsHigh = cl == zl
+R.clampsLow = ns.Utils:GetIconTexCoords(-3, 50, 50) == l
+R.junkZoom = ns.Utils:GetIconTexCoords("x", 50, 50) == l
+
+-- No size given: fall back to a square crop rather than dividing by zero.
+R.noSizeSquare = ns.Utils:GetIconTexCoords(0) == l
+
+return R
+"""
+
+# The buttons themselves: one path (ApplyIconAppearance) now owns crop and font
+# for both icons, and it is the path every setting change goes through, so drive
+# it against a real display rather than trusting the helpers in isolation.
+BUTTON_SCRIPT = """
+local ns = __ns
+local R = {}
+local FRIZ = "Fonts\\\\FRIZQT__.TTF"
+local acd = ns.AssistedCombatDisplay
+
+acd:Create()
+R.created = acd.frame ~= nil and acd.mainIcon ~= nil and acd.aoeIcon ~= nil
+
+local profile = ns.Addon.db.profile.assistedCombat
+R.shipsUncropped = profile.iconZoom
+R.shipsStockFont = profile.fontFace
+
+-- Crop, an unloadable font face and a text-size bump, all at once.
+profile.iconZoom = 1
+profile.fontFace = "2002"
+profile.fontSizeOffset = 3
+acd:SetIconSize(60)
+
+local main = acd.mainIcon.icon:GetTexCoord()
+local aoe = acd.aoeIcon.icon:GetTexCoord()
+R.mainCropped = main ~= nil and main[1] > 0.08
+R.bothIconsMatch = aoe ~= nil and aoe[1] == main[1]
+-- 60px button, 4px of inset: still square, so the crop stays square too.
+R.stillSquare = main ~= nil and main[1] == main[3]
+
+R.keybindFellBack = acd.mainIcon.keybind:GetFontPath() == FRIZ
+R.keybindSize = acd.mainIcon.keybind.__fontSize
+R.countSize = acd.mainIcon.count.__fontSize
+
+-- Back to the shipped look.
+profile.iconZoom = 0
+profile.fontFace = "Friz Quadrata"
+profile.fontSizeOffset = 0
+acd:SetIconSize(50)
+R.backToDefault = acd.mainIcon.icon:GetTexCoord()[1]
+R.defaultKeybindSize = acd.mainIcon.keybind.__fontSize
+
+return R
+"""
+
 
 def check_bindings(lua):
     """Bindings.xml is loaded by the client straight out of the addon folder and
@@ -262,6 +391,43 @@ def check_bindings(lua):
     check("binding header has a label", results.get("header"), True)
 
 
+def check_packaging():
+    """The installer copies a branch into AddOns; package.sh builds the zip that
+    ships. Both work by excluding the same development files, in two languages
+    that cannot share a list. Let them drift and you get the worst kind of
+    report -- works from the repo, broken from CurseForge, or the reverse.
+    """
+    print("\nsmoke_test [packaging]")
+
+    if not INSTALLER.exists():
+        failures.append("[packaging] install-TankAssist.ps1 is missing from the repo root")
+        print("  FAIL install-TankAssist.ps1 is missing from the repo root")
+        return
+
+    sh = PACKAGE_SH.read_text(encoding="utf-8")
+    # rsync's --exclude='.env*' is a glob; the installer matches literal names,
+    # so it spells out the files that glob covers instead.
+    shipped = {e.rstrip("*") for e in re.findall(r"--exclude='([^']+)'", sh)}
+
+    ps = INSTALLER.read_text(encoding="utf-8")
+    block = re.search(r"\$ExcludeFromInstall = @\((.*?)\)", ps, re.S)
+    if not block:
+        failures.append("[packaging] the installer has no $ExcludeFromInstall list")
+        print("  FAIL the installer has no $ExcludeFromInstall list")
+        return
+    installed = {e.rstrip("*") for e in re.findall(r"'([^']+)'", block.group(1))}
+
+    missing = sorted(n for n in shipped if not any(i == n or i.startswith(n) for i in installed))
+    extra = sorted(n for n in installed if not any(n == s or n.startswith(s) for s in shipped))
+
+    check("installer excludes everything the zip does", ", ".join(missing), "")
+    check("installer excludes nothing extra", ", ".join(extra), "")
+
+    # The one file that must never reach a player: the installer itself.
+    check("the installer is kept out of the shipped zip",
+          "install-TankAssist.ps1" in shipped, True)
+
+
 def run():
     print("\nsmoke_test [load]")
     try:
@@ -303,7 +469,9 @@ if lua is not None:
         ("expired entry is dropped", "entryCleared", True),
     ])
     run_script(lua, "shared media", MEDIA_SCRIPT, [
-        ("built-in fonts still offered", "fontCount", 7),
+        ("built-in fonts still offered", "fontCount", 6),
+        ("a usable built-in is offered", "offersUsable", True),
+        ("an unusable built-in is filtered out", "offersUnusable", False),
         ("built-in bar textures still offered", "barCount", 4),
         ("headless has no LibSharedMedia", "noLSM", True),
         ("saved font name resolves", "knownFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),
@@ -327,7 +495,48 @@ if lua is not None:
         ("glow lib absent in headless", "glowUnavailable", False),
         ("no-lib glow is a no-op", "noGlowNoError", True),
     ])
+    run_script(lua, "fonts", FONT_SCRIPT, [
+        ("unloadable face is not offered", "missingFaceHidden", True),
+        ("stock face is offered", "friznOffered", True),
+        ("unloadable face resolves to stock", "missingFaceFallsBack", True),
+        ("unknown name resolves to stock", "unknownNameFallsBack", True),
+        ("nil name resolves to stock", "nilNameFallsBack", True),
+        ("applying an unloadable face falls back", "appliedMissing", True),
+        ("a good face is not forced to stock", "probedGood", True),
+        ("failure after a good probe falls back", "brokenOnApply", True),
+        ("font string is never left fontless", "stillHasAFont", True),
+        ("a junk size still applies a font", "junkSize", True),
+        ("flag name resolves", "flagResolved", "THICKOUTLINE"),
+        ("unknown flag falls back", "flagFallback", "OUTLINE"),
+    ])
+    run_script(lua, "icon crop", CROP_SCRIPT, [
+        ("default crop matches the old literal", "defaultLeft", 0.08),
+        ("default crop matches the old literal", "defaultRight", 0.92),
+        ("full zoom crops further in", "zoomCropsFurther", True),
+        ("wide button keeps its width", "wideKeepsWidth", True),
+        ("wide button crops to 2:1", "wideAspect", 2.0),
+        ("tall button crops to 1:2", "tallAspect", 0.5),
+        ("zoom clamps at 1", "clampsHigh", True),
+        ("zoom clamps at 0", "clampsLow", True),
+        ("junk zoom reads as 0", "junkZoom", True),
+        ("no size given stays square", "noSizeSquare", True),
+    ])
+    run_script(lua, "button appearance", BUTTON_SCRIPT, [
+        ("display builds both buttons", "created", True),
+        ("crop ships off", "shipsUncropped", 0),
+        ("font ships as the stock face", "shipsStockFont", "Friz Quadrata"),
+        ("crop reaches the primary button", "mainCropped", True),
+        ("both buttons crop alike", "bothIconsMatch", True),
+        ("a square button crops square", "stillSquare", True),
+        ("an unloadable face falls back on the button", "keybindFellBack", True),
+        ("text size offset applies", "keybindSize", 15),
+        ("count text scales with the icon", "countSize", 17),
+        ("clearing the crop restores the old look", "backToDefault", 0.08),
+        ("clearing the offset restores the old size", "defaultKeybindSize", 10),
+    ])
     check_bindings(lua)
+
+check_packaging()
 
 print()
 if failures:

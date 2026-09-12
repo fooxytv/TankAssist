@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Font and bar texture lists now come from LibSharedMedia-3.0, the same way sounds already did. Install any media addon (SharedMediaAdditionalFonts, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically. Nothing is bundled, and TankAssist's own built-ins are registered back into LibSharedMedia so other addons gain them too.
+- Icon Crop slider for the Assisted Combat primary and secondary buttons (Edit Mode). Crops the spell art the way action-bar skins such as ElleremereUI do, from the stock trim through to a full-bleed look. The crop is computed per axis, so a non-square button crops rather than stretches.
+- Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list.
+
+### Fixed
+- Choosing a font that this client cannot load no longer breaks the text. `SetFont` declines such a face rather than raising, which left the font string with no font at all and surfaced the error later on an unrelated update. Faces are now validated before being offered and again as they are applied, with anything that fails falling back to Friz Quadrata. This affected the cast bar font picker, where several of the offered faces (2002, Express Way) are absent on some locales.
+
 ## [0.4.6-alpha.4f7eaab] - 2026-08-21
 
 ### Fixed

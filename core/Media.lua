@@ -191,3 +191,74 @@ function media:HasLibSharedMedia()
     return LSM ~= nil
 end
 
+----------------------------------------------------------------------------
+-- Applying
+--
+-- Validation above proves a path loads; this proves it still loads at the
+-- moment it is applied. The two are not the same -- a pack can be disabled
+-- between the probe and the apply, and the probe's answer is cached -- and the
+-- consequence of getting it wrong is nasty: SetFont declines rather than
+-- raising, leaving the FontString with no font at all, and the error surfaces
+-- later on an unrelated SetText.
+--
+-- Every caller goes through here so none of them has to remember that.
+----------------------------------------------------------------------------
+
+function media:ResolveFontFlag(name)
+    for _, entry in ipairs(TankAssist.Constants.FontFlags) do
+        if entry.name == name then return entry.flag end
+    end
+    return "OUTLINE"
+end
+
+function media:FontFlagDropdownValues()
+    return asDropdownValues((function()
+        local names = {}
+        for _, entry in ipairs(TankAssist.Constants.FontFlags) do
+            table.insert(names, entry.name)
+        end
+        return names
+    end)())
+end
+
+--- Apply a font by name. Returns the path that was actually applied, so a
+-- caller (or a test) can tell a fallback from a hit; nil means even the
+-- Blizzard default was refused.
+function media:SetFont(fontString, name, size, flagName)
+    if not fontString or not fontString.SetFont then return nil end
+
+    size = tonumber(size) or 11
+    if size < 1 then size = 1 end
+
+    local flag = self:ResolveFontFlag(flagName)
+    local path = self:FetchFont(name)
+
+    local ok, applied = pcall(fontString.SetFont, fontString, path, size, flag)
+    if ok and applied ~= false then
+        return path
+    end
+
+    -- Proved usable and still refused. Drop the cached verdict so the next
+    -- listing stops offering it, and fall back rather than leave the string
+    -- with nothing.
+    fontUsable[path] = false
+    if path ~= FALLBACK_FONT then
+        local retryOk, retryApplied = pcall(fontString.SetFont, fontString, FALLBACK_FONT, size, flag)
+        if retryOk and retryApplied ~= false then
+            return FALLBACK_FONT
+        end
+    end
+    if fontString.SetFontObject then
+        pcall(fontString.SetFontObject, fontString, "GameFontNormal")
+    end
+    return nil
+end
+
+function media.DefaultFontName()
+    return "Friz Quadrata"
+end
+
+function media.DefaultFontFlagName()
+    return "Outline"
+end
+
