@@ -4,6 +4,9 @@
 ## Author: Simon
 ## Version: 0.4.6-alpha.4f7eaab
 ## SavedVariables: TankAssistDB
+# Listed so they load before us and their fonts and textures are already
+# registered with LibSharedMedia by the time our dropdowns are built.
+## OptionalDeps: SharedMedia, SharedMediaAdditionalFonts, SharedMedia_Causese
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
 # Libraries
@@ -30,6 +33,7 @@ core\Constants.lua
 core\GearData.lua
 core\Utils.lua
 core\Sounds.lua
+core\Media.lua
 core\SecretValues.lua
 core\Core.lua
 core\Bindings.lua

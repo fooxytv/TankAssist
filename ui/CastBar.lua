@@ -165,10 +165,7 @@ function CastBar:ApplySettings()
 end
 
 function CastBar:ResolveFontPath(name)
-    for _, entry in ipairs(TankAssist.Constants.Fonts) do
-        if entry.name == name then return entry.path end
-    end
-    return "Fonts\\FRIZQT__.TTF"
+    return TankAssist.Media:FetchFont(name)
 end
 
 function CastBar:ResolveFontFlag(name)
@@ -179,10 +176,7 @@ function CastBar:ResolveFontFlag(name)
 end
 
 function CastBar:ResolveBarTexture(name)
-    for _, entry in ipairs(TankAssist.Constants.BarTextures) do
-        if entry.name == name then return entry.path end
-    end
-    return "Interface\\Buttons\\WHITE8x8"
+    return TankAssist.Media:FetchStatusBar(name)
 end
 
 function CastBar:ApplyTextPosition()
@@ -906,13 +900,9 @@ function CastBar:BuildLEMSettings()
             name = "Font Face",
             kind = lem.SettingType.Dropdown,
             default = "Friz Quadrata",
-            values = (function()
-                local v = {}
-                for _, entry in ipairs(TankAssist.Constants.Fonts) do
-                    table.insert(v, { text = entry.name })
-                end
-                return v
-            end)(),
+            -- Built when Edit Mode registers, by which point every media
+            -- addon has loaded and registered with LibSharedMedia.
+            values = TankAssist.Media:FontDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().fontFace or "Friz Quadrata"
             end,
@@ -946,13 +936,7 @@ function CastBar:BuildLEMSettings()
             name = "Bar Texture",
             kind = lem.SettingType.Dropdown,
             default = "Solid",
-            values = (function()
-                local v = {}
-                for _, entry in ipairs(TankAssist.Constants.BarTextures) do
-                    table.insert(v, { text = entry.name })
-                end
-                return v
-            end)(),
+            values = TankAssist.Media:StatusBarDropdownValues(),
             get = function(layoutName)
                 return self_ref:GetSettings().barTexture or "Solid"
             end,
