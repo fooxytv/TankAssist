@@ -96,6 +96,16 @@ function utils:GetSpellInfo(spellId)
     return nil, nil
 end
 
+-- Macro commands that can cast a spell. "/use" included: on a spell it behaves
+-- exactly as /cast, and plenty of macros are written that way.
+local MACRO_CAST_COMMANDS = {
+    cast = true,
+    use = true,
+    castsequence = true,
+    castrandom = true,
+    spell = true,
+}
+
 function utils:GetSpellKeybind(spellId)
     local now = GetTime()
     if now - self.keybindCacheTime < self.keybindCacheDuration then
@@ -137,25 +147,35 @@ function utils:GetSpellKeybind(spellId)
         { start = 133, prefix = "ACTIONBUTTON" },
     }
 
-    local function checkSpellMatch(actionType, id)
-        if actionType == "spell" then
-            if id == spellId then
-                return true
-            end
-            local slotSpellInfo = id and C_Spell.GetSpellInfo(id)
-            if slotSpellInfo and slotSpellInfo.name == name then
-                return true
-            end
-        elseif actionType == "macro" then
-            local macroSpell, _ = GetMacroSpell(id)
-            if macroSpell then
-                if macroSpell == spellId or macroSpell == name then
-                    return true
-                end
-                if type(macroSpell) == "number" then
-                    local macroSpellInfo = C_Spell.GetSpellInfo(macroSpell)
-                    if macroSpellInfo and macroSpellInfo.name == name then
-                        return true
+    local function matchesSpell(candidate)
+        if not candidate then return false end
+        if candidate == spellId or candidate == name then return true end
+        if type(candidate) == "number" then
+            local info = C_Spell.GetSpellInfo(candidate)
+            if info and info.name == name then return true end
+        end
+        return false
+    end
+
+    -- GetMacroSpell answers for the branch that would fire right now, so
+    -- "/cast [mod:shift] A; B" reports a different spell depending on whether
+    -- shift happens to be held, and the keybind appears and vanishes with it.
+    -- The body names every branch, conditionals stripped.
+    local function macroBodyCasts(macroIndex)
+        local body = GetMacroBody and GetMacroBody(macroIndex)
+        if not body then return false end
+        for line in body:gmatch("[^\r\n]+") do
+            local command, args = line:match("^%s*/(%a+)!?%s*(.*)$")
+            if command and args ~= "" and MACRO_CAST_COMMANDS[command:lower()] then
+                -- ";" separates conditional branches, "," packs a castsequence.
+                for rawClause in args:gmatch("[^;]+") do
+                    -- Loop variables are const in 5.4 and the headless test
+                    -- runtime enforces it, so trim into locals rather than
+                    -- writing back over them.
+                    local clause = rawClause:gsub("%b[]", "")
+                    for rawToken in clause:gmatch("[^,]+") do
+                        local token = rawToken:match("^%s*!?%s*(.-)%s*$")
+                        if token ~= "" and token == name then return true end
                     end
                 end
             end
@@ -163,9 +183,34 @@ function utils:GetSpellKeybind(spellId)
         return false
     end
 
+    local function checkSpellMatch(slot, actionType, id, subType)
+        if actionType == "spell" then
+            return matchesSpell(id)
+        elseif actionType == "macro" then
+            -- A "smart" single-spell macro: Blizzard has already resolved it
+            -- and `id` IS the spellID, not a macro index. Handing that to
+            -- GetMacroSpell looks up whichever unrelated macro happens to sit
+            -- at that index, which is why keybinds never showed for macros.
+            if subType == "spell" and matchesSpell(id) then
+                return true
+            end
+
+            -- For every other macro `id` is not a usable identifier either.
+            -- The macro has to be found by the name on the button.
+            local macroName = GetActionText and GetActionText(slot)
+            local macroIndex = macroName and GetMacroIndexByName
+                and GetMacroIndexByName(macroName)
+            if not macroIndex or macroIndex == 0 then return false end
+
+            if matchesSpell(GetMacroSpell(macroIndex)) then return true end
+            return macroBodyCasts(macroIndex)
+        end
+        return false
+    end
+
     for slot = 1, 180 do
-        local actionType, id = GetActionInfo(slot)
-        if checkSpellMatch(actionType, id) then
+        local actionType, id, subType = GetActionInfo(slot)
+        if checkSpellMatch(slot, actionType, id, subType) then
             for _, bar in ipairs(barMappings) do
                 if slot >= bar.start and slot < bar.start + 12 then
                     local buttonNum = slot - bar.start + 1

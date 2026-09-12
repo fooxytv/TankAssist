@@ -310,6 +310,75 @@ R.noSizeSquare = ns.Utils:GetIconTexCoords(0.055) == l
 return R
 """
 
+# Keybinds on the buttons come from walking the action bars and asking what each
+# slot holds. Macros are where that goes wrong, and it went wrong twice:
+#
+#  * GetActionInfo's second return is NOT a macro index. For a "smart"
+#    single-spell macro it is the spellID; for any other macro it is an opaque
+#    id. The old code passed it straight to GetMacroSpell, which then looked up
+#    whichever unrelated macro happened to sit at that index -- so a keybind
+#    behind a macro simply never appeared.
+#  * GetMacroSpell answers only for the branch that would fire right now, so a
+#    "/cast [mod:shift] A; B" macro hides B until shift is held.
+KEYBIND_SCRIPT = """
+local ns = __ns
+local R = {}
+
+local BARKSKIN, INSTINCTS = 22812, 61336
+local SKULL_BASH, IRONFUR = 106839, 192081
+
+-- ACTIONBUTTON1..12 are slots 1..12; MULTIACTIONBAR1BUTTON1.. are slots 61..
+__bindings["ACTIONBUTTON1"] = "Q"
+__bindings["ACTIONBUTTON2"] = "SHIFT-E"
+__bindings["ACTIONBUTTON3"] = "R"
+__bindings["ACTIONBUTTON4"] = "F"
+
+-- Slot 1: a plain spell, the case that always worked.
+__actionSlots[1] = { actionType = "spell", id = BARKSKIN }
+
+-- Slot 2: a "smart" single-spell macro. subType is "spell" and id is the
+-- spellID itself -- not an index into __macros.
+__actionSlots[2] = { actionType = "macro", id = INSTINCTS, subType = "spell",
+                     macroName = "SI" }
+
+-- Slot 3: a conditional macro. GetMacroSpell reports only the branch that
+-- would fire now (Ironfur); Skull Bash is the other branch and is what we ask
+-- for, so only a body scan finds it.
+__actionSlots[3] = { actionType = "macro", id = 999, macroName = "Utility" }
+__macros[7] = {
+    name = "Utility",
+    liveSpell = IRONFUR,
+    body = "#showtooltip\\n/cast [mod:shift] Skull Bash; Ironfur",
+}
+
+-- Slot 4: a macro whose opaque id collides with a real, unrelated macro index.
+-- This is the old bug's mirror: resolving by id would report Barkskin's key
+-- here and hand out a wrong binding rather than none.
+__actionSlots[4] = { actionType = "macro", id = 7, macroName = "Unrelated" }
+__macros[11] = { name = "Unrelated", liveSpell = nil,
+                 body = "/use Healthstone" }
+
+local function keyFor(spellId)
+    ns.Utils:ClearKeybindCache()
+    return ns.Utils:GetSpellKeybind(spellId)
+end
+
+R.plainSpell = keyFor(BARKSKIN)
+R.smartMacro = keyFor(INSTINCTS)
+R.conditionalBranch = keyFor(SKULL_BASH)
+R.liveMacroSpell = keyFor(IRONFUR)
+
+-- The collision slot must contribute nothing: its macro casts an item, and
+-- nothing in it should claim a spell binding.
+__actionSlots[1] = nil
+__actionSlots[2] = nil
+__actionSlots[3] = nil
+R.noFalseMatch = keyFor(BARKSKIN) == nil
+
+return R
+"""
+
+
 # The buttons themselves: one path (ApplyIconAppearance) now owns crop and font
 # for both icons, and it is the path every setting change goes through, so drive
 # it against a real display rather than trusting the helpers in isolation.
@@ -498,7 +567,11 @@ def run_script(lua, label, script, checks):
         print(f"  FAIL {exc}")
         return
     for name, key, expected in checks:
-        check(name, results[key], expected)
+        # .get, not [key]: a nil in Lua leaves the key out of the table
+        # entirely, and returning nil is exactly what a broken lookup does. That
+        # deserves a FAIL naming the check, not a KeyError traceback that buries
+        # which assertion died.
+        check(name, results.get(key), expected)
 
 
 lua = run()
@@ -562,6 +635,13 @@ if lua is not None:
         ("trim clamps at zero", "clampsLow", 0.0),
         ("junk falls back to the stock trim", "junkTrim", 0.08),
         ("no size given stays square", "noSizeSquare", True),
+    ])
+    run_script(lua, "keybinds", KEYBIND_SCRIPT, [
+        ("a plain spell slot resolves", "plainSpell", "Q"),
+        ("a smart single-spell macro resolves", "smartMacro", "SHIFT-E"),
+        ("a conditional branch is found in the body", "conditionalBranch", "R"),
+        ("the live macro spell resolves", "liveMacroSpell", "R"),
+        ("an id collision does not invent a binding", "noFalseMatch", True),
     ])
     run_script(lua, "button appearance", BUTTON_SCRIPT, [
         ("display builds both buttons", "created", True),
