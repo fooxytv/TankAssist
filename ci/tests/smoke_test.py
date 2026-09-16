@@ -379,6 +379,69 @@ return R
 """
 
 
+# The external cooldown icons take the same crop/shape/border/font settings as
+# the Assisted Combat buttons, out of the same IconStyle module. The point of
+# sharing it is that the two agree, so this asserts against the same numbers --
+# and against the one place they deliberately differ, the border default.
+EXTERNALS_SCRIPT = """
+local ns = __ns
+local R = {}
+local FRIZ = "Fonts\\\\FRIZQT__.TTF"
+local ec = ns.ExternalCooldowns
+
+local profile = ns.Addon.db.profile.externalCooldowns
+R.shipsAtSkinDefault = profile.iconZoomPercent
+
+-- The border is signal here, not chrome: it says an external is on you. It is
+-- the one setting that ships differently from the Assisted Combat buttons.
+R.shipsWithBorder = ec:ShowBorder()
+R.buttonsShipWithout = ns.AssistedCombatDisplay:GetAppearanceSettings().showBorder
+
+ec:Create()
+local icon = ec:GetIcon(1)
+R.built = icon ~= nil and icon.icon ~= nil
+
+-- Art fills the icon frame rather than sitting inset inside the background.
+R.artFillsIcon = icon.icon.texture:IsFillingParent()
+R.shippedTrim = icon.icon.texture:GetTexCoord()[1]
+R.borderShown = icon.icon.border.top:IsShown()
+
+-- Same shape maths as the buttons: 36 wide stays 36, height goes to 80%.
+profile.iconShape = "Cropped"
+profile.iconZoomPercent = 20
+profile.showBorder = false
+ec:ApplyIconAppearance()
+
+local w, h = ec:GetIconDimensions()
+R.croppedWidth = w
+R.croppedHeight = h
+local c = icon.icon.texture:GetTexCoord()
+R.croppedTrim = c[1]
+R.croppedArtAspect = math.floor(((c[2] - c[1]) / (c[4] - c[3])) * 1000 + 0.5) / 1000
+R.croppedButtonAspect = math.floor((w / h) * 1000 + 0.5) / 1000
+R.borderHides = icon.icon.border.top:IsShown() ~= true
+
+-- An unloadable face falls back rather than blanking the timer text.
+profile.fontFace = "2002"
+profile.fontSizeOffset = 2
+ec:ApplyIconAppearance()
+R.fontFellBack = icon.timerInside:GetFontPath() == FRIZ
+R.timerSize = icon.timerInside.__fontSize
+R.nameSize = icon.spellName.__fontSize
+
+-- Back to shipped.
+profile.iconShape = "Square"
+profile.iconZoomPercent = 5.5
+profile.showBorder = true
+profile.fontFace = "Friz Quadrata"
+profile.fontSizeOffset = 0
+ec:ApplyIconAppearance()
+R.squareAgain = select(2, ec:GetIconDimensions())
+
+return R
+"""
+
+
 # The buttons themselves: one path (ApplyIconAppearance) now owns crop and font
 # for both icons, and it is the path every setting change goes through, so drive
 # it against a real display rather than trusting the helpers in isolation.
@@ -642,6 +705,25 @@ if lua is not None:
         ("a conditional branch is found in the body", "conditionalBranch", "R"),
         ("the live macro spell resolves", "liveMacroSpell", "R"),
         ("an id collision does not invent a binding", "noFalseMatch", True),
+    ])
+    run_script(lua, "external cooldowns", EXTERNALS_SCRIPT, [
+        ("ships at the same 5.5% crop", "shipsAtSkinDefault", 5.5),
+        ("border ships on, unlike the buttons", "shipsWithBorder", True),
+        ("the buttons still ship without one", "buttonsShipWithout", False),
+        ("the display builds an icon", "built", True),
+        ("the art fills the icon", "artFillsIcon", True),
+        ("the shipped crop matches the buttons", "shippedTrim", 0.055),
+        ("the border is drawn by default", "borderShown", True),
+        ("cropped keeps the full width", "croppedWidth", 36),
+        ("cropped takes 80% of the height", "croppedHeight", 29),
+        ("the crop setting reaches the art", "croppedTrim", 0.2),
+        ("cropped art is not stretched", "croppedArtAspect", 1.241),
+        ("cropped art matches the icon aspect", "croppedButtonAspect", 1.241),
+        ("the border can be turned off", "borderHides", True),
+        ("an unloadable face falls back", "fontFellBack", True),
+        ("the size offset reaches the timer", "timerSize", 18),
+        ("the size offset reaches the name", "nameSize", 12),
+        ("square restores the full height", "squareAgain", 36),
     ])
     run_script(lua, "button appearance", BUTTON_SCRIPT, [
         ("display builds both buttons", "created", True),

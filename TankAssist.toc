@@ -34,6 +34,7 @@ core\GearData.lua
 core\Utils.lua
 core\Sounds.lua
 core\Media.lua
+core\IconStyle.lua
 core\SecretValues.lua
 core\Core.lua
 core\Bindings.lua
