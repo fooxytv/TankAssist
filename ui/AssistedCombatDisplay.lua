@@ -13,6 +13,13 @@ end
 TankAssist.AssistedCombatDisplay = {}
 local acd = TankAssist.AssistedCombatDisplay
 
+-- The crop, shape, border and font all come from TankAssist.IconStyle, which
+-- the external cooldowns share. An action button draws no border of its own,
+-- hence false here; a widget whose border carries meaning passes true.
+-- Declared up here because BuildLEMSettings reads it: a local declared further
+-- down is simply not in scope above, and resolves to a nil global instead.
+local BORDER_DEFAULT = false
+
 local assistedCombatAPI = {}
 
 function assistedCombatAPI:IsAvailable()
@@ -896,11 +903,6 @@ function acd:GetAppearanceSettings()
     return TankAssist.Addon and TankAssist.Addon.db
         and TankAssist.Addon.db.profile.assistedCombat or {}
 end
-
--- The crop, shape, border and font all come from TankAssist.IconStyle, which
--- the external cooldowns share. An action button draws no border of its own,
--- hence false here; a widget whose border carries meaning passes true.
-local BORDER_DEFAULT = false
 
 function acd:GetIconTrim()
     return TankAssist.IconStyle:GetTrim(self:GetAppearanceSettings())

@@ -11,6 +11,13 @@ end
 TankAssist.ExternalCooldowns = {}
 local ec = TankAssist.ExternalCooldowns
 
+-- Unlike the Assisted Combat buttons, the border here is coloured and says what
+-- you are looking at -- an external someone has cast on you -- so it is signal
+-- rather than chrome and stays on unless turned off.
+-- Declared up here because BuildLEMSettings reads it: a local declared further
+-- down is not in scope above, and resolves to a nil global instead.
+local BORDER_DEFAULT = true
+
 local function IsLibEQOLAvailable()
     return lem ~= nil
 end
@@ -790,11 +797,6 @@ function ec:SetScale(scale)
         self:GetSettings().scale = scale
     end
 end
-
--- Unlike the Assisted Combat buttons, the border here is coloured and says
--- what you are looking at -- an external someone has cast on you -- so it is
--- signal rather than chrome and stays on unless turned off.
-local BORDER_DEFAULT = true
 
 function ec:GetIconDimensions(size)
     local settings = self:GetSettings()
