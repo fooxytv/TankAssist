@@ -166,6 +166,14 @@ local defaults = {
             alertStyle = "BOTH",
             timerPosition = "INSIDE",
             borderColor = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
+            -- Border on: coloured to mark a cooldown coming up or ready, so
+            -- it is information rather than decoration.
+            iconZoomPercent = 5.5,
+            iconShape = "Square",
+            showBorder = true,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            fontSizeOffset = 0,
             soundEnabled = false,
             trackedSpells = {},
             trackedSpellsBySpec = {},

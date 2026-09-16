@@ -11,6 +11,12 @@ end
 TankAssist.CooldownAlerts = {}
 local ca = TankAssist.CooldownAlerts
 
+-- As with the external cooldowns, the border here is coloured and carries
+-- meaning -- it marks a cooldown coming up or ready -- so it is signal rather
+-- than chrome and ships on. Declared at the top because BuildLEMSettings reads
+-- it, and a local declared further down is not in scope above.
+local BORDER_DEFAULT = true
+
 local function IsLibEQOLAvailable()
     return lem ~= nil
 end
@@ -179,20 +185,21 @@ end
 
 function ca:CreateAlertIcon()
     local settings = self:GetSettings()
-    local size = settings.iconSize
+    local width, height = self:GetIconDimensions()
 
     local frame = CreateFrame("Frame", nil, self.frame)
-    frame:SetSize(size, size + 15)
+    frame:SetSize(width, height + 15)
     frame.icon = CreateFrame("Frame", nil, frame)
-    frame.icon:SetSize(size, size)
+    frame.icon:SetSize(width, height)
     frame.icon:SetPoint("TOP", frame, "TOP", 0, 0)
     frame.icon.bg = frame.icon:CreateTexture(nil, "BACKGROUND")
     frame.icon.bg:SetAllPoints()
     frame.icon.bg:SetColorTexture(0, 0, 0, 0.6)
+    -- Edge to edge, as an action button does it. The old 2px inset let the
+    -- background show as a dark frame around every icon.
     frame.icon.texture = frame.icon:CreateTexture(nil, "ARTWORK")
-    frame.icon.texture:SetPoint("TOPLEFT", 2, -2)
-    frame.icon.texture:SetPoint("BOTTOMRIGHT", -2, 2)
-    frame.icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    frame.icon.texture:SetAllPoints()
+    TankAssist.IconStyle:ApplyTexCoords(frame.icon.texture, settings, width, height)
     frame.cooldown = CreateFrame("Cooldown", nil, frame.icon, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints(frame.icon.texture)
     frame.cooldown:SetDrawEdge(false)
@@ -219,16 +226,23 @@ function ca:CreateAlertIcon()
     frame.icon.borderRight:SetPoint("BOTTOMRIGHT", 0, 0)
     frame.icon.borderRight:SetWidth(1)
     frame.icon.borderRight:SetColorTexture(unpack(borderColor))
+    frame.icon.border = {
+        top = frame.icon.borderTop,
+        bottom = frame.icon.borderBottom,
+        left = frame.icon.borderLeft,
+        right = frame.icon.borderRight,
+    }
+    TankAssist.IconStyle:ApplyBorder(frame.icon.border, self:ShowBorder())
     frame.timerInside = frame.icon:CreateFontString(nil, "OVERLAY")
-    frame.timerInside:SetFont("Fonts\\FRIZQT__.TTF", 16, "THICKOUTLINE")
+    TankAssist.IconStyle:ApplyFont(settings, frame.timerInside, 16)
     frame.timerInside:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.timerInside:SetTextColor(1, 1, 1, 1)
     frame.timerBelow = frame:CreateFontString(nil, "OVERLAY")
-    frame.timerBelow:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    TankAssist.IconStyle:ApplyFont(settings, frame.timerBelow, 11)
     frame.timerBelow:SetPoint("TOP", frame.icon, "BOTTOM", 0, -2)
     frame.timerBelow:SetTextColor(1, 1, 1, 1)
     frame.spellName = frame:CreateFontString(nil, "OVERLAY")
-    frame.spellName:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    TankAssist.IconStyle:ApplyFont(settings, frame.spellName, 10)
     frame.spellName:SetTextColor(1, 1, 1, 1)
     frame.spellName:SetWordWrap(false)
     frame.readyFlash = frame.icon:CreateTexture(nil, "OVERLAY", nil, 7)
@@ -236,7 +250,7 @@ function ca:CreateAlertIcon()
     frame.readyFlash:SetColorTexture(0.2, 1, 0.2, 0.5)
     frame.readyFlash:Hide()
     frame.readyText = frame.icon:CreateFontString(nil, "OVERLAY")
-    frame.readyText:SetFont("Fonts\\FRIZQT__.TTF", 12, "THICKOUTLINE")
+    TankAssist.IconStyle:ApplyFont(settings, frame.readyText, 12)
     frame.readyText:SetPoint("CENTER", frame.icon, "CENTER", 0, 0)
     frame.readyText:SetTextColor(0.2, 1, 0.2, 1)
     frame.readyText:SetText("READY")
@@ -282,7 +296,9 @@ function ca:Update()
     local now = GetTime()
     local countdownDuration = settings.countdownDuration or 3
     local displayMode = settings.displayMode or "ICON_ONLY"
-    local iconSize = settings.iconSize or 36
+    -- Width and height differ once the Cropped shape is on, so the layout has
+    -- to carry both rather than assuming a square.
+    local iconSize, iconHeight = self:GetIconDimensions()
     local alertStyle = settings.alertStyle or "BOTH"
     local activeIcons = {}
     local sv = TankAssist.SecretValues
@@ -373,7 +389,7 @@ function ca:Update()
     end
 
     local totalWidth = #activeIcons * iconWidth + math.max(0, #activeIcons - 1) * spacing
-    local totalHeight = iconSize + 15
+    local totalHeight = iconHeight + 15
     if displayMode == "NAME_ONLY" then
         totalHeight = 20
     end
@@ -391,8 +407,8 @@ function ca:Update()
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
         else
-            icon:SetSize(iconWidth, iconSize + 15)
-            icon.icon:SetSize(iconSize, iconSize)
+            icon:SetSize(iconWidth, iconHeight + 15)
+            icon.icon:SetSize(iconSize, iconHeight)
             icon.icon:Show()
         end
 
@@ -559,7 +575,7 @@ end
 function ca:BuildLEMSettings()
     local self_ref = self
 
-    return {
+    local entries = {
         {
             order = 199,
             name = "Enabled",
@@ -743,6 +759,25 @@ function ca:BuildLEMSettings()
             end,
         },
     }
+
+    -- Crop, shape, border and font, shared with the Assisted Combat buttons and
+    -- the external cooldowns. Spliced in after Icon Size: they describe the icon
+    -- itself and belong beside its size, not after the behaviour toggles.
+    local appearance = TankAssist.IconStyle:BuildSettings({
+        getSettings = function() return self_ref:GetSettings() end,
+        refresh = function() self_ref:ApplyIconAppearance() end,
+        resize = function()
+            self_ref:ApplyIconAppearance()
+            if self_ref.editMode then self_ref:OnEditModeEnter() end
+        end,
+        borderDefault = BORDER_DEFAULT,
+        startOrder = 101.5,
+    })
+    for offset, entry in ipairs(appearance) do
+        table.insert(entries, 3 + offset, entry)
+    end
+
+    return entries
 end
 
 function ca:RegisterEditModeLibEQOL()
@@ -903,7 +938,9 @@ function ca:OnEditModeEnter()
     self.frame:SetMovable(true)
 
     local settings = self:GetSettings()
-    local iconSize = settings.iconSize or 36
+    -- Width and height differ once the Cropped shape is on, so the layout has
+    -- to carry both rather than assuming a square.
+    local iconSize, iconHeight = self:GetIconDimensions()
     local displayMode = settings.displayMode or "ICON_ONLY"
     local spacing = 4
     local placeholderSpells = { 871, 12975, 6552 }
@@ -920,7 +957,7 @@ function ca:OnEditModeEnter()
         iconWidth = 80
     end
     local totalWidth = placeholderCount * iconWidth + (placeholderCount - 1) * spacing
-    local totalHeight = iconSize + 15
+    local totalHeight = iconHeight + 15
     if displayMode == "NAME_ONLY" then
         totalHeight = 20
     end
@@ -936,8 +973,8 @@ function ca:OnEditModeEnter()
             icon:SetSize(iconWidth, 20)
             icon.icon:Hide()
         else
-            icon:SetSize(iconWidth, iconSize + 15)
-            icon.icon:SetSize(iconSize, iconSize)
+            icon:SetSize(iconWidth, iconHeight + 15)
+            icon.icon:SetSize(iconSize, iconHeight)
             icon.icon:Show()
         end
 
@@ -1040,9 +1077,40 @@ function ca:SetScale(scale)
     end
 end
 
+function ca:GetIconDimensions(size)
+    local settings = self:GetSettings()
+    return TankAssist.IconStyle:GetDimensions(settings, size or settings.iconSize or 36)
+end
+
+function ca:ShowBorder()
+    return TankAssist.IconStyle:ShowBorder(self:GetSettings(), BORDER_DEFAULT)
+end
+
+--- Re-apply crop, border and fonts to every icon already built.
+-- Called only from settings changes, never from the ticker: the update loop
+-- here is deliberately pure arithmetic, and anything that reaches an API from
+-- inside it risks tainting the path that draws these frames at all.
+function ca:ApplyIconAppearance()
+    local settings = self:GetSettings()
+    local width, height = self:GetIconDimensions()
+    local show = self:ShowBorder()
+    for _, icon in ipairs(self.icons or {}) do
+        if icon.icon then
+            TankAssist.IconStyle:ApplyTexCoords(icon.icon.texture, settings, width, height)
+            TankAssist.IconStyle:ApplyBorder(icon.icon.border, show)
+        end
+        TankAssist.IconStyle:ApplyFont(settings, icon.timerInside, 16)
+        TankAssist.IconStyle:ApplyFont(settings, icon.timerBelow, 11)
+        TankAssist.IconStyle:ApplyFont(settings, icon.spellName, 10)
+        TankAssist.IconStyle:ApplyFont(settings, icon.readyText, 12)
+    end
+    self:Update()
+end
+
 function ca:SetIconSize(size)
     if not self.frame then return end
     self:GetSettings().iconSize = size
+    self:ApplyIconAppearance()
     if self.editMode then
         self:OnEditModeEnter()
     end

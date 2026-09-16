@@ -442,6 +442,61 @@ return R
 """
 
 
+# The cooldown alert icons are the third widget on IconStyle, and the last one
+# that had the old inset-and-hardcoded-font shape. Asserted against the same
+# numbers as the other two: shared means identical where it should be, and the
+# border default is the one place a widget gets its own answer.
+ALERTS_SCRIPT = """
+local ns = __ns
+local R = {}
+local FRIZ = "Fonts\\\\FRIZQT__.TTF"
+local ca = ns.CooldownAlerts
+
+local profile = ns.Addon.db.profile.cooldownAlerts
+R.shipsAtSkinDefault = profile.iconZoomPercent
+R.shipsWithBorder = ca:ShowBorder()
+
+ca:Create()
+local icon = ca:GetIcon(1)
+R.built = icon ~= nil and icon.icon ~= nil
+R.artFillsIcon = icon.icon.texture:IsFillingParent()
+R.shippedTrim = icon.icon.texture:GetTexCoord()[1]
+R.borderShown = icon.icon.border.top:IsShown()
+
+profile.iconShape = "Cropped"
+profile.iconZoomPercent = 20
+profile.showBorder = false
+profile.fontFace = "2002"
+profile.fontSizeOffset = 2
+ca:ApplyIconAppearance()
+
+local w, h = ca:GetIconDimensions()
+R.croppedWidth = w
+R.croppedHeight = h
+local c = icon.icon.texture:GetTexCoord()
+R.croppedTrim = c[1]
+R.croppedArtAspect = math.floor(((c[2] - c[1]) / (c[4] - c[3])) * 1000 + 0.5) / 1000
+R.croppedButtonAspect = math.floor((w / h) * 1000 + 0.5) / 1000
+R.borderHides = icon.icon.border.top:IsShown() ~= true
+
+-- readyText is this widget's own string and has to follow the font too --
+-- it was the one most likely to be forgotten.
+R.readyFellBack = icon.readyText:GetFontPath() == FRIZ
+R.readySize = icon.readyText.__fontSize
+R.timerSize = icon.timerInside.__fontSize
+
+profile.iconShape = "Square"
+profile.iconZoomPercent = 5.5
+profile.showBorder = true
+profile.fontFace = "Friz Quadrata"
+profile.fontSizeOffset = 0
+ca:ApplyIconAppearance()
+R.squareAgain = select(2, ca:GetIconDimensions())
+
+return R
+"""
+
+
 # The buttons themselves: one path (ApplyIconAppearance) now owns crop and font
 # for both icons, and it is the path every setting change goes through, so drive
 # it against a real display rather than trusting the helpers in isolation.
@@ -723,6 +778,24 @@ if lua is not None:
         ("an unloadable face falls back", "fontFellBack", True),
         ("the size offset reaches the timer", "timerSize", 18),
         ("the size offset reaches the name", "nameSize", 12),
+        ("square restores the full height", "squareAgain", 36),
+    ])
+    run_script(lua, "cooldown alerts", ALERTS_SCRIPT, [
+        ("ships at the same 5.5% crop", "shipsAtSkinDefault", 5.5),
+        ("border ships on, like the externals", "shipsWithBorder", True),
+        ("the display builds an icon", "built", True),
+        ("the art fills the icon", "artFillsIcon", True),
+        ("the shipped crop matches the others", "shippedTrim", 0.055),
+        ("the border is drawn by default", "borderShown", True),
+        ("cropped keeps the full width", "croppedWidth", 36),
+        ("cropped takes 80% of the height", "croppedHeight", 29),
+        ("the crop setting reaches the art", "croppedTrim", 0.2),
+        ("cropped art is not stretched", "croppedArtAspect", 1.241),
+        ("cropped art matches the icon aspect", "croppedButtonAspect", 1.241),
+        ("the border can be turned off", "borderHides", True),
+        ("the ready text follows the font", "readyFellBack", True),
+        ("the size offset reaches the ready text", "readySize", 14),
+        ("the size offset reaches the timer", "timerSize", 18),
         ("square restores the full height", "squareAgain", 36),
     ])
     run_script(lua, "button appearance", BUTTON_SCRIPT, [
