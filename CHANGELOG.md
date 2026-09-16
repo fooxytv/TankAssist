@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7-alpha.dd671d0] - 2026-09-16
+
+### Added
+- Added a "Target marker menu" keybinding that opens a context menu on your current target with all eight raid markers (Skull ordered first) plus a Clear option, each shown with its raid-target icon.
+- Assisted Combat buttons now display the keybind text for abilities, including abilities bound behind a macro.
+- Added a "Cropped" icon shape and new icon-crop and font options for the Assisted Combat buttons.
+- Fonts and bar textures are now resolved through LibSharedMedia, so any faces and textures registered by SharedMedia (and add-ons like SharedMediaAdditionalFonts and SharedMedia_Causese) appear in the dropdowns.
+- Added a PowerShell installer at `ci/scripts/Install-TankAssist.ps1` for deploying a branch to a gaming machine; it now locates WoW on any drive rather than only C through F.
+
+### Changed
+- Assisted Combat buttons are now styled to look like a skinned action bar.
+- CI derives the CurseForge game version from the `.toc` interface line and validates it against CurseForge's version list, failing the build on an unresolvable version instead of shipping a mislabelled file; a manual override input remains available.
+- Changelogs now start from the last stable tag for beta and release builds (and the previous tag of any kind for incremental alphas), and CI version-bump commits are excluded from changelog output.
+
+### Fixed
+- The target marker menu safely does nothing when you have no target or when the client's menu system is unavailable, rather than erroring on the keypress.
+- Font handling now falls back gracefully when the client cannot load a requested font face (e.g. faces absent on some locales).
+
 ### Added
 - Font and bar texture lists now come from LibSharedMedia-3.0, the same way sounds already did. Install any media addon (SharedMediaAdditionalFonts, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically. Nothing is bundled, and TankAssist's own built-ins are registered back into LibSharedMedia so other addons gain them too.
 - The Assisted Combat primary and secondary buttons now match a skinned action bar. The spell art fills the button edge to edge instead of sitting inset inside a dark frame, the border is off by default, and the keybind sits where an action button puts its hotkey.
