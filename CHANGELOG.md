@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Icon Zoom % slider for those buttons (Edit Mode), in the same units action-bar skins use for the same setting. It defaults to 5.5, which is EllesmereUI's default, so the same number in both places gives the same crop. The crop is computed per axis, so a non-square button crops rather than stretches.
 - Icon Shape option for those buttons (Edit Mode): Square, or Cropped for the squat action-bar button -- full width, 80% height, with the art cropped to suit rather than squashed into it.
 - Show Border toggle for those buttons (Edit Mode), off by default.
+- The same icon options -- Icon Zoom %, Icon Shape, Show Border, Font Face, Font Style and Text Size Adjust -- now apply to the external cooldown icons as well. The spell art fills the icon edge to edge there too. Its border ships on rather than off: it is coloured to say an external is active on you, which is information rather than decoration.
 - Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list. A UI that registers its font with LibSharedMedia -- EllesmereUI registers Expressway and twenty others -- can be matched exactly by picking the same face.
 
 ### Fixed

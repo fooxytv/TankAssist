@@ -145,6 +145,14 @@ local defaults = {
             displayMode = "ICON_ONLY",
             timerPosition = "BELOW",
             borderColor = { r = 0.2, g = 0.8, b = 0.3, a = 1 },
+            -- Border on: here it is coloured and says what kind of thing this
+            -- is, unlike the Assisted Combat buttons where it is only chrome.
+            iconZoomPercent = 5.5,
+            iconShape = "Square",
+            showBorder = true,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            fontSizeOffset = 0,
             showOnlyInCombat = false,
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -260 },
         },

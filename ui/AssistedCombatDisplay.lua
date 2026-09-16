@@ -208,7 +208,7 @@ end
 function acd:BuildLEMSettings()
     local self_ref = self
 
-    return {
+    local settings = {
         {
             order = 99,
             name = "Enabled",
@@ -255,104 +255,6 @@ function acd:BuildLEMSettings()
             set = function(layoutName, value)
                 value = math.floor(value / 5 + 0.5) * 5
                 self_ref:SetIconSize(value)
-            end,
-        },
-        {
-            -- Percent, matching what action-bar skins call Icon Zoom, so the
-            -- number you already use there produces the same crop here.
-            order = 101.5,
-            name = "Icon Zoom %",
-            kind = lem.SettingType.Slider,
-            default = 5.5,
-            minValue = 0,
-            maxValue = 25,
-            valueStep = 0.5,
-            get = function(layoutName)
-                local percent = TankAssist.Addon.db.profile.assistedCombat.iconZoomPercent
-                if percent == nil then return 5.5 end
-                return percent
-            end,
-            set = function(layoutName, value)
-                value = math.floor(value * 2 + 0.5) / 2
-                TankAssist.Addon.db.profile.assistedCombat.iconZoomPercent = value
-                self_ref:ApplyIconAppearance()
-            end,
-        },
-        {
-            -- The skins' Button Shape, under their own names. "Cropped" is the
-            -- squat button: full width, 80% height, art cropped to suit.
-            order = 101.52,
-            name = "Icon Shape",
-            kind = lem.SettingType.Dropdown,
-            default = "Square",
-            values = { { text = "Square" }, { text = "Cropped" } },
-            get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.iconShape or "Square"
-            end,
-            set = function(layoutName, value)
-                TankAssist.Addon.db.profile.assistedCombat.iconShape =
-                    (value == "Cropped") and "Cropped" or "Square"
-                -- Re-run the size path: shape changes the button, not just the art.
-                self_ref:SetIconSize(TankAssist.Addon.db.profile.assistedCombat.iconSize or 50)
-            end,
-        },
-        {
-            order = 101.55,
-            name = "Show Border",
-            kind = lem.SettingType.Checkbox,
-            default = false,
-            get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.showBorder == true
-            end,
-            set = function(layoutName, value)
-                TankAssist.Addon.db.profile.assistedCombat.showBorder = value
-                self_ref:ApplyIconAppearance()
-            end,
-        },
-        {
-            order = 101.6,
-            name = "Font Face",
-            kind = lem.SettingType.Dropdown,
-            default = TankAssist.Media.DefaultFontName(),
-            values = TankAssist.Media:FontDropdownValues(),
-            get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.fontFace
-                    or TankAssist.Media.DefaultFontName()
-            end,
-            set = function(layoutName, value)
-                TankAssist.Addon.db.profile.assistedCombat.fontFace = value
-                self_ref:ApplyIconAppearance()
-            end,
-        },
-        {
-            order = 101.7,
-            name = "Font Style",
-            kind = lem.SettingType.Dropdown,
-            default = TankAssist.Media.DefaultFontFlagName(),
-            values = TankAssist.Media:FontFlagDropdownValues(),
-            get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.fontFlag
-                    or TankAssist.Media.DefaultFontFlagName()
-            end,
-            set = function(layoutName, value)
-                TankAssist.Addon.db.profile.assistedCombat.fontFlag = value
-                self_ref:ApplyIconAppearance()
-            end,
-        },
-        {
-            order = 101.8,
-            name = "Text Size Adjust",
-            kind = lem.SettingType.Slider,
-            default = 0,
-            minValue = -4,
-            maxValue = 8,
-            valueStep = 1,
-            get = function(layoutName)
-                return TankAssist.Addon.db.profile.assistedCombat.fontSizeOffset or 0
-            end,
-            set = function(layoutName, value)
-                TankAssist.Addon.db.profile.assistedCombat.fontSizeOffset = math.floor(value + 0.5)
-                self_ref:ApplyIconAppearance()
             end,
         },
         {
@@ -457,6 +359,24 @@ function acd:BuildLEMSettings()
             end,
         },
     }
+
+    -- Spliced in after Icon Size rather than appended: these describe the
+    -- button itself, and belong next to its size rather than after the
+    -- behaviour toggles.
+    local appearance = TankAssist.IconStyle:BuildSettings({
+        getSettings = function() return acd:GetAppearanceSettings() end,
+        refresh = function() self_ref:ApplyIconAppearance() end,
+        resize = function()
+            self_ref:SetIconSize(self_ref:GetAppearanceSettings().iconSize or 50)
+        end,
+        borderDefault = BORDER_DEFAULT,
+        startOrder = 101.5,
+    })
+    for offset, entry in ipairs(appearance) do
+        table.insert(settings, 3 + offset, entry)
+    end
+
+    return settings
 end
 
 function acd:RegisterEditMode()
@@ -977,45 +897,23 @@ function acd:GetAppearanceSettings()
         and TankAssist.Addon.db.profile.assistedCombat or {}
 end
 
---- The icon crop, as the fraction of the art trimmed off each edge.
--- Stored as a percentage because that is the unit action-bar skins use for the
--- same setting -- EllesmereUI calls it Icon Zoom and defaults to 5.5 -- so the
--- same number in both places gives the same picture.
+-- The crop, shape, border and font all come from TankAssist.IconStyle, which
+-- the external cooldowns share. An action button draws no border of its own,
+-- hence false here; a widget whose border carries meaning passes true.
+local BORDER_DEFAULT = false
+
 function acd:GetIconTrim()
-    local percent = self:GetAppearanceSettings().iconZoomPercent
-    if percent == nil then percent = 5.5 end
-    return percent / 100
-end
-
---- Button dimensions for an icon size, honouring the shape.
--- "Cropped" is the action-bar skins' squat button: the same width, 80% of the
--- height. The art then crops to suit, because GetIconTexCoords derives the
--- vertical trim from the button's own aspect -- so unlike the fixed extra 10%
--- the skins take off top and bottom, the art is never stretched to fit.
-local CROPPED_HEIGHT_RATIO = 0.80
-
-function acd:GetIconShape()
-    return self:GetAppearanceSettings().iconShape or "Square"
+    return TankAssist.IconStyle:GetTrim(self:GetAppearanceSettings())
 end
 
 function acd:GetIconDimensions(size)
     local settings = self:GetAppearanceSettings()
-    size = size or settings.iconSize or 50
-    if self:GetIconShape() == "Cropped" then
-        return size, math.floor(size * CROPPED_HEIGHT_RATIO + 0.5)
-    end
-    return size, size
-end
-
-function acd:ShowBorder()
-    return self:GetAppearanceSettings().showBorder == true
+    return TankAssist.IconStyle:GetDimensions(settings, size or settings.iconSize or 50)
 end
 
 function acd:ApplyBorderVisibility(icon)
-    local show = self:ShowBorder()
-    for _, edge in pairs(icon.border) do
-        edge:SetShown(show)
-    end
+    TankAssist.IconStyle:ApplyBorder(icon.border,
+        TankAssist.IconStyle:ShowBorder(self:GetAppearanceSettings(), BORDER_DEFAULT))
     -- The background only ever peeked through the old inset. With the icon
     -- filling the button it is hidden anyway, but an icon that fails to load
     -- should show something deliberate rather than the frame behind.
@@ -1036,6 +934,8 @@ function acd:CountFontSize(size)
 end
 
 function acd:ApplyTextFont(fontString, size)
+    -- The size offset is already folded in by KeybindFontSize/CountFontSize,
+    -- which scale with the button, so pass the resolved size straight through.
     local settings = self:GetAppearanceSettings()
     TankAssist.Media:SetFont(fontString, settings.fontFace, size, settings.fontFlag)
 end
