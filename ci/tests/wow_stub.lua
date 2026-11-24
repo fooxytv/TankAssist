@@ -65,9 +65,13 @@ setmetatable(Widget, {
     end,
 })
 
-function Widget:SetPoint(point, ...) record("SetPoint") self.__points[#self.__points + 1] = { point, ... } end
+function Widget:SetPoint(point, ...) record("SetPoint") self.__allPoints = false; self.__points[#self.__points + 1] = { point, ... } end
 function Widget:ClearAllPoints() record("ClearAllPoints") self.__points = {} end
-function Widget:SetAllPoints() record("SetAllPoints") end
+-- Recorded, not just counted: "does this region fill its parent, or is it
+-- inset by explicit points" is a real question about how a button looks, and
+-- SetPoint vs SetAllPoints is the only thing that distinguishes them.
+function Widget:SetAllPoints() record("SetAllPoints") self.__allPoints = true end
+function Widget:IsFillingParent() return self.__allPoints == true and #self.__points == 0 end
 function Widget:GetPoint() return self.__points[1] and self.__points[1][1] or "CENTER", nil, "CENTER", 0, 0 end
 function Widget:GetNumPoints() return #self.__points end
 
@@ -119,7 +123,16 @@ end
 function Widget:SetText(text) self.__text = text end
 function Widget:GetText() return self.__text end
 function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
-function Widget:SetFont(file, size, flags) self.__fontSize = size end
+-- SetFont answers like the real client: false for a face this "client" cannot
+-- load, and the font string is left as it was. 2002 stands in for the faces
+-- that are genuinely absent on some locales.
+_G.__unloadableFonts = { ["Fonts\\2002.TTF"] = true }
+function Widget:SetFont(file, size, flags)
+    if _G.__unloadableFonts[file] then return false end
+    self.__fontPath, self.__fontSize, self.__fontFlags = file, size, flags
+    return true
+end
+function Widget:GetFontPath() return self.__fontPath end
 function Widget:SetFontObject(object) self.__font = object end
 
 -- StatusBar
@@ -137,6 +150,8 @@ function Widget:SetStatusBarColor(r, g, b, a) self.__barColor = { r, g, b, a } e
 -- Texture
 function Widget:SetAtlas(atlas, useSize) record("SetAtlas") self.__atlas = atlas end
 function Widget:SetTexture(file) self.__texture = file end
+function Widget:SetTexCoord(l, r, t, b) self.__texCoord = { l, r, t, b } end
+function Widget:GetTexCoord() return self.__texCoord end
 function Widget:GetTexture() return self.__texture end
 function Widget:SetColorTexture(r, g, b, a) self.__color = { r, g, b, a } end
 function Widget:SetVertexColor(r, g, b, a) self.__vertex = { r, g, b, a } end
@@ -231,9 +246,39 @@ _G.GetInstanceInfo = function() return "Test", "none" end
 _G.GetWeaponEnchantInfo = function() return false end
 _G.GetInventoryItemLink = function() return nil end
 _G.GetLootRollItemLink = function() return nil end
-_G.GetActionInfo = function() return nil end
-_G.GetBindingKey = function() return nil end
-_G.GetMacroSpell = function() return nil end
+-- Action bars and macros. __actionSlots is keyed by slot and holds what
+-- GetActionInfo returns; __macros is keyed by macro index. The distinction that
+-- matters, and that the real API makes: for a "smart" single-spell macro the
+-- second return of GetActionInfo is the *spellID*, while for any other macro it
+-- is an opaque id that must not be used as a macro index.
+_G.__actionSlots = {}
+_G.__macros = {}
+_G.__bindings = {}
+
+_G.GetActionInfo = function(slot)
+    local entry = _G.__actionSlots[slot]
+    if not entry then return nil end
+    return entry.actionType, entry.id, entry.subType
+end
+_G.GetActionText = function(slot)
+    local entry = _G.__actionSlots[slot]
+    return entry and entry.macroName or nil
+end
+_G.GetBindingKey = function(command) return _G.__bindings[command] end
+_G.GetMacroIndexByName = function(name)
+    for index, macro in pairs(_G.__macros) do
+        if macro.name == name then return index end
+    end
+    return 0
+end
+_G.GetMacroSpell = function(index)
+    local macro = _G.__macros[index]
+    return macro and macro.liveSpell or nil
+end
+_G.GetMacroBody = function(index)
+    local macro = _G.__macros[index]
+    return macro and macro.body or nil
+end
 _G.GetRuneCooldown = function() return 0, 10, true end
 
 -- Guardian Druid: the spec the addon is primarily developed against.

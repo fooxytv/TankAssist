@@ -68,7 +68,6 @@ TankAssist.Constants.BarTextures = {
     { name = "Solid",           path = "Interface\\Buttons\\WHITE8x8" },
     { name = "Blizzard",        path = "Interface\\TargetingFrame\\UI-StatusBar" },
     { name = "Blizzard Raid",   path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
-    { name = "Blizzard Rock",   path = "Interface\\BarberShop\\UI-BarberShop-pointed" },
 }
 
 TankAssist.Constants.CooldownAlertDefaults = {

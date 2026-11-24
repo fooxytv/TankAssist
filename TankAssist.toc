@@ -1,15 +1,19 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: TankAssist
 ## Notes: Tank rotation assistant leveraging Blizzard's Assisted Combat with supplementary cooldown and buff tracking
 ## Author: Simon
-## Version: 0.4.2
+## Version: 0.4.8-alpha.e696d82
 ## SavedVariables: TankAssistDB
+# Listed so they load before us and their fonts and textures are already
+# registered with LibSharedMedia by the time our dropdowns are built.
+## OptionalDeps: SharedMedia, SharedMediaAdditionalFonts, SharedMedia_Causese
 ## IconTexture: Interface\Icons\Spell_Holy_DefensiveStance
 
 # Libraries
 libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
 libs\AceAddon-3.0\AceAddon-3.0.lua
 libs\AceEvent-3.0\AceEvent-3.0.lua
 libs\AceDB-3.0\AceDB-3.0.lua
@@ -29,8 +33,14 @@ core\Constants.lua
 core\GearData.lua
 core\Utils.lua
 core\Sounds.lua
+core\Media.lua
+core\IconStyle.lua
 core\SecretValues.lua
 core\Core.lua
+core\Bindings.lua
+
+# Bindings.xml is deliberately absent from this list: the client loads it
+# from the addon folder by itself, and listing it here does nothing.
 
 # UI Components
 ui\AssistedCombatDisplay.lua
@@ -54,3 +64,4 @@ specs\Druid\Guardian.lua
 data\ClassCooldowns.lua
 data\RotationData.lua
 data\Consumables.lua
+data\ProcRules.lua

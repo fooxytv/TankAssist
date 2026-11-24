@@ -98,6 +98,41 @@ def field_names(tree) -> set:
     return names
 
 
+
+# A file-scope `local NAME = ...` is only in scope *below* itself. Referenced
+# above, Lua silently reads a nil global instead -- not a syntax error, not a
+# missing global, so neither the parse nor the undeclared-globals pass sees it.
+# That is how a `local BORDER_DEFAULT = true` sitting under the function that
+# read it shipped a settings default of nil.
+#
+# Textual rather than AST-based on purpose: the installed luaparser does not
+# attach positions to every Name node, and line numbers are the whole point.
+# Only column-zero declarations count, so a local inside a function -- scoped to
+# that function anyway -- is never considered.
+FILE_SCOPE_LOCAL = re.compile(r"^local\s+([A-Za-z_]\w*)\s*=")
+
+
+def used_before_declared(source: str):
+    lines = source.splitlines()
+
+    declared = {}
+    for number, line in enumerate(lines, 1):
+        match = FILE_SCOPE_LOCAL.match(line)
+        if match:
+            declared.setdefault(match.group(1), number)
+
+    found = []
+    for name, declared_at in declared.items():
+        # Not after a "." or ":", so a table field of the same name is not a use
+        # of the local.
+        word = re.compile(r"(?<![\w.:])" + re.escape(name) + r"(?![\w])")
+        for number, line in enumerate(lines[:declared_at - 1], 1):
+            if word.search(line.split("--", 1)[0]):
+                found.append((name, number, declared_at))
+                break
+    return sorted(found, key=lambda item: item[1])
+
+
 def main() -> int:
     allowed = declared_globals() | LUA_BUILTINS
     problems = {}
@@ -106,19 +141,34 @@ def main() -> int:
     for folder in ("core", "ui", "specs", "data"):
         sources.extend(sorted((ROOT / folder).glob("*.lua")))
 
+    scope_problems = {}
+
     for path in sources:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
         undeclared = read_names(tree) - bound_names(tree) - field_names(tree) - allowed
         if undeclared:
             problems[path.relative_to(ROOT).as_posix()] = sorted(undeclared)
+        early = used_before_declared(source)
+        if early:
+            scope_problems[path.relative_to(ROOT).as_posix()] = early
 
-    if not problems:
-        print(f"check_globals: {len(sources)} files, no undeclared globals.")
+    if not problems and not scope_problems:
+        print(f"check_globals: {len(sources)} files, no undeclared globals "
+              f"or late declarations.")
         return 0
 
-    print("check_globals: undeclared globals (add to .luacheckrc or fix the typo)")
-    for filename, names in problems.items():
-        print(f"  {filename}: {', '.join(names)}")
+    if problems:
+        print("check_globals: undeclared globals (add to .luacheckrc or fix the typo)")
+        for filename, names in problems.items():
+            print(f"  {filename}: {', '.join(names)}")
+
+    if scope_problems:
+        print("check_globals: file-scope locals used above their own declaration")
+        print("  (Lua reads these as nil globals -- move the declaration up)")
+        for filename, names in scope_problems.items():
+            for name, line, declared_at in names:
+                print(f"  {filename}:{line}: {name} (declared at line {declared_at})")
     return 1
 
 

@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8-alpha.e696d82] - 2026-09-17
+
+### Added
+- Cooldown alerts and external cooldowns now have the same icon appearance options as the Assisted Combat buttons: Icon Zoom % (crop), Icon Shape (Square or Cropped), Show Border, Font Face, Font Style, and Text Size Adjust — all editable in Edit Mode.
+
+### Changed
+- Icon appearance settings now live in one shared module, so Assisted Combat buttons, external cooldowns, and cooldown alerts stay consistent instead of drifting apart. Borders default off for Assisted Combat buttons (chrome) and on for external and alert icons, where the coloured border signals what you're looking at.
+- On the Assisted Combat display, the appearance settings sit next to Icon Size in Edit Mode rather than after the behaviour toggles.
+
+### Fixed
+- Fixed a scoping bug where the border default was read before it was declared, resolving to a nil global.
+
+## [0.4.7-alpha.dd671d0] - 2026-09-16
+
+### Added
+- Added a "Target marker menu" keybinding that opens a context menu on your current target with all eight raid markers (Skull ordered first) plus a Clear option, each shown with its raid-target icon.
+- Assisted Combat buttons now display the keybind text for abilities, including abilities bound behind a macro.
+- Added a "Cropped" icon shape and new icon-crop and font options for the Assisted Combat buttons.
+- Fonts and bar textures are now resolved through LibSharedMedia, so any faces and textures registered by SharedMedia (and add-ons like SharedMediaAdditionalFonts and SharedMedia_Causese) appear in the dropdowns.
+- Added a PowerShell installer at `ci/scripts/Install-TankAssist.ps1` for deploying a branch to a gaming machine; it now locates WoW on any drive rather than only C through F.
+
+### Changed
+- Assisted Combat buttons are now styled to look like a skinned action bar.
+- CI derives the CurseForge game version from the `.toc` interface line and validates it against CurseForge's version list, failing the build on an unresolvable version instead of shipping a mislabelled file; a manual override input remains available.
+- Changelogs now start from the last stable tag for beta and release builds (and the previous tag of any kind for incremental alphas), and CI version-bump commits are excluded from changelog output.
+
+### Fixed
+- The target marker menu safely does nothing when you have no target or when the client's menu system is unavailable, rather than erroring on the keypress.
+- Font handling now falls back gracefully when the client cannot load a requested font face (e.g. faces absent on some locales).
+
+### Added
+- Font and bar texture lists now come from LibSharedMedia-3.0, the same way sounds already did. Install any media addon (SharedMediaAdditionalFonts, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically. Nothing is bundled, and TankAssist's own built-ins are registered back into LibSharedMedia so other addons gain them too.
+- The Assisted Combat primary and secondary buttons now match a skinned action bar. The spell art fills the button edge to edge instead of sitting inset inside a dark frame, the border is off by default, and the keybind sits where an action button puts its hotkey.
+- Icon Zoom % slider for those buttons (Edit Mode), in the same units action-bar skins use for the same setting. It defaults to 5.5, which is EllesmereUI's default, so the same number in both places gives the same crop. The crop is computed per axis, so a non-square button crops rather than stretches.
+- Icon Shape option for those buttons (Edit Mode): Square, or Cropped for the squat action-bar button -- full width, 80% height, with the art cropped to suit rather than squashed into it.
+- Show Border toggle for those buttons (Edit Mode), off by default.
+- The same icon options -- Icon Zoom %, Icon Shape, Show Border, Font Face, Font Style and Text Size Adjust -- now apply to the external cooldown and cooldown alert icons as well. The spell art fills the icon edge to edge there too. Their borders ship on rather than off: they are coloured to say an external is active on you, or that a cooldown is coming up, which is information rather than decoration.
+- Font Face, Font Style and Text Size Adjust settings for the keybind and stack-count text on those buttons (Edit Mode), drawing on the same LibSharedMedia list. A UI that registers its font with LibSharedMedia -- EllesmereUI registers Expressway and twenty others -- can be matched exactly by picking the same face.
+
+### Fixed
+- Keybinds now show for abilities bound behind a macro. `GetActionInfo` does not return a macro index -- for a single-spell macro it returns the spell itself, and for any other macro an opaque id -- but that value was being used as one, so the lookup asked about whichever unrelated macro sat at that index. Macros are now resolved by the name on the button, and where the id happened to collide with a real macro the button could show another ability's key rather than none at all.
+- A macro with conditional branches (`/cast [mod:shift] A; B`) now shows its keybind for every branch, not just whichever one would fire at the moment the button was drawn.
+- Choosing a font that this client cannot load no longer breaks the text. `SetFont` declines such a face rather than raising, which left the font string with no font at all and surfaced the error later on an unrelated update. Faces are now validated before being offered and again as they are applied, with anything that fails falling back to Friz Quadrata. This affected the cast bar font picker, where several of the offered faces (2002, Express Way) are absent on some locales.
+
+## [0.4.6-alpha.4f7eaab] - 2026-08-21
+
+### Fixed
+- The GCD sweep on the Assisted Combat and Tank Actions buttons now matches Blizzard's action bars and Cooldown Manager: a dark swipe instead of a half-transparent white one, with the spinning edge line and the end-of-GCD "bling" flash removed.
+- The GCD sweep no longer stacks on top of a spell's own cooldown swipe. As on the action bars, the longer cooldown wins and each button shows a single swipe; the GCD only animates when no spell cooldown is running.
+- Spell cooldown swipes animate again instead of freezing at a fixed fraction. The swipe was being restarted on every 0.1s update; it now uses the real start time and duration and is only re-applied when those values actually change.
+
+### Fixed
+- The GCD sweep on the primary and secondary Assisted Combat buttons now matches Blizzard's action bars and the Cooldown Manager: a dark swipe instead of a half-transparent white one, no spinning edge line, and no "bling" flash at the end of every global.
+- The GCD sweep no longer stacks on top of a spell's own cooldown sweep. Action bars draw a single swipe per button with the longer cooldown winning; the buttons now do the same.
+- Spell cooldown swipes animate again. `SetCooldown` was re-applied on every 0.1s ticker pass with freshly computed values, which restarted the swipe each time and pinned it at a fixed fraction; the real start time and duration are now used, and only re-applied when they change.
+
+## [0.4.5-alpha.9fe43fd] - 2026-08-20
+
+### Added
+- Proc glow support: the LibCustomGlow library and a new ProcRules data module are now loaded by the addon, enabling glow highlights on abilities when their procs are active.
+
+### Changed
+- Updated supported game version to 12.1 (from 12.0.7) across publishing workflows.
+
+### Fixed
+- Proc glow now functions correctly — LibCustomGlow and ProcRules were previously not loaded in the .toc, so the feature had no effect until this fix.
+
+### Fixed
+- The proc/activation-overlay glow feature was inert in 0.4.4-alpha: `TankAssist.toc` did not load `libs/LibCustomGlow-1.0` or `data/ProcRules.lua` (the load lines were lost in a merge), so the glow library never registered and no glow could appear. Both are now loaded. A smoke-test guard asserts the proc-rules table loads so this cannot silently regress.
+
+## [0.4.4-alpha.2a7596f] - 2026-08-13
+
+### Added
+- Proc and activation-overlay glow on the Assisted Combat display: the recommended ability now glows when a relevant proc is active (e.g. Crimson Scourge, Revenge!, Grand Crusader, Gore/Galactic Guardian), with a new data-driven proc-rules table covering Blood DK, Protection Warrior, Protection Paladin, and Guardian Druid.
+- Glow settings with an on/off toggle (off by default) and a selectable glow style — Action Button Glow, Pixel Glow, Autocast Shine, or Proc Glow — backed by the bundled LibCustomGlow-1.0 library.
+
+### Changed
+- Consolidated version stamping and changelog generation into shared `ci/scripts` used by the main, beta, and release publish workflows, so the `.toc` stamping loop and changelog format each live in a single place.
+
+### Added
+- Proc / activation-overlay glow on the Assisted Combat display. When enabled, the recommended and secondary icons glow with the Blizzard proc look while Blizzard is overlaying that spell (Revenge!, Grand Crusader, ...) or a curated tank proc rule for the active spec is active (Blood Crimson Scourge → Death and Decay, Prot Warrior Revenge! → Revenge, Prot Paladin Grand Crusader → Avenger's Shield, Guardian Gore/Galactic Guardian → Mangle). Opt-in per the Assisted Combat Edit Mode options, with a selectable glow style (Action Button / Pixel / Autocast Shine / Proc Glow), defaulting off. Read-and-highlight only — never queues or casts. Bundles LibCustomGlow-1.0 and drives the glow from it; proc rules read aura *presence*, which is not a Secret Value, so they keep working when stacks/duration are hidden. A spec with no matching rule glows nothing.
+
+## [0.4.3-alpha.fddb0c8] - 2026-08-13
+
+### Added
+- Continuous integration that lints and smoke-tests every push, running the addon's load path through a minimal WoW client stub to catch load-order mistakes, nil child widgets, and untaken API branches before they surface in-game.
+- Beta release channel that publishes to CurseForge as a pre-release when develop is merged into a release branch, alongside the existing alpha and stable paths.
+
+### Changed
+- Linting is now strict: undefined-global warnings fail the build, so any mistyped API name is caught in CI rather than in-game, and all warnings (including shadowed upvalues and unused loop variables) are surfaced.
+- Stable releases are now gated behind a `release/*` branch merge, preventing an accidental develop-to-main merge from cutting a stable build.
+
+### Fixed
+- Action titles no longer include the run name, keeping them consistent with companion addons.
+
+The previous release tag `v0.4.0-alpha.c36e001` points to the exact same commit as `8eccc46` (HEAD). There are no commits and no code diff between them, so there are no changes to report.
+
 ## [0.4.2] - 2026-08-03
 
 ### Changed
