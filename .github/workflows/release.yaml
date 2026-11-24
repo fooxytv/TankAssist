@@ -1,6 +1,4 @@
 name: "Release - TankAssist"
-# Named after the release branch being merged, which carries the version.
-run-name: "Release ${{ github.event.pull_request.head.ref }}"
 
 # Triggers when a release branch is merged into main.
 # Creates a clean version tag (no alpha/beta suffix), a GitHub release,
@@ -60,12 +58,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          for toc_file in *.toc; do
-            if [ -f "$toc_file" ]; then
-              sed -i "s/^## Version:.*/## Version: $VERSION/" "$toc_file"
-              echo "Updated $toc_file"
-            fi
-          done
+          bash ci/scripts/version.sh stamp "$VERSION" > /dev/null
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -86,15 +79,11 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="v${VERSION}"
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          # Last stable, so the release notes span the whole gap between
+          # public versions rather than stopping at an internal alpha tag.
+          PREVIOUS_TAG=$(bash ci/scripts/previous_tag.sh stable "${TAG}^")
 
-          if [ -n "$PREVIOUS_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s" "$PREVIOUS_TAG".."$TAG" --no-merges)
-          else
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
-          fi
-
-          CHANGELOG="## ${TAG}"$'\n\n'"$COMMITS"
+          CHANGELOG=$(bash ci/scripts/changelog.sh "$PREVIOUS_TAG" "$TAG" "## ${TAG}")
           {
             echo 'CHANGELOG<<EOF'
             echo "$CHANGELOG"
@@ -123,6 +112,18 @@ jobs:
           files: ${{ steps.artifact.outputs.zip }}
           prerelease: false
 
+      - name: Resolve CurseForge game version
+        id: game_version
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+        run: |
+          # Derived from the .toc interface and checked against CurseForge's
+          # version list. The upload action does not fail on a name it cannot
+          # resolve -- it uploads an empty version list and CurseForge labels
+          # the file with a default -- so the check has to happen here.
+          VERSION=$(bash ci/scripts/game_version.sh)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish to CurseForge
         uses: itsmeow/curseforge-upload@v3
         with:
@@ -133,4 +134,4 @@ jobs:
           release_type: release
           changelog: ${{ env.CHANGELOG }}
           changelog_type: "markdown"
-          game_versions: "12.0.7"
+          game_versions: ${{ steps.game_version.outputs.version }}

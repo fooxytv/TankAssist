@@ -13,6 +13,13 @@ end
 TankAssist.AssistedCombatDisplay = {}
 local acd = TankAssist.AssistedCombatDisplay
 
+-- The crop, shape, border and font all come from TankAssist.IconStyle, which
+-- the external cooldowns share. An action button draws no border of its own,
+-- hence false here; a widget whose border carries meaning passes true.
+-- Declared up here because BuildLEMSettings reads it: a local declared further
+-- down is simply not in scope above, and resolves to a nil global instead.
+local BORDER_DEFAULT = false
+
 local assistedCombatAPI = {}
 
 function assistedCombatAPI:IsAvailable()
@@ -61,7 +68,8 @@ end
 function acd:Create()
     local settings = TankAssist.Addon.db.profile.assistedCombat
     self.frame = CreateFrame("Frame", "TankAssistRotationFrame", UIParent, "BackdropTemplate")
-    self.frame:SetSize(settings.iconSize * 2 + 4, settings.iconSize + 2)
+    local iconW, iconH = self:GetIconDimensions(settings.iconSize)
+    self.frame:SetSize(iconW * 2 + 4, iconH + 2)
     self.frame.editModeName = "TankAssist"
 
     local validAnchors = { CENTER=1, TOP=1, BOTTOM=1, LEFT=1, RIGHT=1, TOPLEFT=1, TOPRIGHT=1, BOTTOMLEFT=1, BOTTOMRIGHT=1 }
@@ -85,10 +93,10 @@ function acd:Create()
     })
     self.frame:SetBackdropColor(0, 0, 0, 0.2)
 
-    self.mainIcon = self:CreateIcon(self.frame, settings.iconSize)
+    self.mainIcon = self:CreateIcon(self.frame, iconW, iconH)
     self.mainIcon:SetPoint("LEFT", self.frame, "LEFT", 1, 0)
 
-    self.aoeIcon = self:CreateIcon(self.frame, settings.iconSize)
+    self.aoeIcon = self:CreateIcon(self.frame, iconW, iconH)
     self.aoeIcon:SetPoint("LEFT", self.mainIcon, "RIGHT", 2, 0)
 
     self.apiAvailable = assistedCombatAPI:IsAvailable()
@@ -105,16 +113,19 @@ function acd:Create()
     return self.frame
 end
 
-function acd:CreateIcon(parent, size)
+function acd:CreateIcon(parent, size, height)
+    height = height or size
     local frame = CreateFrame("Button", nil, parent)
-    frame:SetSize(size, size)
+    frame:SetSize(size, height)
     frame.bg = frame:CreateTexture(nil, "BACKGROUND")
     frame.bg:SetAllPoints()
     frame.bg:SetColorTexture(0.12, 0.12, 0.12, 1)
+    -- Edge to edge, the way an action button does it. The old 2px inset left
+    -- the background showing as a dark frame around every icon, which is the
+    -- single thing that made these read as "not action bars".
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
-    frame.icon:SetPoint("TOPLEFT", 2, -2)
-    frame.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-    frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    frame.icon:SetAllPoints()
+    TankAssist.Utils:ApplyIconZoom(frame.icon, self:GetIconTrim(), size, height)
     local borderColor = {0.3, 0.3, 0.3, 1}
     frame.borderTop = frame:CreateTexture(nil, "OVERLAY")
     frame.borderTop:SetPoint("TOPLEFT", 0, 0)
@@ -142,6 +153,9 @@ function acd:CreateIcon(parent, size)
         left = frame.borderLeft,
         right = frame.borderRight,
     }
+    -- Off unless asked for: action buttons draw no border of their own, and
+    -- these sit on top of the icon now that it fills the button.
+    self:ApplyBorderVisibility(frame)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.cooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
@@ -150,18 +164,16 @@ function acd:CreateIcon(parent, size)
     frame.gcdCooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.gcdCooldown:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.gcdCooldown:SetPoint("BOTTOMRIGHT", frame.icon, "BOTTOMRIGHT", 0, 0)
-    frame.gcdCooldown:SetDrawEdge(true)
-    frame.gcdCooldown:SetDrawSwipe(true)
-    frame.gcdCooldown:SetSwipeColor(1, 1, 1, 0.5)
-    frame.gcdCooldown:SetHideCountdownNumbers(true)
+    TankAssist.Utils:StyleGCDCooldown(frame.gcdCooldown)
     frame.gcdCooldown:SetFrameLevel(frame.cooldown:GetFrameLevel() + 1)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY")
-    frame.keybind:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 12 or 10, "OUTLINE")
-    frame.keybind:SetPoint("TOPLEFT", 4, -4)
+    self:ApplyTextFont(frame.keybind, self:KeybindFontSize(size))
+    -- Same corner and inset an action button uses for its hotkey.
+    frame.keybind:SetPoint("TOPLEFT", 4, -3)
     frame.keybind:SetTextColor(1, 1, 1, 1)
     frame.count = frame:CreateFontString(nil, "OVERLAY")
-    frame.count:SetFont("Fonts\\FRIZQT__.TTF", size > 50 and 14 or 11, "OUTLINE")
-    frame.count:SetPoint("BOTTOMRIGHT", -4, 4)
+    self:ApplyTextFont(frame.count, self:CountFontSize(size))
+    frame.count:SetPoint("BOTTOMRIGHT", -2, 2)
     frame.count:SetTextColor(1, 1, 1, 1)
     frame.unusable = frame:CreateTexture(nil, "OVERLAY", nil, 1)
     frame.unusable:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
@@ -182,10 +194,28 @@ function acd:CreateIcon(parent, size)
     return frame
 end
 
+-- Friendly labels for the Edit Mode dropdown, mapped to LibCustomGlow style names.
+local glowStyleLabels = {
+    { text = "Action Button (Blizzard)" },
+    { text = "Pixel" },
+    { text = "Autocast Shine" },
+    { text = "Proc Glow" },
+}
+local glowLabelToStyle = {
+    ["Action Button (Blizzard)"] = "Action Button Glow",
+    ["Pixel"] = "Pixel Glow",
+    ["Autocast Shine"] = "Autocast Shine",
+    ["Proc Glow"] = "Proc Glow",
+}
+local glowStyleToLabel = {}
+for label, style in pairs(glowLabelToStyle) do
+    glowStyleToLabel[style] = label
+end
+
 function acd:BuildLEMSettings()
     local self_ref = self
 
-    return {
+    local settings = {
         {
             order = 99,
             name = "Enabled",
@@ -308,7 +338,52 @@ function acd:BuildLEMSettings()
                 self_ref:UpdateVisibility()
             end,
         },
+        {
+            order = 108,
+            name = "Glow Procs",
+            kind = lem.SettingType.Checkbox,
+            default = false,
+            get = function(layoutName)
+                return TankAssist.Addon.db.profile.assistedCombat.glowEnabled or false
+            end,
+            set = function(layoutName, value)
+                self_ref:SetGlowEnabled(value)
+            end,
+        },
+        {
+            order = 109,
+            name = "Glow Style",
+            kind = lem.SettingType.Dropdown,
+            default = glowStyleLabels[1].text,
+            values = glowStyleLabels,
+            get = function(layoutName)
+                local style = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+                return glowStyleToLabel[style] or glowStyleLabels[1].text
+            end,
+            set = function(layoutName, value)
+                TankAssist.Addon.db.profile.assistedCombat.glowStyle = glowLabelToStyle[value] or "Action Button Glow"
+                self_ref:RefreshGlow()
+            end,
+        },
     }
+
+    -- Spliced in after Icon Size rather than appended: these describe the
+    -- button itself, and belong next to its size rather than after the
+    -- behaviour toggles.
+    local appearance = TankAssist.IconStyle:BuildSettings({
+        getSettings = function() return acd:GetAppearanceSettings() end,
+        refresh = function() self_ref:ApplyIconAppearance() end,
+        resize = function()
+            self_ref:SetIconSize(self_ref:GetAppearanceSettings().iconSize or 50)
+        end,
+        borderDefault = BORDER_DEFAULT,
+        startOrder = 101.5,
+    })
+    for offset, entry in ipairs(appearance) do
+        table.insert(settings, 3 + offset, entry)
+    end
+
+    return settings
 end
 
 function acd:RegisterEditMode()
@@ -605,18 +680,24 @@ function acd:UpdateIcon(icon, spellId, spellType, priority)
     end
 
     local cdInfo = TankAssist.SecretValues:GetCooldownInfo(spellId)
-    if cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5 then
-        local cdStart = GetTime() - cdInfo.remaining
-        icon.cooldown:SetCooldown(cdStart, cdInfo.remaining + (GetTime() - cdStart))
+    local onSpellCooldown = cdInfo.onCooldown and cdInfo.remaining and cdInfo.remaining > 1.5
+    if onSpellCooldown then
+        if cdInfo.startTime and cdInfo.duration and cdInfo.duration > 0 then
+            TankAssist.Utils:SetCooldownSwipe(icon.cooldown, cdInfo.startTime, cdInfo.duration)
+        else
+            TankAssist.Utils:SetCooldownSwipeFromRemaining(icon.cooldown, cdInfo.remaining)
+        end
     else
-        icon.cooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
     end
 
-    local gcdInfo = C_Spell.GetSpellCooldown(61304)
-    if gcdInfo and gcdInfo.startTime and gcdInfo.duration and gcdInfo.duration > 0 then
-        icon.gcdCooldown:SetCooldown(gcdInfo.startTime, gcdInfo.duration)
+    -- Action bars draw one swipe per button: the spell's own cooldown wins over
+    -- the GCD, so only sweep the GCD when nothing longer is already running.
+    local gcdInfo = not onSpellCooldown and C_Spell.GetSpellCooldown(61304) or nil
+    if gcdInfo and gcdInfo.duration and gcdInfo.duration > 0 then
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, gcdInfo.startTime, gcdInfo.duration)
     else
-        icon.gcdCooldown:Clear()
+        TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     end
 
     if cdInfo.charges and cdInfo.maxCharges and cdInfo.maxCharges > 1 then
@@ -665,6 +746,50 @@ function acd:UpdateIcon(icon, spellId, spellType, priority)
     icon.icon:SetDesaturated(false)
     icon.icon:SetVertexColor(1, 1, 1, 1)
     icon:SetAlpha(1.0)
+
+    local glowStyle = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+    TankAssist.Utils:SetGlow(icon, self:ShouldGlowSpell(spellId), glowStyle)
+end
+
+-- True when the proc glow feature is on and this spell is currently a "press
+-- now" cue: either Blizzard is overlaying it (Revenge!, Grand Crusader, ...) or a
+-- curated proc rule for the active spec has one of its auras up.
+function acd:ShouldGlowSpell(spellId)
+    if not spellId then return false end
+    if not TankAssist.Addon.db.profile.assistedCombat.glowEnabled then return false end
+    if not TankAssist.Utils:IsGlowAvailable() then return false end
+    if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed
+        and C_SpellActivationOverlay.IsSpellOverlayed(spellId) then
+        return true
+    end
+    if TankAssist.ProcRules then
+        return TankAssist.ProcRules:IsProcActive(TankAssist.Addon.activeSpec, spellId)
+    end
+    return false
+end
+
+-- Re-evaluate glow on both icons immediately (used when the style changes or the
+-- feature is toggled on, without waiting for the next update tick).
+function acd:RefreshGlow()
+    local glowStyle = TankAssist.Addon.db.profile.assistedCombat.glowStyle or "Action Button Glow"
+    for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+        if icon then
+            TankAssist.Utils:SetGlow(icon, self:ShouldGlowSpell(icon.spellId), glowStyle)
+        end
+    end
+end
+
+function acd:SetGlowEnabled(value)
+    TankAssist.Addon.db.profile.assistedCombat.glowEnabled = value
+    if value then
+        self:RefreshGlow()
+    else
+        for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+            if icon then
+                TankAssist.Utils:SetGlow(icon, false)
+            end
+        end
+    end
 end
 
 function acd:ClearIcon(icon)
@@ -672,9 +797,10 @@ function acd:ClearIcon(icon)
     icon.icon:SetTexture(nil)
     icon.keybind:SetText("")
     icon.count:SetText("")
-    icon.cooldown:Clear()
-    icon.gcdCooldown:Clear()
+    TankAssist.Utils:SetCooldownSwipe(icon.cooldown, nil, nil)
+    TankAssist.Utils:SetCooldownSwipe(icon.gcdCooldown, nil, nil)
     icon.unusable:Hide()
+    TankAssist.Utils:SetGlow(icon, false)
     if icon.border then
         local r, g, b, a = 0.3, 0.3, 0.3, 1
         if icon.border.top then
@@ -770,18 +896,84 @@ function acd:SetScale(scale)
     end
 end
 
+-- Appearance helpers. Both buttons are built before the saved variables are
+-- necessarily loaded, so every one of these has to answer sensibly with no db
+-- behind it -- hence the defaults inline rather than a hard index.
+function acd:GetAppearanceSettings()
+    return TankAssist.Addon and TankAssist.Addon.db
+        and TankAssist.Addon.db.profile.assistedCombat or {}
+end
+
+function acd:GetIconTrim()
+    return TankAssist.IconStyle:GetTrim(self:GetAppearanceSettings())
+end
+
+function acd:GetIconDimensions(size)
+    local settings = self:GetAppearanceSettings()
+    return TankAssist.IconStyle:GetDimensions(settings, size or settings.iconSize or 50)
+end
+
+function acd:ApplyBorderVisibility(icon)
+    TankAssist.IconStyle:ApplyBorder(icon.border,
+        TankAssist.IconStyle:ShowBorder(self:GetAppearanceSettings(), BORDER_DEFAULT))
+    -- The background only ever peeked through the old inset. With the icon
+    -- filling the button it is hidden anyway, but an icon that fails to load
+    -- should show something deliberate rather than the frame behind.
+    icon.bg:SetShown(true)
+end
+
+function acd:KeybindFontSize(size)
+    local settings = self:GetAppearanceSettings()
+    size = size or settings.iconSize or 50
+    -- 12 is what an action button uses for its hotkey.
+    return (size > 50 and 12 or 11) + (settings.fontSizeOffset or 0)
+end
+
+function acd:CountFontSize(size)
+    local settings = self:GetAppearanceSettings()
+    size = size or settings.iconSize or 50
+    return (size > 50 and 14 or 11) + (settings.fontSizeOffset or 0)
+end
+
+function acd:ApplyTextFont(fontString, size)
+    -- The size offset is already folded in by KeybindFontSize/CountFontSize,
+    -- which scale with the button, so pass the resolved size straight through.
+    local settings = self:GetAppearanceSettings()
+    TankAssist.Media:SetFont(fontString, settings.fontFace, size, settings.fontFlag)
+end
+
+--- Re-apply crop and fonts to both buttons. Called whenever icon size, zoom or
+-- font settings change; the cooldown, GCD and unusable overlays are anchored to
+-- the icon texture rather than the button, so they follow the crop by
+-- themselves and need nothing here.
+function acd:ApplyIconAppearance()
+    if not self.frame then return end
+
+    local trim = self:GetIconTrim()
+    for _, icon in ipairs({ self.mainIcon, self.aoeIcon }) do
+        if icon then
+            -- The icon fills the button, so the button's own size is the
+            -- aspect to crop against.
+            local width, height = icon:GetSize()
+            TankAssist.Utils:ApplyIconZoom(icon.icon, trim, width, height)
+            self:ApplyBorderVisibility(icon)
+            self:ApplyTextFont(icon.keybind, self:KeybindFontSize(width))
+            self:ApplyTextFont(icon.count, self:CountFontSize(width))
+        end
+    end
+end
+
 function acd:SetIconSize(size)
     if not self.frame then return end
 
     TankAssist.Addon.db.profile.assistedCombat.iconSize = size
 
-    self.mainIcon:SetSize(size, size)
-    self.aoeIcon:SetSize(size, size)
-    self.frame:SetSize(size * 2 + 4, size + 2)
+    local width, height = self:GetIconDimensions(size)
+    self.mainIcon:SetSize(width, height)
+    self.aoeIcon:SetSize(width, height)
+    self.frame:SetSize(width * 2 + 4, height + 2)
 
-    local fontSize = size > 50 and 12 or 10
-    self.mainIcon.keybind:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "OUTLINE")
-    self.aoeIcon.keybind:SetFont("Fonts\\FRIZQT__.TTF", fontSize, "OUTLINE")
+    self:ApplyIconAppearance()
 end
 
 function acd:ResetPosition()

@@ -72,6 +72,22 @@ update_all_toc_files() {
     done
 }
 
+# Non-computing mode: stamp an explicit version into every .toc and echo it back.
+# The publish workflows compute the version their own way (from the tag, or a
+# suffixed base) and then hand it here, so the sed loop lives in exactly one
+# place instead of being copy-pasted into each workflow.
+#   version.sh stamp <version>
+if [[ "$bump_type" == "stamp" ]]; then
+    stamp_version="$pre_release_type"
+    if [[ -z "$stamp_version" ]]; then
+        echo "Usage: version.sh stamp <version>" >&2
+        exit 1
+    fi
+    update_all_toc_files "$stamp_version"
+    echo "$stamp_version" | tr -d '\r'
+    exit 0
+fi
+
 current_version=$(get_version_from_toc "$main_toc_file")
 if [[ -z "$current_version" ]]; then
     echo "No version found in .toc file. Using 1.0.0"

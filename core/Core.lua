@@ -70,7 +70,18 @@ local defaults = {
             outOfCombatAlpha = 0.5,
             showKeybinds = true,
             hideWhenMounted = false,
+            -- Defaults chosen to sit alongside a skinned action bar rather than
+            -- against it: art edge to edge, no border, and the same 5.5% crop
+            -- EllesmereUI and friends use.
+            iconZoomPercent = 5.5,
+            iconShape = "Square",
+            showBorder = false,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            fontSizeOffset = 0,
             hideInPetBattles = true,
+            glowEnabled = false,
+            glowStyle = "Action Button Glow",
             position = {
                 point = "CENTER",
                 relativePoint = "CENTER",
@@ -134,6 +145,14 @@ local defaults = {
             displayMode = "ICON_ONLY",
             timerPosition = "BELOW",
             borderColor = { r = 0.2, g = 0.8, b = 0.3, a = 1 },
+            -- Border on: here it is coloured and says what kind of thing this
+            -- is, unlike the Assisted Combat buttons where it is only chrome.
+            iconZoomPercent = 5.5,
+            iconShape = "Square",
+            showBorder = true,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            fontSizeOffset = 0,
             showOnlyInCombat = false,
             position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -260 },
         },
@@ -147,6 +166,14 @@ local defaults = {
             alertStyle = "BOTH",
             timerPosition = "INSIDE",
             borderColor = { r = 0.9, g = 0.7, b = 0.2, a = 1 },
+            -- Border on: coloured to mark a cooldown coming up or ready, so
+            -- it is information rather than decoration.
+            iconZoomPercent = 5.5,
+            iconShape = "Square",
+            showBorder = true,
+            fontFace = "Friz Quadrata",
+            fontFlag = "Outline",
+            fontSizeOffset = 0,
             soundEnabled = false,
             trackedSpells = {},
             trackedSpellsBySpec = {},

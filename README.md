@@ -11,6 +11,7 @@ The intent is to feel like a streamlined two-button rotation helper (in the spir
 - A **Secondary** ability button highlights situational offensive/defensive cooldowns using lightweight addon-side tracking
 - Shows keybinds for the recommended abilities
 - Works wherever the Assisted Combat system works — no custom rotation engine
+- **Proc glow** (opt-in): the recommended/secondary icon glows with the Blizzard proc look when the ability is being overlayed by Blizzard (Revenge!, Grand Crusader, ...) or a curated tank proc is up (e.g. Guardian Gore/Galactic Guardian → Mangle, Blood Crimson Scourge → Death and Decay). Read-and-highlight only; selectable glow style (Action Button / Pixel / Autocast Shine / Proc Glow) in Edit Mode
 
 ### Player & Target Cast Bars
 - Fully customisable replacements for Blizzard's default cast bars
@@ -54,6 +55,12 @@ The intent is to feel like a streamlined two-button rotation helper (in the spir
 - Six bundled Blizzard SOUNDKIT entries shipped under TankAssist names (Ready Ding, Raid Siren, Alarm, Boss Whisper, Soft Click, Quest Done)
 - Per-spell sound overrides — set a unique sound on individual tracked cooldowns, or fall back to a global default
 
+### Fonts & Bar Textures
+- Font and bar texture lists come from LibSharedMedia-3.0, the same way sounds do — install any media addon (**SharedMediaAdditionalFonts**, SharedMedia_Causese, ElvUI, WeakAuras, DBM) and its fonts and textures appear in the dropdowns automatically
+- Nothing is bundled, so the addon stays small and redistributes no font licences
+- TankAssist's own built-ins are registered back into LibSharedMedia, so they are selectable from any other LSM-aware addon too
+- Fonts are validated before being offered: a pack that registers a file it no longer ships is filtered out rather than blanking the text it is applied to
+
 ### Shared Display Options
 The following settings are available for External Cooldowns and Cooldown Alerts:
 - **Display Mode**: Icon Only, Icon + Name, Name Only
@@ -84,6 +91,47 @@ All UI components integrate with WoW's Edit Mode via LibEQOL:
 2. Extract to your `World of Warcraft/_retail_/Interface/AddOns/` folder
 3. Ensure the folder is named `TankAssist`
 4. Restart WoW or `/reload`
+
+### Installing a development branch
+
+`ci/scripts/Install-TankAssist.ps1` pulls any branch, tag or commit straight
+into your AddOns folder. Nothing needs to be installed on the machine you run
+it on -- no git, no clone, no GitHub account -- so fetching that one file onto
+a gaming machine is enough:
+
+```powershell
+irm "https://raw.githubusercontent.com/fooxytv/TankAssist/develop/ci/scripts/Install-TankAssist.ps1" -OutFile Install-TankAssist.ps1
+```
+
+Then:
+
+```powershell
+.\Install-TankAssist.ps1                              # tip of develop
+.\Install-TankAssist.ps1 -Branch feature/my-branch    # a feature branch
+.\Install-TankAssist.ps1 -Branch v0.4.6               # a release tag
+.\Install-TankAssist.ps1 -List                        # what branches exist
+```
+
+The WoW folder is found from the Blizzard uninstall entries first, then the
+registry, then the usual folders on every fixed drive, and failing all of that
+a shallow scan of each drive. If more than one install turns up, the chosen one
+and the alternatives are both printed.
+
+Point at it explicitly if it lives somewhere unusual, or set
+`TANKASSIST_WOW_PATH` once to stop passing it:
+
+```powershell
+.\Install-TankAssist.ps1 -WowPath 'G:\World of Warcraft'
+setx TANKASSIST_WOW_PATH 'G:\World of Warcraft'
+```
+
+Each run replaces the installed copy outright, so switching branches leaves
+nothing behind from the last one. Your settings and Edit Mode layouts live in
+`WTF\` and are never touched. Add `-WhatIf` to see what would happen without
+writing anything.
+
+Restart the client afterwards rather than using `/reload` -- the `.toc` is only
+read at launch, so a reload will not pick up a version with new files in it.
 
 ## Slash Commands
 

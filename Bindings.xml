@@ -1,0 +1,5 @@
+<Bindings xmlns="http://www.blizzard.com/wow/ui/">
+    <Binding name="TANKASSIST_TARGETMARKER_MENU" header="TANKASSIST">
+        TankAssist_OpenTargetMarkerMenu()
+    </Binding>
+</Bindings>

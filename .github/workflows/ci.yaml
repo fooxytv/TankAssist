@@ -1,5 +1,4 @@
 name: "CI - TankAssist"
-run-name: "CI - ${{ github.ref_name }}"
 
 # Checks only. Nothing here packages or publishes.
 #

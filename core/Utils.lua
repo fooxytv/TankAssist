@@ -96,6 +96,16 @@ function utils:GetSpellInfo(spellId)
     return nil, nil
 end
 
+-- Macro commands that can cast a spell. "/use" included: on a spell it behaves
+-- exactly as /cast, and plenty of macros are written that way.
+local MACRO_CAST_COMMANDS = {
+    cast = true,
+    use = true,
+    castsequence = true,
+    castrandom = true,
+    spell = true,
+}
+
 function utils:GetSpellKeybind(spellId)
     local now = GetTime()
     if now - self.keybindCacheTime < self.keybindCacheDuration then
@@ -137,25 +147,35 @@ function utils:GetSpellKeybind(spellId)
         { start = 133, prefix = "ACTIONBUTTON" },
     }
 
-    local function checkSpellMatch(actionType, id)
-        if actionType == "spell" then
-            if id == spellId then
-                return true
-            end
-            local slotSpellInfo = id and C_Spell.GetSpellInfo(id)
-            if slotSpellInfo and slotSpellInfo.name == name then
-                return true
-            end
-        elseif actionType == "macro" then
-            local macroSpell, _ = GetMacroSpell(id)
-            if macroSpell then
-                if macroSpell == spellId or macroSpell == name then
-                    return true
-                end
-                if type(macroSpell) == "number" then
-                    local macroSpellInfo = C_Spell.GetSpellInfo(macroSpell)
-                    if macroSpellInfo and macroSpellInfo.name == name then
-                        return true
+    local function matchesSpell(candidate)
+        if not candidate then return false end
+        if candidate == spellId or candidate == name then return true end
+        if type(candidate) == "number" then
+            local info = C_Spell.GetSpellInfo(candidate)
+            if info and info.name == name then return true end
+        end
+        return false
+    end
+
+    -- GetMacroSpell answers for the branch that would fire right now, so
+    -- "/cast [mod:shift] A; B" reports a different spell depending on whether
+    -- shift happens to be held, and the keybind appears and vanishes with it.
+    -- The body names every branch, conditionals stripped.
+    local function macroBodyCasts(macroIndex)
+        local body = GetMacroBody and GetMacroBody(macroIndex)
+        if not body then return false end
+        for line in body:gmatch("[^\r\n]+") do
+            local command, args = line:match("^%s*/(%a+)!?%s*(.*)$")
+            if command and args ~= "" and MACRO_CAST_COMMANDS[command:lower()] then
+                -- ";" separates conditional branches, "," packs a castsequence.
+                for rawClause in args:gmatch("[^;]+") do
+                    -- Loop variables are const in 5.4 and the headless test
+                    -- runtime enforces it, so trim into locals rather than
+                    -- writing back over them.
+                    local clause = rawClause:gsub("%b[]", "")
+                    for rawToken in clause:gmatch("[^,]+") do
+                        local token = rawToken:match("^%s*!?%s*(.-)%s*$")
+                        if token ~= "" and token == name then return true end
                     end
                 end
             end
@@ -163,9 +183,34 @@ function utils:GetSpellKeybind(spellId)
         return false
     end
 
+    local function checkSpellMatch(slot, actionType, id, subType)
+        if actionType == "spell" then
+            return matchesSpell(id)
+        elseif actionType == "macro" then
+            -- A "smart" single-spell macro: Blizzard has already resolved it
+            -- and `id` IS the spellID, not a macro index. Handing that to
+            -- GetMacroSpell looks up whichever unrelated macro happens to sit
+            -- at that index, which is why keybinds never showed for macros.
+            if subType == "spell" and matchesSpell(id) then
+                return true
+            end
+
+            -- For every other macro `id` is not a usable identifier either.
+            -- The macro has to be found by the name on the button.
+            local macroName = GetActionText and GetActionText(slot)
+            local macroIndex = macroName and GetMacroIndexByName
+                and GetMacroIndexByName(macroName)
+            if not macroIndex or macroIndex == 0 then return false end
+
+            if matchesSpell(GetMacroSpell(macroIndex)) then return true end
+            return macroBodyCasts(macroIndex)
+        end
+        return false
+    end
+
     for slot = 1, 180 do
-        local actionType, id = GetActionInfo(slot)
-        if checkSpellMatch(actionType, id) then
+        local actionType, id, subType = GetActionInfo(slot)
+        if checkSpellMatch(slot, actionType, id, subType) then
             for _, bar in ipairs(barMappings) do
                 if slot >= bar.start and slot < bar.start + 12 then
                     local buttonNum = slot - bar.start + 1
@@ -241,12 +286,48 @@ function utils:GetSpecName(specId)
     return "Unknown"
 end
 
+-- Icon art cropping, the way action-bar skins (EllesmereUI, Masque and the
+-- rest) do it. `trim` is the fraction taken off each edge of the art, the same
+-- quantity those skins expose as a percentage -- EllesmereUI's default Icon
+-- Zoom of 5.5 is a trim of 0.055 here, so matching its number matches its look.
+-- The crop is computed per axis from the button's own aspect, because trimming
+-- a square region on a non-square button stretches the art instead of cropping
+-- it.
+local ICON_DEFAULT_TRIM = 0.08
+local ICON_MAX_TRIM = 0.45
+
+function utils:GetIconTexCoords(trim, width, height)
+    trim = tonumber(trim) or ICON_DEFAULT_TRIM
+    if trim < 0 then trim = 0 elseif trim > ICON_MAX_TRIM then trim = ICON_MAX_TRIM end
+
+    local left, right, top, bottom = trim, 1 - trim, trim, 1 - trim
+
+    width = tonumber(width) or 0
+    height = tonumber(height) or 0
+    if width > 0 and height > 0 then
+        if width > height then
+            local dy = (1 - height / width) * (bottom - top) / 2
+            top, bottom = top + dy, bottom - dy
+        elseif height > width then
+            local dx = (1 - width / height) * (right - left) / 2
+            left, right = left + dx, right - dx
+        end
+    end
+
+    return left, right, top, bottom
+end
+
+function utils:ApplyIconZoom(texture, trim, width, height)
+    if not texture or not texture.SetTexCoord then return end
+    texture:SetTexCoord(self:GetIconTexCoords(trim, width, height))
+end
+
 function utils:CreateIcon(parent, size, template)
     local frame = CreateFrame("Frame", nil, parent, template)
     frame:SetSize(size, size)
     frame.icon = frame:CreateTexture(nil, "ARTWORK")
     frame.icon:SetAllPoints()
-    frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    utils:ApplyIconZoom(frame.icon, ICON_DEFAULT_TRIM, size, size)
     frame.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
     frame.cooldown:SetAllPoints()
     frame.cooldown:SetDrawSwipe(true)
@@ -262,6 +343,56 @@ function utils:CreateIcon(parent, size, template)
     frame.keybind = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
     frame.keybind:SetPoint("TOPLEFT", 2, -2)
     return frame
+end
+
+-- Styles a Cooldown frame the way Blizzard styles action button / Cooldown
+-- Manager swipes: dark swipe, no edge line, no bling flash.
+function utils:StyleGCDCooldown(cd)
+    cd:SetDrawSwipe(true)
+    cd:SetDrawEdge(false)
+    cd:SetDrawBling(false)
+    cd:SetSwipeColor(0, 0, 0, 0.8)
+    cd:SetHideCountdownNumbers(true)
+end
+
+-- Applies a cooldown swipe only when the values actually change. Calling
+-- SetCooldown on every ticker pass restarts the swipe, which pins it at a
+-- fixed fraction instead of sweeping like a normal cooldown does.
+function utils:SetCooldownSwipe(cd, start, duration)
+    if not cd then
+        return
+    end
+    if not start or not duration or start <= 0 or duration <= 0 then
+        if cd.taSwipeStart then
+            cd.taSwipeStart, cd.taSwipeDuration = nil, nil
+            cd:Clear()
+        end
+        return
+    end
+    if cd.taSwipeStart == start and cd.taSwipeDuration == duration then
+        return
+    end
+    cd.taSwipeStart, cd.taSwipeDuration = start, duration
+    cd:SetCooldown(start, duration)
+end
+
+-- Same as SetCooldownSwipe but when only the time left is known: keeps the
+-- existing swipe running unless the projected finish time has actually drifted.
+function utils:SetCooldownSwipeFromRemaining(cd, remaining)
+    if not cd then
+        return
+    end
+    if not remaining or remaining <= 0 then
+        return self:SetCooldownSwipe(cd, nil, nil)
+    end
+    local now = GetTime()
+    if cd.taSwipeStart and cd.taSwipeDuration then
+        local currentEnd = cd.taSwipeStart + cd.taSwipeDuration
+        if currentEnd > now and math.abs(currentEnd - (now + remaining)) < 0.3 then
+            return
+        end
+    end
+    self:SetCooldownSwipe(cd, now, remaining)
 end
 
 function utils:ApplyGlow(frame, color, intensity)
@@ -291,6 +422,75 @@ function utils:RemoveGlow(frame)
         ActionButton_HideOverlayGlow(frame) -- Deprecated by ActionButtonSpellAlertManager:ShowAlert
     elseif frame.glowFrame then
         frame.glowFrame:SetBackdrop(nil)
+    end
+end
+
+-- LibCustomGlow-driven proc glow. Resolved lazily and cached: LibStub is absent
+-- under the headless smoke test (libs are not loaded there), so every entry
+-- point degrades to a no-op rather than erroring.
+local glowLib
+local function GetGlowLib()
+    if glowLib ~= nil then
+        return glowLib or nil
+    end
+    local ok, lib = pcall(function()
+        return LibStub and LibStub("LibCustomGlow-1.0", true)
+    end)
+    glowLib = (ok and lib) or false
+    return glowLib or nil
+end
+
+utils.GlowStyles = { "Action Button Glow", "Pixel Glow", "Autocast Shine", "Proc Glow" }
+
+function utils:IsGlowAvailable()
+    return GetGlowLib() ~= nil
+end
+
+function utils:StartProcGlow(frame, style, color)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    style = style or "Action Button Glow"
+    if style == "Pixel Glow" then
+        lib.PixelGlow_Start(frame, color)
+    elseif style == "Autocast Shine" then
+        lib.AutoCastGlow_Start(frame, color)
+    elseif style == "Proc Glow" then
+        lib.ProcGlow_Start(frame)
+    else
+        lib.ButtonGlow_Start(frame, color)
+    end
+end
+
+function utils:StopProcGlow(frame)
+    local lib = GetGlowLib()
+    if not lib or not frame then return end
+    -- Stop every style: a stop for a style that is not active is a no-op, so
+    -- this clears the glow cleanly even after the configured style changed.
+    if lib.ButtonGlow_Stop then lib.ButtonGlow_Stop(frame) end
+    if lib.PixelGlow_Stop then lib.PixelGlow_Stop(frame) end
+    if lib.AutoCastGlow_Stop then lib.AutoCastGlow_Stop(frame) end
+    if lib.ProcGlow_Stop then lib.ProcGlow_Stop(frame) end
+end
+
+-- Transition-guarded glow: only touches the library when the on/off state or the
+-- style actually changes, so it is safe to call every frame from the update loop.
+function utils:SetGlow(frame, shouldGlow, style, color)
+    if not frame then return end
+    style = style or "Action Button Glow"
+    if shouldGlow then
+        if frame.__taGlowing and frame.__taGlowStyle == style then
+            return
+        end
+        if frame.__taGlowing then
+            self:StopProcGlow(frame)
+        end
+        self:StartProcGlow(frame, style, color)
+        frame.__taGlowing = true
+        frame.__taGlowStyle = style
+    elseif frame.__taGlowing then
+        self:StopProcGlow(frame)
+        frame.__taGlowing = false
+        frame.__taGlowStyle = nil
     end
 end
 
