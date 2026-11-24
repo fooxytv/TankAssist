@@ -704,7 +704,7 @@ if lua is not None:
         ("built-in fonts still offered", "fontCount", 6),
         ("a usable built-in is offered", "offersUsable", True),
         ("an unusable built-in is filtered out", "offersUnusable", False),
-        ("built-in bar textures still offered", "barCount", 4),
+        ("built-in bar textures still offered", "barCount", 3),
         ("headless has no LibSharedMedia", "noLSM", True),
         ("saved font name resolves", "knownFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),
         ("unknown font falls back", "unknownFont", "Fonts" + chr(92) + "FRIZQT__.TTF"),

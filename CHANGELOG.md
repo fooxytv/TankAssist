@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8-alpha.e696d82] - 2026-09-17
+
+### Added
+- Cooldown alerts and external cooldowns now have the same icon appearance options as the Assisted Combat buttons: Icon Zoom % (crop), Icon Shape (Square or Cropped), Show Border, Font Face, Font Style, and Text Size Adjust — all editable in Edit Mode.
+
+### Changed
+- Icon appearance settings now live in one shared module, so Assisted Combat buttons, external cooldowns, and cooldown alerts stay consistent instead of drifting apart. Borders default off for Assisted Combat buttons (chrome) and on for external and alert icons, where the coloured border signals what you're looking at.
+- On the Assisted Combat display, the appearance settings sit next to Icon Size in Edit Mode rather than after the behaviour toggles.
+
+### Fixed
+- Fixed a scoping bug where the border default was read before it was declared, resolving to a nil global.
+
 ## [0.4.7-alpha.dd671d0] - 2026-09-16
 
 ### Added

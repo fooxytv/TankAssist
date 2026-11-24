@@ -79,8 +79,10 @@ if LSM then
             LSM:Register(FONT, entry.name, entry.path)
         end
     end
+    -- Newer LSM builds reject paths missing from the client; one stale texture
+    -- must not abort this chunk before the media functions below are defined.
     for _, entry in ipairs(TankAssist.Constants.BarTextures) do
-        LSM:Register(STATUSBAR, entry.name, entry.path)
+        pcall(LSM.Register, LSM, STATUSBAR, entry.name, entry.path)
     end
 end
 
